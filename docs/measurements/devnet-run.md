@@ -355,3 +355,194 @@ was topped up by 0.6 SOL from the project wallet. The project wallet holds
 10.94148008 SOL after that top up and after paying for the program upgrade. The
 upgrade needed 1.88780928 SOL free for the temporary upload buffer, which came
 back when it landed, and the wallet stays well clear of that.
+
+# The third run, on the Pyth build (slot 502436678)
+
+Program slot **502436678**, the build whose price band reads Pyth instead of
+Switchboard, on chain since 22 September 2026 at 13:02:53 UTC (see
+`docs/deployments.md`). Program `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`,
+running `pangu.so`, sha256
+`08746faa7b4ac83ada7bfa0cd2fcf0b04aabc9c335ebfc310fd2a06d486d3a7c`, hash checked
+against the local build again at 13:25 UTC.
+
+## What was already run against this build
+
+The refresh, the list mode sale, the attacks and the graduation were run
+straight after the upgrade and are written up in full in
+`docs/measurements/sdk-pyth.md`, under "Devnet, end to end". The pointers:
+
+| Command | What landed | Where to read it |
+| --- | --- | --- |
+| `refresh-price` | Apple at 340.2997 dollars, published the same second, into `9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb`. Signatures `2xiHPArYKpXTFR2cU81maow3KSB2VuN2BNqrXuEXdvfSTZLzdDuJaNUFMKARVPLKc34rmNu9kfYFiVJqNhyKQsu4` and `vf232DYgcwfgETHg5998J6SJaNgaziZCZxBBRmC6Zz4JQXeP7JhT5uSbaYBFKigd2BBY1PSEao4ejacRtuhodvB`, 35,180 lamports | sdk-pyth.md, "The refresh" |
+| `launch --mode list --band 500` | Mint `E1PSmsUoxvwJas6e1UY8soQq3nhSTUsaP3oBS9eLws4f`, pool `AGzisymETq3hPYrqkt4gw648xTeMhEmWECQLjafaTEjX`, sale `4WQZxg6H7cmMDP6rzGG2QzeWbH36dZQjbwnZUJuLSSMuV5icsMLD7csf74jJK4mWNJ7ihkWRtRxh4zFt5oiJQYyo`, 0.019283 SOL | sdk-pyth.md, "The banded sale" |
+| `prove` | 9 attacks, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard. Exit 0 | sdk-pyth.md, "The attacks" |
+| `graduate` | Curve filled by ten wallets, DAMM v2 pool `4NYMEmSNcUQ4n3r1Q1jT9W3Lupfxcvw5Z3W2f3oVy116`, migration `XvGgdBj7ibyKW1NXjjkcDAQt4nSSMvC859fYaaFPjBhGapUBcLYj3fbU4bLb9rTqXFKxfj5fU8H4mFFxb5smXUn`, hook gone, 0.149953 SOL | sdk-pyth.md, "Graduation, with the buy sizing fixed" |
+
+One line in that run was not a refusal and not a pass: the ceiling itself. That
+sale was priced in SOL, the ceiling is in dollars, and a curve raising 0.1 SOL
+cannot reach 357 dollars a share whatever anybody buys. So `prove` reported it
+as not applicable and said why. The rest of this section is the sale that can
+reach it.
+
+## A sale that can reach the ceiling
+
+The band compares the curve's price, in dollars a share, against the stock's
+price plus the band. For that comparison to bite, buyers have to be paying in
+something that is a dollar, and the curve has to open somewhere near a share
+price. So this sale is priced in a dollar token and opens at 400 dollars a share
+while Apple trades at about 345. Every buy is refused until Apple rises through
+the ceiling, which is exactly what a price band is for: Pangu will not let an
+issuer sell a tokenised Apple share at 400 dollars while Apple is worth 345.
+
+### The dollar token
+
+Devnet has no dollar anybody can get in quantity, so the demo mints its own.
+
+```
+npx tsx src/mint-dollars.ts
+mint     : HSawBqXvK3vRvcuxp3HdDytDbmj8ffBH5PfS7vvpHT5X
+decimals : 6
+holder   : A7pBuE2gKddYxSZWR3ZuukPoWHBvJE5J1RuNPiNvXg5, owned by 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+minted   : 1000000000000 whole tokens, 1000000000000000000 raw units
+signature: aE6Ah9sS3eb7t8NjbPv6vRQwecJbzVX2pwzSqjzw2W3yRs6s929VoAjKdhG3uiihnDtp7sMHiVmyDTazFgcpoH7
+spent    : 0.002575 SOL
+```
+
+Six decimals, like every real dollar token on Solana. No freeze authority, so
+nobody can strand a buyer mid sale. The mint authority stays with the demo
+keypair, which is what lets `prove` hand its attacking wallets something to pay
+with. It is a devnet demo token and nothing else.
+
+### The curve
+
+```
+npx tsx src/launch.ts --mode open --band 500 \
+  --quote HSawBqXvK3vRvcuxp3HdDytDbmj8ffBH5PfS7vvpHT5X \
+  --threshold 360000000000 --base-decimals 9 --migration-percent 40 \
+  --name "Pangu Priced Share" --symbol PBAND
+```
+
+Three of those flags are new, and all three exist for one reason: to move the
+curve up into share price territory. Meteora's `buildCurve` works the opening
+price out from the raise, the supply and the share kept back for migration, so
+the opening price is not something a launch can set directly. It comes out as
+the threshold times the migration share, over the supply times the square of
+what is left to sell: 360,000,000,000 times 0.4, over a billion times 0.36,
+which is 400 dollars.
+
+The raise is a silly number, and it is meant to be. Nobody is filling a curve
+that asks for 360 billion dollars. What matters is where it starts, and the only
+way to start a billion share curve at 400 dollars with Meteora's own builder is
+to ask it for a raise that large. Nine decimal shares are the other half of it:
+the builder works in raw units, and six decimal shares run out of precision
+somewhere around five dollars a share.
+
+| Fact | Value |
+| --- | --- |
+| Sale | Pangu Priced Share (PBAND), open access, cap 10 percent of the curve |
+| Mint | [`4vyCQRLeowhSzaZqbPVpdNy7upxVtqaCZdono2z8JeoT`](https://explorer.solana.com/address/4vyCQRLeowhSzaZqbPVpdNy7upxVtqaCZdono2z8JeoT?cluster=devnet) |
+| Pool | `Fkaw1opbQSxfSKvEhjNAHQm3J2CRwCW7mM4ihy964QnB` |
+| Rules | `FsApXMXBrcPQHDXekEwNisFnpBB4tEHaUqvgvDjSnWHt` |
+| Launch template | `2MDhHJ7uTB2SE5VzyRtEXrtCq2xBpQELSCoNMCRHLBVB` |
+| Extra account list | `7BKdnmMkE7rFdXhWNEQeqmEjG51aL1hnoSZ44kLxVV8M` |
+| Price account | `9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb`, Pyth shard 7700 |
+| Paying token | `HSawBqXvK3vRvcuxp3HdDytDbmj8ffBH5PfS7vvpHT5X`, 6 decimals |
+| Opening price | 400 dollars a share |
+| Cap | 59,999,999,997,545,703 raw units, a tenth of what the curve sells |
+| Template signature | `3WubQPUZqXKXptdpUqgCGLGhAQrEucRTvxB7dVbcDmxSDtScTWUbfWncAknbhcCUp1WcHSN22gRsC2wZjNrTTMav` |
+| Sale signature | `4i9on6ciyq1jst9VGjhmSpNDMoSctwAX8TpUzR2rrVm26NH56A8ocDbChR1bkbJ5YWCxSVQBnThsM41ML4oxmP3h` |
+| Bytes | 662 for the template, 947 for the pool and rules, of 1232 |
+| Cost | 0.019283 SOL |
+
+The launch refreshed Apple's price itself before opening the sale, at 13:33 UTC:
+344.6438 dollars, published the same second, confidence 3 basis points.
+Signatures
+`2fyY9jdsESFRUnwRErnYkChjm58gEk1kCT3UoAdMCDKz5veMhTVYC9CgPgVKcVeqBNVYLZoUGjAkgBgxaN52GDpF`
+and
+`4hyKbAJTiAewaZhJ7gPM5DpDP2U7trbmt2ppQNLDAx6MeTDRF33MZDHCT2cWYFiYkPU3cwNYZJPnHU9hREYZ62in`.
+
+### The ceiling, refused on chain
+
+`npx tsx src/prove.ts`, 13:33 to 13:34 UTC on Tuesday 22 September. That is
+9:33 in New York, three minutes after the opening bell, so Pyth was publishing
+Apple and the price the program read was 18 seconds old against the hour this
+sale allows. Had the run happened at a weekend or overnight, the same line would
+have said `PriceStale` instead: Pyth stops publishing an equity when its market shuts, the account ages
+out, and the band refuses the buy for that reason rather than the ceiling.
+
+```
+band     : 5 percent over Equity.US.AAPL/USD at 344.6438 dollars, from Pyth shard 7700
+price    : usable, published 18 seconds ago of an allowed 3600, confidence 3 of an allowed 100 basis points
+account  : 9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb, fully verified by the Wormhole guardians
+curve    : 400.0000 dollars a share against a ceiling of 361.8759, so every buy is refused
+```
+
+| Attack | Invariant | Expected | Actual | Result |
+| --- | --- | --- | --- | --- |
+| buy with no buyer record | C2 | BuyerRecordMissing | BuyerRecordMissing | ok |
+| buy while not on the approved list | C6 | NotApproved | open access, no list to be left off | skipped |
+| buy past the cap in one go | C3 | PriceOutsideBand | PriceOutsideBand | ok |
+| buy while the curve stands above the ceiling | C9 | PriceOutsideBand | PriceOutsideBand | ok |
+| a second buy that crosses the cap | C3 | OverCap | no buy can land to set this up | skipped |
+| buy into a second token account of the same wallet | C3 | OverCap | no buy can land to set this up | skipped |
+| buy into an account whose owner can still change | C13 | ReceivingAccountOwnerCanChange | ReceivingAccountOwnerCanChange | ok |
+| send tokens straight to another wallet | C4 | WalletToWalletDuringSale | no buy can land to set this up | skipped |
+| call the hook on its own, with no transfer | C1 | NotTransferring | NotTransferring | ok |
+| a revoked wallet sells back to the pool | C5 | it goes through | nothing to revoke, open access | skipped |
+| buy that would push the price past the ceiling | C9 | PriceOutsideBand | PriceOutsideBand | ok |
+
+```
+6 attacks run, 6 refused as expected, 0 allowed as expected, 5 not applicable, 0 off the standard
+cost     : 0.007609 SOL, after 0.032867 SOL came back from the attacking wallets
+```
+
+The three that matter, each a transaction that really landed and was really
+refused, with the refusal read out of the program's own logs by
+`panguErrorFromLogs` rather than from "it failed":
+
+| What was tried | Signature |
+| --- | --- |
+| A buy past the cap, which meets the band first because the hook reads the band before the cap | [`38mR5tkSHA5DPHvGWgN1qtDSxwgsZGVq6eE52aSkQyGfAo64dxr8v4ZqEcjotzm3V8sqMTCvuPNaovkGjaLsdVhe`](https://explorer.solana.com/tx/38mR5tkSHA5DPHvGWgN1qtDSxwgsZGVq6eE52aSkQyGfAo64dxr8v4ZqEcjotzm3V8sqMTCvuPNaovkGjaLsdVhe?cluster=devnet) |
+| An ordinary buy, well under the cap | [`3boLTHs2ZHfMPTURkDYVMV14RgamvqooQDGRco1nn24879gKgvn59Pef8HBfa6PcuQXLTGKCaSy43ohKDvA35aSM`](https://explorer.solana.com/tx/3boLTHs2ZHfMPTURkDYVMV14RgamvqooQDGRco1nn24879gKgvn59Pef8HBfa6PcuQXLTGKCaSy43ohKDvA35aSM?cluster=devnet) |
+| The buy the SDK's preflight had already said would break the ceiling | [`2iJnchxoJLgyixCS56VcxB1Aac1pRfoLhXywyK2RYmQvQmx6wYM97cZRW5R2ss7AFjPjZ27oCC9VAJeC13aEKb3B`](https://explorer.solana.com/tx/2iJnchxoJLgyixCS56VcxB1Aac1pRfoLhXywyK2RYmQvQmx6wYM97cZRW5R2ss7AFjPjZ27oCC9VAJeC13aEKb3B?cluster=devnet) |
+
+The five that were not run say why on their own line. A sale that refuses every
+buy cannot be walked up to its cap, and the cap and the wallet to wallet rules
+need a wallet that holds something. Those are proven on the list sale in the
+same build, in `sdk-pyth.md`.
+
+### What this run needed from the scripts
+
+Three things had to change before a dollar priced sale could be attacked at all,
+and each one was a hole rather than a preference.
+
+1. **The curve's shape.** `launch` now takes `--threshold`, `--base-decimals` and
+   `--migration-percent`, and `curve.ts` says what opening price they add up to.
+   Without them every demo curve opened at a fraction of a cent.
+2. **Sizing in the paying token's own units.** `prove` worked its buy sizes out
+   in lamports, which is right for a SOL sale and a thousand times wrong for a
+   six decimal dollar token. It now reads the paying mint's decimals off the
+   chain and works in whole numbers throughout.
+3. **Paying the attacking wallets in the paying token.** A wallet holding only
+   devnet SOL cannot buy in a dollar priced sale: the swap takes the dollar token
+   out of the buyer's own account, so the refusal would come from the token
+   program and would say nothing about Pangu's rules. `prove` now hands each
+   wallet the paying token as well as its fees.
+
+`prove` also learned one thing about the band itself. A sale whose curve already
+stands above the ceiling refuses every buy for the same reason a stale price
+does, so it takes the same path through the run: nothing that needs a buy to
+land is attempted, and every attack that is sent expects `PriceOutsideBand`.
+
+## What the third run cost
+
+| Command | Cost |
+| --- | --- |
+| `mint-dollars` | 0.002575 SOL |
+| `launch --mode open --band 500 --quote <dollar mint>` | 0.019283 SOL |
+| `prove` on the banded dollar sale | 0.007609 SOL |
+
+The demo keypair started this part of the run holding 0.653845 SOL and ended on
+0.624379 SOL. The dollar tokens handed to the attacking wallets are not swept
+back the way devnet SOL is: they are a demo token the same keypair can mint more
+of.

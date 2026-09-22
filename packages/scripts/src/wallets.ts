@@ -16,6 +16,11 @@ import {
   Transaction,
   type Connection,
 } from "@solana/web3.js";
+import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
 import { send } from "./chain.js";
 
 /** How many wallets one funding transaction carries. Keeps it well inside the size limit. */
@@ -92,6 +97,62 @@ export async function fundWallets(
     spent += landed.fee + batch.reduce((total, entry) => total + entry.lamports, 0);
   }
   return spent;
+}
+
+/** One wallet and how much of the paying token it is being handed. */
+export interface QuoteFunding {
+  wallet: PublicKey;
+  /** Raw units of the paying token. */
+  amount: bigint;
+}
+
+/**
+ * Hands throwaway wallets the paying token, when that token is not SOL.
+ *
+ * A sale priced in a dollar token cannot be attacked with devnet SOL: the swap
+ * takes the paying token out of the buyer's own account, so a wallet holding
+ * none is refused by the token program before Pangu's rules are ever reached,
+ * and the refusal would say nothing about the sale. The account is opened here
+ * and the tokens are sent in one transaction, from the payer's own holding.
+ *
+ * Unlike the devnet SOL, these are not swept back: they are a demo token the
+ * payer can mint more of.
+ */
+export async function fundQuoteTokens(
+  connection: Connection,
+  payer: Keypair,
+  mint: PublicKey,
+  tokenProgram: PublicKey,
+  decimals: number,
+  funding: readonly QuoteFunding[]
+): Promise<void> {
+  const from = getAssociatedTokenAddressSync(mint, payer.publicKey, false, tokenProgram);
+  const transaction = new Transaction();
+  for (const entry of funding) {
+    const to = getAssociatedTokenAddressSync(mint, entry.wallet, false, tokenProgram);
+    transaction.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        payer.publicKey,
+        to,
+        entry.wallet,
+        mint,
+        tokenProgram
+      ),
+      createTransferCheckedInstruction(
+        from,
+        mint,
+        to,
+        payer.publicKey,
+        entry.amount,
+        decimals,
+        [],
+        tokenProgram
+      )
+    );
+  }
+  await send(connection, `handing ${funding.length} wallets the paying token`, transaction, [
+    payer,
+  ]);
 }
 
 /**

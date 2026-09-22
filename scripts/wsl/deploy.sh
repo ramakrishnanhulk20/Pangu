@@ -87,6 +87,12 @@ fi
 echo "PROGRAM ALREADY ON CHAIN: $PROGRAM_EXISTS"
 echo "ON-CHAIN SHA256: $ONCHAIN_HASH"
 
+count_buffers() {
+  local listed
+  listed="$(solana program show --buffers --keypair "$PAYER" --url "$URL" 2>/dev/null || true)"
+  printf '%s\n' "$listed" | tail -n +3 | grep -c . || true
+}
+
 report_facts() {
   solana program show "$PROGRAM_ID" --url "$URL" --keypair "$PAYER" > "$SHOW"
   local bal_after
@@ -101,7 +107,14 @@ report_facts() {
   echo "BALANCE AFTER: $(sol "$bal_after") SOL"
   echo "SOL SPENT THIS RUN: $(sol "$(( BAL_BEFORE - bal_after ))") SOL"
   local leftovers
-  leftovers="$(solana program show --buffers --keypair "$PAYER" --url "$URL" 2>/dev/null | tail -n +3 | grep -c . || true)"
+  leftovers="$(count_buffers)"
+  if [ "${leftovers:-0}" -gt 0 ]; then
+    # The node can still be serving the upload buffer a moment after the
+    # transaction that closed it, so a first count of one means nothing. Read it
+    # again, and only then say a buffer is holding SOL.
+    sleep 15
+    leftovers="$(count_buffers)"
+  fi
   if [ "${leftovers:-0}" -gt 0 ]; then
     echo "WARNING: $leftovers upload buffer(s) still hold SOL. Reclaim with:"
     echo "  solana program close --buffers --keypair $PAYER --url $URL"

@@ -4,6 +4,7 @@
  *
  *   npm run launch -- --mode list --cap-share-bps 1000
  *   npm run launch -- --mode open --band 500 --feed Crypto.AAPLX/USD
+ *   npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40
  *
  * Everything it prints comes back off the chain after the transactions land,
  * and every sale it opens is appended to sales.json so the other commands can
@@ -32,7 +33,7 @@ import {
   wholeNumber,
 } from "./arguments.js";
 import { send } from "./chain.js";
-import { demoCurve } from "./curve.js";
+import { demoCurve, openingPrice, type CurveShape } from "./curve.js";
 import {
   addressLink,
   devnet,
@@ -62,7 +63,9 @@ const FLAGS = [
   "name",
   "symbol",
   "uri",
-  "threshold-sol",
+  "threshold",
+  "base-decimals",
+  "migration-percent",
   "credential",
   "schema",
 ];
@@ -71,11 +74,29 @@ const MODES = ["open", "list", "credential"] as const;
 
 /**
  * How much of the paying token the curve has to take in before the sale
- * graduates. Small on purpose: the point of the devnet run is that somebody can
- * afford to fill a curve and watch a sale graduate, and the project's devnet
- * wallet is not a faucet.
+ * graduates, in whole units of that token. Small on purpose: the point of the
+ * devnet run is that somebody can afford to fill a curve and watch a sale
+ * graduate, and the project's devnet wallet is not a faucet.
  */
-const DEFAULT_THRESHOLD_SOL = 0.1;
+const DEFAULT_THRESHOLD = 0.1;
+
+/**
+ * The share of the supply carried over to DAMM v2 at graduation, as a
+ * percentage. It sets how steep the curve is: the more that is kept back, the
+ * closer the opening price sits to the graduation price.
+ */
+const DEFAULT_MIGRATION_PERCENT = 20;
+
+/**
+ * The sale token's own decimals.
+ *
+ * Nine is worth asking for when a share is priced in dollars. Meteora builds the
+ * curve out of raw units, so a token with more of them per share gives the curve
+ * builder the room to carry a three figure opening price, and six decimals does
+ * not. The band reads both mints' decimals off the chain, so the dollar price it
+ * compares is the same either way.
+ */
+const DEFAULT_BASE_DECIMALS = 6;
 
 const ACCESS_MODE_OF: Record<(typeof MODES)[number], AccessMode> = {
   open: ACCESS_MODE.open,
@@ -107,7 +128,15 @@ async function main(): Promise<void> {
   const capShareBps = wholeNumber(flags, "cap-share-bps", 1, 10_000, 1_000);
   const bandBps = wholeNumber(flags, "band", 1, 5_000, 0);
   const feed = feedFor(text(flags, "feed", DEFAULT_FEED));
-  const thresholdSol = amount(flags, "threshold-sol", 0.01, 100, DEFAULT_THRESHOLD_SOL);
+  const threshold = amount(flags, "threshold", 0.01, 1e15, DEFAULT_THRESHOLD);
+  const baseDecimals = wholeNumber(flags, "base-decimals", 6, 9, DEFAULT_BASE_DECIMALS);
+  const migrationPercent = wholeNumber(
+    flags,
+    "migration-percent",
+    10,
+    40,
+    DEFAULT_MIGRATION_PERCENT
+  );
   const quoteFlag = text(flags, "quote", "wsol");
   const name = text(
     flags,
@@ -127,6 +156,12 @@ async function main(): Promise<void> {
 
   const quoteMint = quoteFlag === "wsol" ? NATIVE_MINT : new PublicKey(quoteFlag);
   const quoteDecimals = await quoteDecimalsOf(connection, quoteMint);
+  const shape: CurveShape = {
+    quoteDecimals,
+    baseDecimals: baseDecimals as TokenDecimal,
+    migrationPercent,
+    threshold,
+  };
 
   const started = await connection.getBalance(issuer.publicKey, "confirmed");
   console.log(`network  : devnet, ${rpcUrl()}`);
@@ -136,7 +171,10 @@ async function main(): Promise<void> {
     `sale     : ${name} (${symbol}), ${mode} access, cap ${capShareBps / 100} percent of the curve`
   );
   console.log(
-    `paying in: ${quoteMint.toBase58()}, ${quoteDecimals} decimals, ${thresholdSol} of it to graduate`
+    `paying in: ${quoteMint.toBase58()}, ${quoteDecimals} decimals, ${threshold} of it to graduate`
+  );
+  console.log(
+    `curve    : ${baseDecimals} decimal shares, ${migrationPercent} percent kept back for DAMM v2, opening at ${openingPrice(shape)} of the paying token a share`
   );
 
   if (bandBps > 0) {
@@ -171,7 +209,7 @@ async function main(): Promise<void> {
     connection,
     partner: issuer.publicKey,
     quoteMint,
-    curve: demoCurve(quoteDecimals, thresholdSol),
+    curve: demoCurve(shape),
   });
   const templateLanded = await send(
     connection,
@@ -264,7 +302,7 @@ async function main(): Promise<void> {
     accessMode: sale.accessMode,
     capShareBps,
     cap: sale.cap.toString(),
-    thresholdSol,
+    thresholdSol: threshold,
     bandBps: sale.hasBand ? sale.bandBps : null,
     feed: sale.hasBand ? feed.symbol : null,
     config: template.config.publicKey.toBase58(),

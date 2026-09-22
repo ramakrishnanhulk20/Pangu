@@ -114,5 +114,29 @@
     "priceAccount": "9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb",
     "templateSignature": "TRTGnxPPdhcm15xC4QchGXJZ4d51jQWZQH4dqBoUKD6fEFcHKZo6RcnBhuBnf6qSiegKdtF2L4C1JsdhArqSBkK",
     "saleSignature": "4WQZxg6H7cmMDP6rzGG2QzeWbH36dZQjbwnZUJuLSSMuV5icsMLD7csf74jJK4mWNJ7ihkWRtRxh4zFt5oiJQYyo"
+  },
+  {
+    "network": "devnet",
+    "program": "4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG",
+    "openedAt": "2026-09-22T13:33:33.341Z",
+    "name": "Pangu Priced Share",
+    "symbol": "PBAND",
+    "mode": "open",
+    "accessMode": 0,
+    "capShareBps": 1000,
+    "cap": "59999999997545703",
+    "thresholdSol": 360000000000,
+    "bandBps": 500,
+    "feed": "Equity.US.AAPL/USD",
+    "config": "2MDhHJ7uTB2SE5VzyRtEXrtCq2xBpQELSCoNMCRHLBVB",
+    "mint": "4vyCQRLeowhSzaZqbPVpdNy7upxVtqaCZdono2z8JeoT",
+    "pool": "Fkaw1opbQSxfSKvEhjNAHQm3J2CRwCW7mM4ihy964QnB",
+    "rules": "FsApXMXBrcPQHDXekEwNisFnpBB4tEHaUqvgvDjSnWHt",
+    "extraAccountList": "7BKdnmMkE7rFdXhWNEQeqmEjG51aL1hnoSZ44kLxVV8M",
+    "quoteMint": "HSawBqXvK3vRvcuxp3HdDytDbmj8ffBH5PfS7vvpHT5X",
+    "issuer": "9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW",
+    "priceAccount": "9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb",
+    "templateSignature": "3WubQPUZqXKXptdpUqgCGLGhAQrEucRTvxB7dVbcDmxSDtScTWUbfWncAknbhcCUp1WcHSN22gRsC2wZjNrTTMav",
+    "saleSignature": "4i9on6ciyq1jst9VGjhmSpNDMoSctwAX8TpUzR2rrVm26NH56A8ocDbChR1bkbJ5YWCxSVQBnThsM41ML4oxmP3h"
   }
 ]

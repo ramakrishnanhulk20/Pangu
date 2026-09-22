@@ -12,7 +12,6 @@
  */
 
 import {
-  LAMPORTS_PER_SOL,
   PublicKey,
   Transaction,
   type Connection,
@@ -20,6 +19,7 @@ import {
   type Signer,
 } from "@solana/web3.js";
 import {
+  NATIVE_MINT,
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedWithTransferHookInstruction,
   getAssociatedTokenAddressSync,
@@ -29,18 +29,20 @@ import {
   ACCESS_MODE,
   TOKEN_2022_PROGRAM_ID,
   approveBuyerInstruction,
+  curvePriceDollars,
   dollars,
   getBuyerRecord,
   getSale,
   isSaleRunning,
   listBuyerRecords,
+  priceCeiling,
   readPrice,
   revokeBuyerInstruction,
   saleStanding,
   type PanguErrorName,
   type Sale,
 } from "pangu-sdk";
-import { buyTransaction, preflightBuy, sellTransaction } from "pangu-sdk/dbc";
+import { buyTransaction, loadPool, preflightBuy, sellTransaction } from "pangu-sdk/dbc";
 import { readFlags } from "./arguments.js";
 import {
   directExecute,
@@ -60,7 +62,12 @@ import { buyWithin } from "./buying.js";
 import { attempt, lastLogLine, refusal, send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
-import { freshWallet, fundWallets, returnLeftovers } from "./wallets.js";
+import {
+  freshWallet,
+  fundQuoteTokens,
+  fundWallets,
+  returnLeftovers,
+} from "./wallets.js";
 
 /** Spare devnet SOL each attacking wallet gets on top of what it tries to spend. */
 const OVERHEAD_LAMPORTS = 12_000_000;
@@ -185,12 +192,40 @@ async function main(): Promise<void> {
 
   const listMode = sale.accessMode === ACCESS_MODE.issuerList;
   const price = sale.hasBand ? await readPrice(connection, sale) : null;
+
+  // The pool itself, for the token buyers pay in and for where the curve stands.
+  const view = await loadPool(connection, mint);
+  const quoteMint = view.quoteMint;
+  const quoteDecimals = (
+    await getMint(connection, quoteMint, "confirmed", view.quoteProgram)
+  ).decimals;
+  const payingInSol = quoteMint.equals(NATIVE_MINT);
+
+  const ceiling =
+    price !== null && price.usable ? priceCeiling(sale, price.price) : null;
+  const curveNow = sale.hasBand
+    ? curvePriceDollars(
+        BigInt(view.poolAccount.poolState.sqrtPrice.toString()),
+        sale.baseDecimals,
+        sale.quoteDecimals
+      )
+    : null;
+  const aboveCeiling = ceiling !== null && curveNow !== null && curveNow > ceiling;
+
   // What a banded sale would refuse every buy with right now, or null when buys
   // can go through. PriceStale, PriceTooUncertain and PriceNotFullyVerified are
   // the same answer as far as the rest of the run is concerned: the band fails
-  // closed, and nothing that needs a buy to land can be set up.
+  // closed, and nothing that needs a buy to land can be set up. A curve already
+  // standing above the ceiling is that same answer again, because the hook reads
+  // the band before the cap, so PriceOutsideBand is what every buy meets.
   const bandRefusal: PanguErrorName | null =
-    price === null || price.usable ? null : (price.error ?? "PriceStale");
+    price === null
+      ? null
+      : !price.usable
+        ? (price.error ?? "PriceStale")
+        : aboveCeiling
+          ? "PriceOutsideBand"
+          : null;
   const canBuy = bandRefusal === null;
   const stock = record.feed ?? "the stock";
 
@@ -209,10 +244,21 @@ async function main(): Promise<void> {
       `account  : ${sale.priceAccount.toBase58()}, ${price.fullyVerified ? "fully verified by the Wormhole guardians" : "not fully verified"}`
     );
   }
+  if (curveNow !== null && ceiling !== null) {
+    console.log(
+      `curve    : ${dollars(curveNow).toFixed(4)} dollars a share against a ceiling of ${dollars(ceiling).toFixed(4)}, so ${aboveCeiling ? "every buy is refused" : "there is room under the band"}`
+    );
+  }
 
-  const capWorth = BigInt(
-    Math.round((record.thresholdSol * LAMPORTS_PER_SOL * record.capShareBps) / 10_000)
-  );
+  // Raw units of the paying token, whatever that token is: the threshold in
+  // whole units of it, its own decimals, and the cap's share of the curve. Whole
+  // numbers all the way through, because a dollar threshold is bigger than a
+  // float carries to the last unit.
+  const capWorth =
+    (BigInt(Math.round(record.thresholdSol * 100)) *
+      10n ** BigInt(quoteDecimals) *
+      BigInt(record.capShareBps)) /
+    1_000_000n;
   const smallBuy = capWorth / 5n > 0n ? capWorth / 5n : 1_000_000n;
 
   const newcomer = freshWallet();
@@ -243,24 +289,47 @@ async function main(): Promise<void> {
   process.on("unhandledRejection", rescue);
 
   try {
-    await fundWallets(
-      connection,
-      issuer,
-      [newcomer.publicKey],
-      Number(smallBuy) + OVERHEAD_LAMPORTS
-    );
-    await fundWallets(
-      connection,
-      issuer,
-      [filler.publicKey],
-      Number(capWorth * 5n) + OVERHEAD_LAMPORTS
-    );
-    await fundWallets(
-      connection,
-      issuer,
-      [careless.publicKey],
-      Number(capWorth) + OVERHEAD_LAMPORTS
-    );
+    if (payingInSol) {
+      await fundWallets(
+        connection,
+        issuer,
+        [newcomer.publicKey],
+        Number(smallBuy) + OVERHEAD_LAMPORTS
+      );
+      await fundWallets(
+        connection,
+        issuer,
+        [filler.publicKey],
+        Number(capWorth * 5n) + OVERHEAD_LAMPORTS
+      );
+      await fundWallets(
+        connection,
+        issuer,
+        [careless.publicKey],
+        Number(capWorth) + OVERHEAD_LAMPORTS
+      );
+    } else {
+      // The paying token is not SOL, so each wallet needs devnet SOL for the
+      // fees and the accounts, and the paying token for the buy itself.
+      await fundWallets(
+        connection,
+        issuer,
+        spenders.map((wallet) => wallet.publicKey),
+        OVERHEAD_LAMPORTS
+      );
+      await fundQuoteTokens(
+        connection,
+        issuer,
+        quoteMint,
+        view.quoteProgram,
+        quoteDecimals,
+        [
+          { wallet: newcomer.publicKey, amount: smallBuy },
+          { wallet: filler.publicKey, amount: capWorth * 5n },
+          { wallet: careless.publicKey, amount: capWorth },
+        ]
+      );
+    }
     console.log(`wallets  : three fresh ones, never seen by this sale`);
     console.log("");
 
@@ -352,7 +421,10 @@ async function main(): Promise<void> {
       TOKEN_2022_PROGRAM_ID
     );
 
-    const shut = `the sale's price cannot be used right now (${bandRefusal}), so no buy can land to set this up`;
+    const shut =
+      bandRefusal === "PriceOutsideBand"
+        ? "the curve already stands above the ceiling, so no buy can land to set this up"
+        : `the sale's price cannot be used right now (${bandRefusal}), so no buy can land to set this up`;
 
     if (canBuy) {
       const toTheCap = await buyWithin(
@@ -425,7 +497,9 @@ async function main(): Promise<void> {
       );
       reports.push(
         await mustRefuse(
-          "buy while the sale's price cannot be used",
+          bandRefusal === "PriceOutsideBand"
+            ? "buy while the curve stands above the ceiling"
+            : "buy while the sale's price cannot be used",
           "C9",
           bandRefusal ?? "PriceStale",
           wouldBuy.transaction,
@@ -588,7 +662,7 @@ async function main(): Promise<void> {
         mint,
         amountOut: sale.cap,
       });
-      if (room.error === "PriceOutsideBand") {
+      if (room.error === "PriceOutsideBand" || aboveCeiling) {
         const overCeiling = await buyTransaction({
           connection,
           buyer: careless.publicKey,

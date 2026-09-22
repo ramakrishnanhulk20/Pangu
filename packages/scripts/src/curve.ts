@@ -3,9 +3,8 @@
  *
  * It is Meteora's own `buildCurve` input with nothing clever in it: a billion
  * tokens, a flat 25 basis point fee, all the graduating liquidity locked to the
- * creator. Only two things change per launch, the paying token's decimals and
- * the amount that has to be raised before the sale graduates, because those are
- * what decide how much devnet SOL the whole demo costs.
+ * creator. What changes per launch is the shape below, because that is what
+ * decides both the devnet cost of the demo and the price a share opens at.
  */
 
 import {
@@ -20,22 +19,52 @@ import {
   type BuildCurveParams,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
 
-/** The sale token's own decimals, fixed so a cap in raw units reads the same everywhere. */
-export const BASE_DECIMALS = TokenDecimal.SIX;
+/** How many shares a demo sale ever mints. */
+export const TOTAL_SUPPLY = 1_000_000_000;
 
-export function demoCurve(
-  quoteDecimals: TokenDecimal,
-  migrationQuoteThreshold: number
-): BuildCurveParams {
+/** What a launch decides about the curve it opens. */
+export interface CurveShape {
+  /** The paying token's decimals, read off its mint. */
+  quoteDecimals: TokenDecimal;
+  /** The sale token's decimals. */
+  baseDecimals: TokenDecimal;
+  /** What share of the supply is carried over to DAMM v2, as a percentage. */
+  migrationPercent: number;
+  /** Whole units of the paying token the curve has to take in to graduate. */
+  threshold: number;
+}
+
+/**
+ * The opening price of this curve, in whole units of the paying token per share.
+ *
+ * Meteora works the curve out from the raise and the supply, so the opening
+ * price is not something a launch sets directly: it falls out of the threshold,
+ * the supply and the share kept back for migration. This says what it will be,
+ * so a launch can be aimed at a price rather than guessed at. Measured against
+ * `buildCurve` for every shape the scripts open, and the real pool's own price
+ * is printed after the sale is open.
+ */
+export function openingPrice(shape: CurveShape): number {
+  const soldOnCurve = (100 - shape.migrationPercent) / 100;
+  const onMigration = shape.migrationPercent / 100;
+  return (
+    (shape.threshold * onMigration) /
+    (TOTAL_SUPPLY * soldOnCurve * soldOnCurve)
+  );
+}
+
+export function demoCurve(shape: CurveShape): BuildCurveParams {
+  const { quoteDecimals, baseDecimals, migrationPercent } = shape;
+  const migrationQuoteThreshold = shape.threshold;
   return {
     token: {
-      tokenBaseDecimal: BASE_DECIMALS,
+      tokenBaseDecimal: baseDecimals,
       tokenQuoteDecimal: quoteDecimals,
       // The creator keeps the metadata update authority and nobody keeps the
       // mint authority. A token that can still be minted is one the hook can
       // never hold to a cap, and create_sale refuses it.
       tokenAuthorityOption: TokenAuthorityOption.CreatorUpdateAuthority,
-      totalTokenSupply: 1_000_000_000,
+      totalTokenSupply: TOTAL_SUPPLY,
       leftover: 0,
     },
     fee: {
@@ -77,7 +106,7 @@ export function demoCurve(
       cliffDurationFromMigrationTime: 0,
     },
     activationType: ActivationType.Timestamp,
-    percentageSupplyOnMigration: 20,
+    percentageSupplyOnMigration: migrationPercent,
     migrationQuoteThreshold,
   } as unknown as BuildCurveParams;
 }

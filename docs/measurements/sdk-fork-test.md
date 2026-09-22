@@ -2,6 +2,15 @@
 
 Date: 22 September 2026.
 
+This is the run from the morning of that day, when the price band still read
+Switchboard. The band moved to Pyth the same afternoon, and the run that proves
+the band as it stands now is in `sdk-pyth.md`: same fork, Pyth's price update
+account, `PriceOutsideBand` and `PriceStale` both predicted and then refused by
+the chain. Everything below about the sale itself, the caps, the bytes and the
+compute units still holds, because none of that changed. The devnet price
+refresh recorded further down is the Switchboard one, kept as the record of what
+was measured; the Pyth refresh replacing it is in `sdk-pyth.md`.
+
 A whole sale run on a local validator holding Meteora's real mainnet Dynamic
 Bonding Curve and DAMM v2 programs, driven only by the `pangu-sdk` package plus
 web3.js. Nothing was sent to mainnet. The price refresh is proven on devnet with
@@ -20,7 +29,7 @@ Result: `SDK-FORK-OK`. Unit tests: 85 pass across 7 files.
 | Thing | Value |
 |---|---|
 | Meteora SDK | `@meteora-ag/dynamic-bonding-curve-sdk` 1.5.12, pinned exactly |
-| Switchboard | `@switchboard-xyz/on-demand` 3.10.6, `@switchboard-xyz/common` 5.8.5, the versions packages/program uses |
+| Price feed | `@pythnetwork/pyth-solana-receiver` 0.16.0, the one package the `pangu-sdk/price` entry adds. On the morning of this run it was `@switchboard-xyz/on-demand` 3.10.6 and `@switchboard-xyz/common` 5.8.5, and the fork test has run on Pyth since. |
 | web3.js | 1.98.4, a peer dependency |
 | Entry points | `pangu-sdk` (browser safe), `pangu-sdk/dbc`, `pangu-sdk/price` |
 
@@ -90,7 +99,10 @@ The two numbers that matter. The pool and the rules fit in one transaction with
 ever set the rules. And a buy costs about 115,000 units, or 145,000 in a banded
 sale, against a 1.4 million limit.
 
-## Devnet: the price refresh
+## Devnet: the price refresh, on Switchboard
+
+This is the Switchboard refresh, kept as the measurement it was. The Pyth one
+that replaced it, with its own fees and compute units, is in `sdk-pyth.md`.
 
 The production AAPL feeds, queue `EYiAmGSdsQTuCw413V5BzaruWuCCSDgTPtBGvLkXHbe7`,
 quote account `7uPLLyB29H9sATzjKi1DKWgqD2YXrjp8YS8QpEZi5b1Z`. Sent twice from
