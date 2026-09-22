@@ -1,0 +1,75 @@
+{
+  "name": "pangu-sdk",
+  "version": "0.1.0",
+  "description": "Find a Pangu sale's accounts, read the sale and its buyers, and build Pangu's instructions.",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./dbc": {
+      "import": {
+        "types": "./dist/dbc.d.mts",
+        "default": "./dist/dbc.mjs"
+      },
+      "require": {
+        "types": "./dist/dbc.d.ts",
+        "default": "./dist/dbc.js"
+      }
+    },
+    "./price": {
+      "import": {
+        "types": "./dist/price.d.mts",
+        "default": "./dist/price.mjs"
+      },
+      "require": {
+        "types": "./dist/price.d.ts",
+        "default": "./dist/price.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "sync-idl": "node scripts/idl.mjs sync",
+    "build": "node scripts/idl.mjs check && tsup",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anchor-lang/core": "1.2.0",
+    "@meteora-ag/dynamic-bonding-curve-sdk": "1.5.12",
+    "@solana/spl-token": "0.4.15",
+    "@switchboard-xyz/common": "5.8.5",
+    "@switchboard-xyz/on-demand": "3.10.6",
+    "buffer": "6.0.3"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.98"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "1.98.4",
+    "@types/node": "26.6.2",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}

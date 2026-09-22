@@ -1,0 +1,1253 @@
+{
+  "address": "4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG",
+  "metadata": {
+    "name": "pangu",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Rules for a fair first sale of a stock token on Meteora DBC"
+  },
+  "docs": [
+    "Pangu holds the rules of a stock token's first sale on Meteora's Dynamic Bonding",
+    "Curve: a cap per wallet, an optional issuer-approved buyer list, an optional",
+    "ceiling against the real stock's live price, and no wallet-to-wallet movement",
+    "until the sale is over. DBC finds the price, Pangu decides who may receive",
+    "tokens and how many."
+  ],
+  "instructions": [
+    {
+      "name": "approve_buyer",
+      "discriminator": [
+        193,
+        6,
+        144,
+        245,
+        24,
+        184,
+        227,
+        19
+      ],
+      "accounts": [
+        {
+          "name": "issuer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "rules"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "rules"
+          ]
+        },
+        {
+          "name": "rules",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "arg",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "close_buyer_record",
+      "discriminator": [
+        27,
+        105,
+        238,
+        144,
+        158,
+        212,
+        40,
+        114
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "record"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "record"
+          ]
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_sale",
+      "discriminator": [
+        137,
+        197,
+        124,
+        245,
+        254,
+        35,
+        17,
+        12
+      ],
+      "accounts": [
+        {
+          "name": "issuer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "docs": [
+            "owning program, the length and the discriminator before any field is used."
+          ]
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "owning program is checked there before the bytes are read."
+          ]
+        },
+        {
+          "name": "credential",
+          "docs": [
+            "key named in `credential`, owned by the attestation service, and to carry",
+            "the credential discriminator. Refused outright in the other modes."
+          ],
+          "optional": true
+        },
+        {
+          "name": "schema",
+          "docs": [
+            "key named in `schema`, owned by the attestation service, to belong to",
+            "`credential`, and not to be paused. Refused outright in the other modes."
+          ],
+          "optional": true
+        },
+        {
+          "name": "dbc_config",
+          "docs": [
+            "template this pool names, owned by DBC and of the right kind. Its fee mode",
+            "decides whether the sale may open at all, and a banded sale also reads the",
+            "paying token it was configured with."
+          ]
+        },
+        {
+          "name": "quote_mint",
+          "docs": [
+            "Band only, and required there. Must be the paying token the template names.",
+            "Its decimals are stored, so the hook can turn a curve price into dollars",
+            "without being handed a mint at buy time."
+          ],
+          "optional": true
+        },
+        {
+          "name": "price_queue",
+          "docs": [
+            "the band names and to be owned by Switchboard's On-Demand program for this",
+            "network. Only its key and owner are read, so it is not typed."
+          ],
+          "optional": true
+        },
+        {
+          "name": "rules",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "extra_account_meta_list",
+          "docs": [
+            "seeds the transfer-hook interface requires, and `init` makes it single-use."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  116,
+                  114,
+                  97,
+                  45,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cap",
+          "type": "u64"
+        },
+        {
+          "name": "access_mode",
+          "type": "u8"
+        },
+        {
+          "name": "credential",
+          "type": "pubkey"
+        },
+        {
+          "name": "schema",
+          "type": "pubkey"
+        },
+        {
+          "name": "band",
+          "type": {
+            "defined": {
+              "name": "PriceBand"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "execute",
+      "discriminator": [
+        105,
+        37,
+        101,
+        197,
+        75,
+        251,
+        102,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "source_token",
+          "docs": [
+            "owning program is checked. Nothing is read from it before that."
+          ]
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "the rules account is proven to be the one derived from it."
+          ],
+          "relations": [
+            "rules"
+          ]
+        },
+        {
+          "name": "destination_token",
+          "docs": [
+            "owning program is checked."
+          ]
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "because a signature proves nothing about who is allowed to receive tokens."
+          ]
+        },
+        {
+          "name": "extra_account_meta_list",
+          "docs": [
+            "Token-2022 resolves the extra accounts from it before the call. Pangu itself",
+            "reads nothing out of it, so it is carried, not trusted."
+          ]
+        },
+        {
+          "name": "rules",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination_record",
+          "docs": [
+            "program, discriminator, mint and wallet are all checked by hand below."
+          ],
+          "writable": true
+        },
+        {
+          "name": "source_record",
+          "docs": [
+            "program, discriminator, mint and wallet are all checked by hand below."
+          ],
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "open_buyer_record",
+      "discriminator": [
+        216,
+        212,
+        35,
+        190,
+        138,
+        99,
+        66,
+        197
+      ],
+      "accounts": [
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "rules",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "account",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "revoke_buyer",
+      "discriminator": [
+        78,
+        97,
+        108,
+        126,
+        172,
+        157,
+        228,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "issuer",
+          "signer": true,
+          "relations": [
+            "rules"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "rules",
+            "record"
+          ]
+        },
+        {
+          "name": "rules",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "arg",
+                "path": "wallet"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "wallet",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BuyerRecord",
+      "discriminator": [
+        107,
+        122,
+        54,
+        31,
+        4,
+        54,
+        209,
+        38
+      ]
+    },
+    {
+      "name": "SaleRules",
+      "discriminator": [
+        39,
+        103,
+        95,
+        70,
+        15,
+        23,
+        201,
+        128
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Bought",
+      "discriminator": [
+        193,
+        56,
+        215,
+        24,
+        156,
+        76,
+        42,
+        104
+      ]
+    },
+    {
+      "name": "BuyerApproved",
+      "discriminator": [
+        146,
+        41,
+        51,
+        7,
+        192,
+        96,
+        249,
+        196
+      ]
+    },
+    {
+      "name": "BuyerRecordClosed",
+      "discriminator": [
+        175,
+        245,
+        14,
+        122,
+        129,
+        113,
+        23,
+        155
+      ]
+    },
+    {
+      "name": "BuyerRecordOpened",
+      "discriminator": [
+        249,
+        239,
+        77,
+        35,
+        176,
+        81,
+        45,
+        85
+      ]
+    },
+    {
+      "name": "BuyerRevoked",
+      "discriminator": [
+        116,
+        129,
+        248,
+        92,
+        255,
+        222,
+        13,
+        59
+      ]
+    },
+    {
+      "name": "SaleCreated",
+      "discriminator": [
+        164,
+        187,
+        32,
+        35,
+        143,
+        167,
+        235,
+        132
+      ]
+    },
+    {
+      "name": "SoldBack",
+      "discriminator": [
+        153,
+        215,
+        200,
+        12,
+        194,
+        138,
+        190,
+        253
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotTransferring",
+      "msg": "Token-2022 is not mid-transfer on both token accounts"
+    },
+    {
+      "code": 6001,
+      "name": "ReceivingAccountOwnerCanChange",
+      "msg": "the receiving token account's owner can still be changed"
+    },
+    {
+      "code": 6002,
+      "name": "WrongMint",
+      "msg": "the account does not belong to this sale's mint"
+    },
+    {
+      "code": 6003,
+      "name": "WrongBuyerRecord",
+      "msg": "the buyer record is not the one for this wallet"
+    },
+    {
+      "code": 6004,
+      "name": "BuyerRecordMissing",
+      "msg": "this wallet has no buyer record yet"
+    },
+    {
+      "code": 6005,
+      "name": "NotApproved",
+      "msg": "this wallet is not on the issuer's approved list"
+    },
+    {
+      "code": 6006,
+      "name": "CredentialInvalid",
+      "msg": "the attestation is not valid for this wallet, credential and schema"
+    },
+    {
+      "code": 6007,
+      "name": "CredentialExpired",
+      "msg": "the attestation has expired"
+    },
+    {
+      "code": 6008,
+      "name": "CredentialSignerNotAuthorized",
+      "msg": "the key that signed the attestation is no longer an authorized signer"
+    },
+    {
+      "code": 6009,
+      "name": "OverCap",
+      "msg": "this buy would take the wallet over the per-wallet cap"
+    },
+    {
+      "code": 6010,
+      "name": "WalletToWalletDuringSale",
+      "msg": "the token cannot move between wallets while the sale is running"
+    },
+    {
+      "code": 6011,
+      "name": "PriceStale",
+      "msg": "the reference price is too old, missing or not a positive number"
+    },
+    {
+      "code": 6012,
+      "name": "MarketClosed",
+      "msg": "the real market has not traded recently enough for this sale to be open"
+    },
+    {
+      "code": 6013,
+      "name": "PriceOutsideBand",
+      "msg": "the price is outside the allowed band"
+    },
+    {
+      "code": 6014,
+      "name": "WrongPriceAccount",
+      "msg": "the price account is not the one named in the rules, or does not hold a usable quote"
+    },
+    {
+      "code": 6015,
+      "name": "PriceNotEnoughOracles",
+      "msg": "the price quote does not carry enough oracle signatures"
+    },
+    {
+      "code": 6016,
+      "name": "PriceSignerNotAnOracle",
+      "msg": "a key that signed the price quote is not an oracle this queue lists"
+    },
+    {
+      "code": 6017,
+      "name": "PriceSlotHashMismatch",
+      "msg": "the slot hash the oracles signed does not match the chain's own record"
+    },
+    {
+      "code": 6018,
+      "name": "NotPoolCreator",
+      "msg": "the signer did not create this pool"
+    },
+    {
+      "code": 6019,
+      "name": "NotAHookPool",
+      "msg": "the account is not a DBC transfer-hook pool"
+    },
+    {
+      "code": 6020,
+      "name": "HookProgramMismatch",
+      "msg": "the mint's transfer hook does not name this program"
+    },
+    {
+      "code": 6021,
+      "name": "MintAuthorityStillSet",
+      "msg": "someone can still mint this token, which would go straight past the cap"
+    },
+    {
+      "code": 6022,
+      "name": "WrongLaunchTemplate",
+      "msg": "the launch template is not the one this pool was opened on"
+    },
+    {
+      "code": 6023,
+      "name": "FeesNotInQuoteToken",
+      "msg": "the launch template collects fees in the sale token instead of the paying token"
+    },
+    {
+      "code": 6024,
+      "name": "ZeroCap",
+      "msg": "the cap must be above zero"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidAccessMode",
+      "msg": "that access mode is not available"
+    },
+    {
+      "code": 6026,
+      "name": "InvalidBand",
+      "msg": "the price band settings are incomplete, out of range, or set on a sale that has no band"
+    },
+    {
+      "code": 6027,
+      "name": "SaleStillRunning",
+      "msg": "the sale is still running, the mint still names this program as its hook"
+    },
+    {
+      "code": 6028,
+      "name": "NotIssuer",
+      "msg": "only the issuer can do this"
+    },
+    {
+      "code": 6029,
+      "name": "MathOverflow",
+      "msg": "the counter would overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Bought",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "net_bought",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuyerApproved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuyerRecord",
+      "docs": [
+        "One wallet's standing in one sale. Keyed on the wallet that owns the token",
+        "account, never on the token account, so extra token accounts share one cap."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "net_bought",
+            "docs": [
+              "Tokens received from the pool minus tokens sold back to it."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuyerRecordClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuyerRecordOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuyerRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceBand",
+      "docs": [
+        "The price band settings, passed to `create_sale` as one value.",
+        "",
+        "They travel together because they are only meaningful together: the quote",
+        "account's address is derived from the queue and both feed ids, so changing any",
+        "one of them changes which account the hook must read."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "band_bps",
+            "docs": [
+              "How far above the live stock price a buy may leave the curve price, in",
+              "basis points. Zero switches the whole band off."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "price_account",
+            "docs": [
+              "The Switchboard quote account. Must be the canonical address for the queue",
+              "and the two feed ids below."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price_queue",
+            "docs": [
+              "The Switchboard queue whose oracles sign the quote."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price_feed_id",
+            "docs": [
+              "The feed carrying the stock price in dollars."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "clock_feed_id",
+            "docs": [
+              "The feed carrying the time of the last real market trade, in Unix seconds."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "max_price_age_slots",
+            "docs": [
+              "How old the oracle quote may be on a buy, in slots."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "max_market_age_secs",
+            "docs": [
+              "How old the last real market trade may be, in seconds."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "min_oracles",
+            "docs": [
+              "Fewest oracle signatures a quote must carry."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SaleCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "base_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "access_mode",
+            "type": "u8"
+          },
+          {
+            "name": "band_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SaleRules",
+      "docs": [
+        "The rules of one sale. Written once at creation and never changed: there is no",
+        "update instruction, which is what makes the cap a promise instead of a setting."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "base_vault",
+            "docs": [
+              "The pool's base token vault, read out of the pool account at creation. The",
+              "hook tells a buy from a sell by comparing against this one address."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "issuer",
+            "docs": [
+              "The pool creator. The only key that can approve or revoke buyers."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "cap",
+            "docs": [
+              "Most tokens one wallet may hold net of sells, in raw units."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "access_mode",
+            "type": "u8"
+          },
+          {
+            "name": "credential",
+            "docs": [
+              "Mode 2 only: the attestation credential whose approvals count. Zero",
+              "otherwise. Sits at byte 145 of the account, and the hook's extra accounts",
+              "are derived by reading it there, so it can never move."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "schema",
+            "docs": [
+              "Mode 2 only: the attestation schema that counts. Zero otherwise. Sits at",
+              "byte 177 of the account, read the same way."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price_account",
+            "docs": [
+              "Band only: the Switchboard quote account, at byte 209. Zero otherwise."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price_queue",
+            "docs": [
+              "Band only: the Switchboard queue, at byte 241. Zero otherwise."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "band_bps",
+            "docs": [
+              "Zero means no band."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "price_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "clock_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "max_price_age_slots",
+            "type": "u32"
+          },
+          {
+            "name": "max_market_age_secs",
+            "type": "u32"
+          },
+          {
+            "name": "min_oracles",
+            "type": "u8"
+          },
+          {
+            "name": "base_decimals",
+            "docs": [
+              "Read off the two mints at creation, so the curve price can be turned into",
+              "dollars per whole token without trusting anything passed at buy time."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "quote_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "buyers",
+            "docs": [
+              "Wallets whose record is above zero right now."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "total_net_bought",
+            "docs": [
+              "Sum of every record, so the app can show the largest holder's share."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SoldBack",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "net_bought",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
