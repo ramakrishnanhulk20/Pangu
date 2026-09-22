@@ -12,9 +12,20 @@ and TSLAX prices. The band rule has not changed: it is still a ceiling on the
 curve price measured against the live stock price, and it still never touches a
 sell. Only the account the ceiling is read from is different.
 
-**Caveat, stated up front.** Ram's Pyth access runs to 5 Oct 2026. After that the
-refresh script cannot fetch a fresh update from Hermes without a new key. The
-program side is unaffected: it reads an account, not an API.
+**Caveat, stated up front.** Ram's Pyth access runs to 5 Oct 2026. After that
+`feeds/refresh.ts` cannot fetch a fresh update from Hermes without a new key, and
+with nothing fresh being written the band would refuse every buy and allow every
+sell, which is the safe way round but is still a sale nobody can join. The
+program side is unaffected either way: it reads an account, not an API, and
+anybody at all can refresh that account.
+
+## Test counts, as they stand
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Rust unit tests | `test.sh` | 27 passed |
+| litesvm suite | `test.sh` | 119 passing |
+| Fork against real DBC | `fork-test.sh` | 36 passing |
 
 ## The account the band reads, proven against real bytes
 
@@ -127,6 +138,21 @@ stops moving and ages out. From inside the program a shut market and a broken
 publisher look identical, so the band treats them the same way: no fresh price,
 no buy. `MarketClosed` was removed rather than faked, because an error that
 claimed to tell the two apart would be a lie.
+
+## The rules account, and what could not move
+
+`SaleRules` is 354 bytes of payload, down from 419, because the queue, the second
+feed id, the slot-based age and the oracle quorum all went. Three offsets were
+frozen before this work started and are still where they were, because the hook's
+extra accounts are derived by reading those exact bytes: `credential` at byte 145,
+`schema` at 177 and `price_account` at 209. The band's own fields follow:
+`price_feed_id` at 241, `price_shard` at 273, `band_bps` at 275,
+`max_price_age_secs` at 277 and `max_conf_bps` at 281. A Rust assertion pins the
+total size and a test in `tests/band.ts` reads those offsets back off real bytes,
+so a silent reshuffle fails the build rather than deriving a wrong address.
+
+No sale exists on mainnet and the earlier devnet sales are abandoned, so changing
+the tail cost nothing.
 
 ## A banded buy
 
