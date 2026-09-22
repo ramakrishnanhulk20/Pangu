@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
 
 // The app reads packages/scripts/sales.json, one folder up, so both the
@@ -16,4 +17,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// The docs route reads MDX out of content/docs, compiled by Fumadocs.
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

@@ -1,0 +1,17 @@
+{
+  "title": "Docs",
+  "pages": [
+    "---Start here---",
+    "index",
+    "how-it-works",
+    "why-not",
+    "getting-started",
+    "---The rules---",
+    "price-band",
+    "security",
+    "---Reference---",
+    "addresses",
+    "faq",
+    "rubric"
+  ]
+}
