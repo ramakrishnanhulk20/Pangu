@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
+import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 
 import { Providers } from "./providers";
@@ -49,6 +50,7 @@ export default function RootLayout({
         <Providers>
           <SiteNav />
           <main className="flex-1">{children}</main>
+          <SiteFooter />
         </Providers>
       </body>
     </html>

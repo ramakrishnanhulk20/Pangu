@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repositoryRoot,
   },
+  // Anchor's ESM entry does `exports.workspace = require(...)` unless it
+  // believes it is in a browser, which throws "exports is not defined" when
+  // Next renders a client component on the server. The app never uses the
+  // node-only workspace or Wallet, so Anchor is told it is in a browser
+  // everywhere.
+  env: {
+    ANCHOR_BROWSER: "true",
+  },
 };
 
 // The docs route reads MDX out of content/docs, compiled by Fumadocs.
