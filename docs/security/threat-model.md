@@ -27,7 +27,7 @@ This is a policy-enforcement program that is invoked by another program on every
 | Stale or manipulated reference data | The price band reads a Pyth price feed account and the DBC pool's own price. Pyth stops publishing an equity outside its trading sessions, so freshness is also the market clock. The pool price is moved by the very trade being checked. |
 | Arithmetic and state errors | Net-bought counters add on buys and subtract on sells. Overflow, underflow on a sell of tokens received elsewhere, and rounding between raw units and display units. |
 | Reentrancy | Not applicable in the usual sense: the hook makes no outgoing calls and Token-2022 forbids the hook from moving the tokens in flight. Stated so nobody assumes more. |
-| Off-chain transaction assembly | The scripts choose accounts and amounts for transactions Ram or a buyer signs. A wrong pool, wrong template or wrong receiver address sends real money to the wrong place. |
+| Off-chain transaction assembly | The scripts choose accounts and amounts for transactions the issuer or a buyer signs. A wrong pool, wrong template or wrong receiver address sends real money to the wrong place. |
 
 Does not apply: web session handling, server-side secrets, databases, user-supplied URLs. There is no server state.
 
@@ -79,7 +79,7 @@ Each line is an outcome the code must uphold. A work order carries the relevant 
 | C10 | All counter math is checked. A sell larger than the wallet's recorded net bought reduces the record to zero and never underflows. |
 | C11 | The launch template makes fee collection happen in the paying token only, so no fee or referral payout ever moves the sale token through the hook. |
 | C12 | Scripts never hold or print a private key, and every address that receives money is shown to the signer before signing and read back from the chain after. |
-| C14 | During the sale no sale token can come into existence except out of the pool vault. The mint's minting power is gone before the sale opens, and create_sale refuses a mint that still has it. Minting is not a transfer and no hook sees it, so without this rule the issuer could mint to any wallet, past the cap and the approvals, and sell into the pool. Found in the code review of 22 Sep 2026, decided by Ram the same day. |
+| C14 | During the sale no sale token can come into existence except out of the pool vault. The mint's minting power is gone before the sale opens, and create_sale refuses a mint that still has it. Minting is not a transfer and no hook sees it, so without this rule the issuer could mint to any wallet, past the cap and the approvals, and sell into the pool. Found in the code review of 22 Sep 2026, decided by the founder the same day. |
 | C13 | During the sale, tokens leave the pool vault only into a token account whose owner can never change. Handing over a whole token account is not a transfer, so no hook sees it. Without this rule a buyer could pass tokens to an unapproved wallet, or pass a full account on and buy again. Found in review of the first build, 21 Sep 2026. |
 
 ### General standards we commit to

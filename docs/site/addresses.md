@@ -10,7 +10,7 @@ description: Everything Pangu depends on, where it lives on chain, and how to ch
 | Program address | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
 | Running since | 22 September 2026, 13:02:53 UTC, slot 502436678 |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
-| Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by Ram, stated openly |
+| Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by the team and stated openly |
 | sha256 of the deployed build | `08746faa7b4ac83ada7bfa0cd2fcf0b04aabc9c335ebfc310fd2a06d486d3a7c` |
 
 The program has been deployed and upgraded three times on devnet, always at this same address, each one checked byte for byte against the code that was tested before it went live. The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
@@ -64,4 +64,4 @@ proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw uni
 
 ## Mainnet
 
-Not deployed for this submission. Ram's decision, 22 September 2026: mainnet deploy costs about 4 SOL, most of it recoverable rent, and it was not the right call to spend it for this submission. The devnet program above is where the whole sale life, every rule, and every attack are proven on a live network with real transactions. The mainnet deploy script is written and ready; running it needs one command and a funded mainnet wallet, and nothing about the program or the SDK changes.
+Not deployed for this submission. The team's decision, 22 September 2026: a mainnet deploy costs about 4 SOL, most of it recoverable rent, and it was not the right call to spend it for this submission. The devnet program above is where the whole sale life, every rule, and every attack are proven on a live network with real transactions. The mainnet deploy script is written and ready; running it needs one command and a funded mainnet wallet, and nothing about the program or the SDK changes.

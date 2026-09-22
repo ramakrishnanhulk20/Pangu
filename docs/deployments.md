@@ -143,7 +143,7 @@ closing report says how many buffers are still holding SOL.
 
 ## Mainnet
 
-Not deployed. Mainnet is Ram's decision and gets its own work order, its own
+Not deployed. Mainnet is the team's decision and gets its own run, its own
 funded wallet and its own upgrade authority plan. `deploy.sh` refuses it today.
 
 | Fact | Value |

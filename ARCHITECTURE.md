@@ -272,5 +272,5 @@ A record account that does not exist yet is still passed. The program treats an 
 
 - Token type Token-2022, hook program Pangu, graduation to DAMM v2.
 - Fees collected in the paying token only, so no fee claim or referral payout ever moves the sale token while the hook is live.
-- Token authority option `CreatorUpdateAuthority` (metadata stays editable, minting power revoked at launch). `create_sale` refuses a mint whose mint authority is still set (threat model C14, Ram's decision 22 Sep 2026). An issuer with more shares later runs a new sale.
+- Token authority option `CreatorUpdateAuthority` (metadata stays editable, minting power revoked at launch). `create_sale` refuses a mint whose mint authority is still set (threat model C14, the founder's decision 22 Sep 2026). An issuer with more shares later runs a new sale.
 - Fees collected in the paying token is checked on chain too: `create_sale` reads the template's collect fee mode in every mode and refuses anything else (C11, code review 22 Sep 2026).

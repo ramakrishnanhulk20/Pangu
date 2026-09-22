@@ -15,7 +15,7 @@ Pyth only publishes a fresh price for a stock while that stock's real market is 
 
 ## The Pyth access caveat
 
-Since 26 August 2026, every fresh read of a Pyth price has needed an API key. Ram's account was given access to every feed, including stock feeds, through 5 October 2026, which covers the whole of judging. A real issuer running Pangu after this submission would need to get their own Pyth key the same way, through Pyth's own developer program. Nothing about the program or the rules changes based on whose key is refreshing the price; the key only controls who is allowed to fetch a signed update from Pyth's Hermes service and write it on chain, and it never leaves the server side of the demo scripts.
+Since 26 August 2026, every fresh read of a Pyth price has needed an API key. the team's account was given access to every feed, including stock feeds, through 5 October 2026, which covers the whole of judging. A real issuer running Pangu after this submission would need to get their own Pyth key the same way, through Pyth's own developer program. Nothing about the program or the rules changes based on whose key is refreshing the price; the key only controls who is allowed to fetch a signed update from Pyth's Hermes service and write it on chain, and it never leaves the server side of the demo scripts.
 
 ## The history, in two lines
 
