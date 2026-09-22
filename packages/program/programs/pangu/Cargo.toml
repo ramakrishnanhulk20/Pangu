@@ -1,0 +1,45 @@
+[package]
+name = "pangu"
+version = "0.1.0"
+description = "Rules for a fair first sale of a stock token on Meteora DBC"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "pangu"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = { version = "=1.2.0", features = ["init-if-needed"] }
+# Token-2022 account and mint unpacking comes from anchor-spl's own re-export, so
+# there is exactly one version of the Token-2022 types in the build. The `token`
+# feature comes along because anchor-spl 1.2.0's `token_interface` module refers to
+# the classic token crate even when only Token-2022 is asked for.
+anchor-spl = { version = "=1.2.0", default-features = false, features = ["token", "token_2022"] }
+spl-discriminator = "=0.5.2"
+spl-tlv-account-resolution = "=0.11.4"
+spl-transfer-hook-interface = "=2.1.0"
+# 256 bit integers for the price band. Squaring a u128 sqrt price needs more than
+# 128 bits, and hand-rolling wide arithmetic on money is not worth the risk. This
+# is the same crate and version Meteora's own bonding curve program uses, so it is
+# already proven to build for this target.
+ruint = { version = "=1.14.0", default-features = false, features = ["alloc"] }
+# Pyth's own Solana SDK. It carries the `PriceUpdateV2` account type, the receiver
+# and price feed program ids, and the getter that checks the feed id, the
+# verification level and the age of a price. Reading a price feed account by hand
+# would mean re-typing byte offsets that Pyth can change, so the audited crate
+# does the parsing and Pangu adds only the rules Pyth leaves to the caller.
+pyth-solana-receiver-sdk = "=2.0.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
