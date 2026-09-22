@@ -6,30 +6,68 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --paper: #fbfbfa;
-  --ink: #16161a;
-  --muted: #6b6b73;
-  --line: #e2e2df;
-  --raised: #ffffff;
+  --paper: #f6f5f0;
+  --ink: #14140f;
+  --muted: #6c6c60;
+  --line: #dedcd2;
+  --raised: #fcfbf7;
+  --accent: #4f6b00;
+  --accent-ink: #f6f5f0;
+
+  /* The one drawing, inked for paper. Same paths in both modes. */
+  --motif-line: rgba(20, 20, 15, 0.45);
+  --motif-faint: rgba(20, 20, 15, 0.1);
+  --motif-glow: none;
+
+  --grain-opacity: 0.05;
+  --grain-blend: multiply;
+
+  /* Cold family, for the sale readout only. Never decoration. */
+  --pending: #3f6fd8;
+  --refused: #c23927;
 }
 
 [data-theme="dark"] {
-  --paper: #0c0c0e;
-  --ink: #ededea;
-  --muted: #8b8b93;
-  --line: #26262b;
-  --raised: #141418;
+  --paper: #0b0b0a;
+  --ink: #edede6;
+  --muted: #8a8a80;
+  --line: #24241f;
+  --raised: #131311;
+  --accent: #c8f135;
+  --accent-ink: #14140f;
+
+  --motif-line: rgba(237, 237, 230, 0.34);
+  --motif-faint: rgba(237, 237, 230, 0.08);
+  --motif-glow: drop-shadow(0 0 22px rgba(200, 241, 53, 0.3));
+
+  --grain-opacity: 0.07;
+  --grain-blend: screen;
+
+  --pending: #7aa6ff;
+  --refused: #ff6f5c;
 }
 
 /* Before next-themes has written the attribute, and when scripting is off, the
    operating system setting still decides. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #0c0c0e;
-    --ink: #ededea;
-    --muted: #8b8b93;
-    --line: #26262b;
-    --raised: #141418;
+    --paper: #0b0b0a;
+    --ink: #edede6;
+    --muted: #8a8a80;
+    --line: #24241f;
+    --raised: #131311;
+    --accent: #c8f135;
+    --accent-ink: #14140f;
+
+    --motif-line: rgba(237, 237, 230, 0.34);
+    --motif-faint: rgba(237, 237, 230, 0.08);
+    --motif-glow: drop-shadow(0 0 22px rgba(200, 241, 53, 0.3));
+
+    --grain-opacity: 0.07;
+    --grain-blend: screen;
+
+    --pending: #7aa6ff;
+    --refused: #ff6f5c;
   }
 }
 
@@ -39,6 +77,14 @@
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-raised: var(--raised);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-pending: var(--pending);
+  --color-refused: var(--refused);
+
+  --font-display: var(--font-bricolage), ui-sans-serif, sans-serif;
+  --font-body: var(--font-plex-sans), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 html {
@@ -52,18 +98,50 @@ html {
 body {
   background: var(--paper);
   color: var(--ink);
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* The wallet adapter ships its own purple. Hold it to the neutral palette
-   until the accent colour is chosen. */
+/* Film grain. One layer over the whole hero, never over body text weight. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* The line draws itself once. pathLength is set to 1 on the path, so one rule
+   works whatever the real geometry measures. */
+@keyframes draw-curve {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The wallet adapter ships its own purple. Held to the palette, and kept
+   quiet: the page's one action is in the hero, not in the nav. */
 .wallet-adapter-button-trigger {
-  background-color: var(--ink) !important;
-  color: var(--paper) !important;
+  background-color: transparent !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--line) !important;
   border-radius: 8px !important;
   height: 36px !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 500 !important;
   padding: 0 14px !important;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.wallet-adapter-button-trigger:hover {
+  background-color: transparent !important;
+  color: var(--ink) !important;
+  border-color: var(--ink) !important;
 }
 
 .wallet-adapter-modal-wrapper {

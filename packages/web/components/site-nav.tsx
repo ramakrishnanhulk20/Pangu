@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 
+import { CurveMark } from "./hero/curve-mark";
 import { ThemeToggle } from "./theme-toggle";
 
 // The wallet button reads the browser's injected wallets, so rendering it on
@@ -19,8 +20,9 @@ export function SiteNav() {
       <nav className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5 sm:px-8">
         <Link
           href="/"
-          className="text-sm font-medium tracking-tight transition-opacity hover:opacity-60"
+          className="flex items-center gap-2 text-sm font-medium tracking-tight transition-opacity hover:opacity-60"
         >
+          <CurveMark className="h-5 w-5" />
           Pangu
         </Link>
         <Link

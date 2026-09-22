@@ -1,0 +1,13 @@
+Cross-check for the hero's live numbers. Run: node lab-evidence/cross-check.mjs
+It reads devnet through pangu-sdk in its own process, no browser and no wallet,
+so the numbers below can be held against the screenshots in this folder.
+
+-- independent read, 2026-09-22 14:44 UTC --
+curve price      $400.00 a share   (mint 4vyCQRLe..., pool sqrtPrice 11666745337904259356)
+Apple from Pyth  $344.64  usable=false  age=4239s
+price ceiling    $361.88 a share   (band 5%)
+buyers           8   (mint FToBcoya...)
+largest wallet   16.8% of a 17.1% cap
+
+-- what the page served at the same moment (GET /api/pulse, no wallet) --
+{"priceSaleName":"Pangu Priced Share","priceDollars":400.00000003272396,"stockName":"Apple","stockDollars":344.64376,"ceilingDollars":361.875948,"priceWarning":"no fresh price right now, so buying is paused","sharedSaleName":"Pangu Listed Share","buyers":8,"largestShare":0.167605371,"capShare":0.171178631,"failure":null}
