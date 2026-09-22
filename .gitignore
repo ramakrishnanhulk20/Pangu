@@ -28,3 +28,4 @@ test-ledger/
 .DS_Store
 
 spikes/
+logs/
