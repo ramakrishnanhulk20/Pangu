@@ -22,7 +22,9 @@ import {
   listBuyerRecords,
   saleRulesAddress,
   saleStanding,
+  PanguLayoutError,
   PANGU_IDL,
+  SALE_RULES_LAYOUT_VERSION,
   PANGU_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
 } from "../src/index.js";
@@ -51,7 +53,8 @@ const openRules = {
   buyers: 0,
   total_net_bought: new BN(0),
   bump: 254,
-  reserved: Array<number>(64).fill(0),
+  layout_version: SALE_RULES_LAYOUT_VERSION,
+  reserved: Array<number>(63).fill(0),
 };
 
 const bandedRules = {
@@ -133,7 +136,7 @@ describe("decoding", () => {
     expect(sale.buyers).toBe(0);
     expect(sale.totalNetBought).toBe(0n);
     expect(sale.bump).toBe(254);
-    expect(sale.reserved).toHaveLength(64);
+    expect(sale.reserved).toHaveLength(63);
     expect(sale.hasBand).toBe(false);
   });
 
@@ -183,6 +186,30 @@ describe("decoding", () => {
       bump: 1,
     });
     expect(() => decodeSale(bytes)).toThrow(/not a Pangu SaleRules/);
+  });
+
+  it("refuses an account that is not the size this build writes", async () => {
+    const current = await coder.accounts.encode("SaleRules", openRules);
+    // 427 bytes is the size an earlier build's rules account really is on
+    // devnet. Anchor reads every field at a fixed offset and would hand back a
+    // sale with 146 decimals and 28 million buyers rather than an error.
+    const older = Buffer.concat([current, Buffer.alloc(427 - current.length)]);
+    expect(older).toHaveLength(427);
+    expect(() => decodeSale(older)).toThrow(PanguLayoutError);
+    expect(() => decodeSale(older)).toThrow(
+      new RegExp(`is ${current.length} bytes and these are 427`)
+    );
+  });
+
+  it("refuses an account of the right size from another layout", async () => {
+    const data = await coder.accounts.encode("SaleRules", {
+      ...openRules,
+      layout_version: 0,
+    });
+    expect(() => decodeSale(data)).toThrow(PanguLayoutError);
+    expect(() => decodeSale(data)).toThrow(
+      new RegExp(`layout version 0 and this package reads version ${SALE_RULES_LAYOUT_VERSION}`)
+    );
   });
 });
 
@@ -308,6 +335,28 @@ describe("reads", () => {
     expect(filters[1].memcmp.bytes).toBe(
       coder.accounts.memcmp("BuyerRecord", openRules.mint.toBuffer()).bytes
     );
+  });
+
+  it("refuses to read a sale whose rules came from another layout", async () => {
+    const mint = key();
+    const data = await coder.accounts.encode("SaleRules", {
+      ...openRules,
+      mint,
+      layout_version: 0,
+    });
+    const { connection } = connectionWith(
+      new Map<string, { data: Buffer; owner: PublicKey }>([
+        [saleRulesAddress(mint).toBase58(), { data, owner: PANGU_PROGRAM_ID }],
+        [
+          mint.toBase58(),
+          { data: mintWithHook(PANGU_PROGRAM_ID), owner: TOKEN_2022_PROGRAM_ID },
+        ],
+      ])
+    );
+    await expect(getSale(connection, mint)).rejects.toThrow(PanguLayoutError);
+    // Whether the sale is still running is read off the mint alone, so it keeps
+    // answering for a sale this package refuses to decode.
+    expect(await isSaleRunning(connection, mint)).toBe(true);
   });
 
   it("calls a sale running while the mint still names Pangu", async () => {

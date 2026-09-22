@@ -188,6 +188,8 @@ const EXPLANATIONS = {
     "The sale is still running and this record still counts tokens, so it cannot be closed yet. Sell them back or wait for the sale to finish.",
   NotIssuer: "Only the issuer of this sale can do that.",
   MathOverflow: "The sale's counters cannot go any higher.",
+  WrongLayoutVersion:
+    "These sale rules were written by an older build of the program, so this build will not act on them.",
 } as const;
 
 export type PanguErrorName = keyof typeof EXPLANATIONS;

@@ -10,6 +10,7 @@ export {
   LIMITS,
   SEEDS,
   PANGU_IDL,
+  SALE_RULES_LAYOUT_VERSION,
 } from "./constants.js";
 export type { AccessMode } from "./constants.js";
 
@@ -28,6 +29,7 @@ export {
 export type { FeedId } from "./addresses.js";
 
 export {
+  PanguLayoutError,
   decodeSale,
   decodeBuyerRecord,
   getSale,

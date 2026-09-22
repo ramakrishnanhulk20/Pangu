@@ -58,4 +58,6 @@ pub enum PanguError {
     NotIssuer,
     #[msg("the counter would overflow")]
     MathOverflow,
+    #[msg("these sale rules were written by another layout of the program")]
+    WrongLayoutVersion,
 }

@@ -106,8 +106,11 @@ pub struct Execute<'info> {
 /// attestation from it, `WrongPriceAccount`, `PriceStale`,
 /// `PriceNotFullyVerified`, `PriceTooUncertain` and `PriceOutsideBand` when the
 /// sale carries a price band and this buy cannot be shown to sit inside it, `OverCap`
-/// when the buy would take the wallet past the cap, `MathOverflow` on any counter
-/// overflow, `WalletToWalletDuringSale` for everything else.
+/// when the buy would take the wallet past the cap, `WrongLayoutVersion` when the
+/// rules account was written by another layout of the program, `MathOverflow` on
+/// any counter overflow, `WalletToWalletDuringSale` for everything else. A sell
+/// never fails for any of these: a sale whose rules this build cannot read leaves
+/// the counters alone and lets the tokens go.
 ///
 /// Emits `Bought` on a buy and `SoldBack` on a sell that moved a record.
 pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
@@ -123,9 +126,17 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
         // holder who cannot sell is trapped, and trapping holders is worse than a
         // counter that drifts high and only ever costs that holder buying room.
         let expected = derive_record_key(&mint_key, &source.owner);
-        if let Some(mut record) =
+        // Rules from another layout cannot be counted against: the counters may
+        // not be the bytes this build reads. That is treated exactly like a
+        // missing record, so the sell still goes through and the exit keeps its
+        // no-failure property. Refusing here would trap every holder of a sale
+        // opened by an earlier build.
+        let found = if rules.layout_is_current() {
             load_record(&ctx.accounts.source_record, &expected, &mint_key, &source.owner)
-        {
+        } else {
+            None
+        };
+        if let Some(mut record) = found {
             let before = record.net_bought;
             let after = before.saturating_sub(amount);
             let removed = before.saturating_sub(after);
@@ -148,6 +159,11 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
     }
 
     if source.key == rules.base_vault {
+        // A buy reads the cap, the access mode and the band out of this account
+        // at fixed offsets, so rules from another layout would be read as rules
+        // they are not. Nothing on this path has to succeed, so it refuses.
+        require!(rules.layout_is_current(), PanguError::WrongLayoutVersion);
+
         // Handing over ownership of a whole token account is not a transfer, so no
         // hook ever sees it. Without this rule a buyer could pass a full account to
         // an unapproved wallet, or pass one on and buy their cap again.

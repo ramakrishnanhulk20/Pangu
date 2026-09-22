@@ -1059,6 +1059,32 @@ export function attest(
   return address;
 }
 
+/**
+ * Where `layout_version` sits inside a serialized SaleRules, the eight byte
+ * discriminator included. It is the first of the bytes that used to be spare,
+ * so it lands behind every field an earlier build already wrote.
+ */
+export const RULES_LAYOUT_VERSION_OFFSET = 298;
+
+/**
+ * Rewrites the layout version on a sale's rules account. Writing the byte by
+ * hand is the only way to aim an account from another build of the program at
+ * the program, because create_sale only ever writes the current one.
+ */
+export async function setRulesLayoutVersion(env: Env, version: number) {
+  const account = await env.client.getAccount(env.rules);
+  assert.isNotNull(account, "the rules account is missing");
+  const data = Buffer.from(account!.data);
+  data.writeUInt8(version, RULES_LAYOUT_VERSION_OFFSET);
+  env.ctx.setAccount(env.rules, {
+    lamports: account!.lamports,
+    data,
+    owner: account!.owner,
+    executable: account!.executable,
+    rentEpoch: account!.rentEpoch,
+  });
+}
+
 /** Makes an account look the way a closed one does: gone. */
 export function removeAccount(env: Env, address: PublicKey) {
   env.ctx.setAccount(address, {

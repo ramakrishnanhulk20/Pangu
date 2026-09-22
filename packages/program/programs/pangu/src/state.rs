@@ -7,6 +7,11 @@ pub const ACCESS_ISSUER_LIST: u8 = 1;
 /// Only wallets a named verifier has attested may buy.
 pub const ACCESS_VERIFIER_CREDENTIAL: u8 = 2;
 
+/// The layout this build writes and reads. A SaleRules account carrying any
+/// other number was written by a different build, where the fields behind this
+/// byte may sit somewhere else entirely.
+pub const SALE_RULES_LAYOUT_VERSION: u8 = 1;
+
 pub const SALE_SEED: &[u8] = b"sale";
 pub const BUYER_SEED: &[u8] = b"buyer";
 
@@ -87,12 +92,25 @@ pub struct SaleRules {
     /// Sum of every record, so the app can show the largest holder's share.
     pub total_net_bought: u64,
     pub bump: u8,
-    pub reserved: [u8; 64],
+    /// Which layout wrote this account, at byte 298. It takes the first of what
+    /// used to be the spare bytes, so the account is the same size and every
+    /// field in front of it sits exactly where it always did. A sale opened
+    /// before this byte existed reads as version 0, which is how a reader tells
+    /// the two apart instead of reading one layout's bytes as the other's.
+    pub layout_version: u8,
+    pub reserved: [u8; 63],
 }
 
 impl SaleRules {
     pub fn has_band(&self) -> bool {
         self.band_bps > 0
+    }
+
+    /// True when this account was written by the layout this build reads. One
+    /// predicate rather than a comparison repeated in each instruction, so a
+    /// second version can never be added to some readers and missed by others.
+    pub fn layout_is_current(&self) -> bool {
+        self.layout_version == SALE_RULES_LAYOUT_VERSION
     }
 }
 

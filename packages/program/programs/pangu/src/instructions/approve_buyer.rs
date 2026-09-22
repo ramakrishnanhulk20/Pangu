@@ -36,12 +36,18 @@ pub struct ApproveBuyer<'info> {
 /// Preconditions: the sale runs in issuer-list mode and the signer is its issuer.
 ///
 /// Rejects: `NotIssuer` for any other signer, `WrongMint` when the rules do not
-/// belong to the given mint, `InvalidAccessMode` when the sale has no list.
+/// belong to the given mint, `WrongLayoutVersion` when the rules account was
+/// written by another layout of the program, `InvalidAccessMode` when the sale
+/// has no list.
 ///
 /// Never touches `net_bought`, so re-approving a wallet cannot give it a fresh cap.
 ///
 /// Emits `BuyerApproved`.
 pub fn handle_approve_buyer(ctx: Context<ApproveBuyer>, wallet: Pubkey) -> Result<()> {
+    require!(
+        ctx.accounts.rules.layout_is_current(),
+        PanguError::WrongLayoutVersion
+    );
     require!(
         ctx.accounts.rules.access_mode == ACCESS_ISSUER_LIST,
         PanguError::InvalidAccessMode

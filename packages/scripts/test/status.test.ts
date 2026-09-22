@@ -6,7 +6,9 @@
 // network says whether the demo is up.
 
 import { describe, expect, it } from "vitest";
+import { PanguInputError, PanguLayoutError } from "pangu-sdk";
 import {
+  earlierBuildReason,
   exitCode,
   readDeployedBuild,
   renderTable,
@@ -116,5 +118,20 @@ describe("the deployment record", () => {
     expect(() => readDeployedBuild(DEPLOYMENTS.replace(/08746FAA[0-9A-F]+/, "unknown"))).toThrow(
       /not a sha256/
     );
+  });
+});
+
+describe("a sale from an earlier build", () => {
+  it("passes on the layout reason the SDK gave, so it is the first thing printed", () => {
+    const thrown = new PanguLayoutError(
+      "a SaleRules account is 362 bytes and these are 427, so they were written by another build of the program"
+    );
+    expect(earlierBuildReason(thrown)).toContain("427");
+  });
+
+  it("leaves every other failure to be reported as a failure", () => {
+    expect(earlierBuildReason(new PanguInputError("mint must be a PublicKey"))).toBeNull();
+    expect(earlierBuildReason(new Error("the RPC timed out"))).toBeNull();
+    expect(earlierBuildReason("not even an error")).toBeNull();
   });
 });

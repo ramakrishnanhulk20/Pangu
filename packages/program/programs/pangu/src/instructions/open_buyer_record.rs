@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{events::BuyerRecordOpened, state::*};
+use crate::{errors::PanguError, events::BuyerRecordOpened, state::*};
 
 #[derive(Accounts)]
 pub struct OpenBuyerRecord<'info> {
@@ -35,10 +35,16 @@ pub struct OpenBuyerRecord<'info> {
 /// Preconditions: a sale exists for this mint. Safe to call again: a record that is
 /// already there keeps its approval and its running total.
 ///
-/// Rejects: nothing of its own. A mint with no sale fails on the missing rules account.
+/// Rejects: `WrongLayoutVersion` when the rules account was written by another
+/// layout of the program. A mint with no sale fails on the missing rules account.
 ///
 /// Emits `BuyerRecordOpened`.
 pub fn handle_open_buyer_record(ctx: Context<OpenBuyerRecord>) -> Result<()> {
+    require!(
+        ctx.accounts.rules.layout_is_current(),
+        PanguError::WrongLayoutVersion
+    );
+
     let record = &mut ctx.accounts.record;
     record.mint = ctx.accounts.mint.key();
     record.wallet = ctx.accounts.wallet.key();

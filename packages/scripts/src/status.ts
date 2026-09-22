@@ -24,6 +24,7 @@ import {
   ACCESS_MODE,
   LIMITS,
   PANGU_PROGRAM_ID,
+  PanguLayoutError,
   getSale,
   isSaleRunning,
   priceFeedAddress,
@@ -332,15 +333,30 @@ interface SaleCheck {
 }
 
 /**
+ * Why the rules could not be read at all, or null when the read failed for some
+ * other reason.
+ *
+ * A sale opened by an earlier build sits at the same address behind the same
+ * Anchor discriminator, so the account's length and its layout version are what
+ * separate the two builds, and the SDK throws on both rather than handing back
+ * fields read from the wrong offsets. This is therefore the first thing said
+ * about such an account, and the limits below only ever see rules this build
+ * could decode.
+ */
+export function earlierBuildReason(error: unknown): string | null {
+  return error instanceof PanguLayoutError ? error.message : null;
+}
+
+/**
  * Why these bytes cannot be a sale the running build opened, or null when
  * nothing says so.
  *
- * A sale opened by an earlier build sits at the same address behind the same
- * Anchor discriminator, so it decodes without complaint and hands back numbers
- * read from the wrong offsets. The test is the program's own limits rather than
- * a list of old addresses: a band of 20443 basis points is something create_sale
- * would have refused, so those bytes are not this build's layout. It cannot
- * catch an old account whose every field happens to land inside the limits.
+ * This runs behind the check above, on rules that did decode. The test is the
+ * program's own limits rather than a list of old addresses: a band of 20443
+ * basis points is something create_sale would have refused, so those bytes are
+ * not this build's layout. It cannot catch an old account whose every field
+ * happens to land inside the limits and whose layout version happens to read as
+ * the current one.
  */
 function notThisBuild(sale: Sale): string | null {
   if (sale.bandBps > LIMITS.maxBandBps) {
@@ -373,6 +389,18 @@ async function checkSale(
   try {
     sale = await getSale(connection, mint);
   } catch (error) {
+    const earlier = earlierBuildReason(error);
+    if (earlier !== null) {
+      return {
+        row: row(
+          check,
+          "WARN",
+          `${record.mint}, opened by an earlier build: ${earlier}. Retire it from sales.json.`
+        ),
+        sale: null,
+        running: false,
+      };
+    }
     return {
       row: row(check, "FAIL", error instanceof Error ? error.message : String(error)),
       sale: null,

@@ -51,6 +51,14 @@ export const PANGU_SHARD_ID = 7_700;
 
 export { TOKEN_2022_PROGRAM_ID };
 
+/**
+ * The SaleRules layout this package reads. Source: state.rs,
+ * SALE_RULES_LAYOUT_VERSION. An account carrying any other number was written
+ * by a different build of the program, so every field behind the version byte
+ * may sit somewhere else.
+ */
+export const SALE_RULES_LAYOUT_VERSION = 1;
+
 export const ACCESS_MODE = {
   open: 0,
   issuerList: 1,

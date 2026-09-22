@@ -3,12 +3,33 @@ import type { BN } from "@anchor-lang/core";
 import type { Connection, PublicKey } from "@solana/web3.js";
 import { getTransferHook, unpackMint } from "@solana/spl-token";
 import { buyerRecordAddress, feedIdHex, saleRulesAddress } from "./addresses.js";
-import { PANGU_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "./constants.js";
+import {
+  PANGU_PROGRAM_ID,
+  SALE_RULES_LAYOUT_VERSION,
+  TOKEN_2022_PROGRAM_ID,
+} from "./constants.js";
 import { panguCoder } from "./coder.js";
 import { PanguInputError, requirePublicKey } from "./inputs.js";
 
 const SALE_RULES = "SaleRules";
 const BUYER_RECORD = "BuyerRecord";
+
+/**
+ * Thrown when a SaleRules account was not written by the layout this package
+ * reads: the wrong length, or a layout version it does not know.
+ *
+ * Both are the same failure seen from two sides. Anchor's decoder reads every
+ * field at a fixed offset and does not care what wrote the bytes, so an account
+ * from another build comes back as a sale with a nonsense cap or a nonsense
+ * band rather than as an error. It is a PanguInputError, so a caller that
+ * already handles those keeps working.
+ */
+export class PanguLayoutError extends PanguInputError {
+  constructor(message: string) {
+    super(message);
+    this.name = "PanguLayoutError";
+  }
+}
 
 /** One sale's rules, as the chain holds them. Written once, never updated. */
 export interface Sale {
@@ -80,6 +101,7 @@ interface RawSale {
   buyers: number;
   total_net_bought: BN;
   bump: number;
+  layout_version: number;
   reserved: number[];
 }
 
@@ -108,9 +130,30 @@ function decodeAccount<T>(name: string, data: Uint8Array): T {
   }
 }
 
-/** Reads a SaleRules account's bytes. Throws when they are not a SaleRules. */
+/**
+ * Reads a SaleRules account's bytes.
+ *
+ * The discriminator says these are a SaleRules, then the length and the layout
+ * version say which build wrote them. Both of those throw a `PanguLayoutError`,
+ * because an account from another build sits at the same address behind the
+ * same discriminator: Anchor reads it without complaint and hands back fields
+ * taken from the wrong offsets.
+ *
+ * Throws `PanguInputError` when the bytes are not a SaleRules at all.
+ */
 export function decodeSale(data: Uint8Array): Sale {
   const raw = decodeAccount<RawSale>(SALE_RULES, data);
+  const size = panguCoder().accounts.size(SALE_RULES);
+  if (data.length !== size) {
+    throw new PanguLayoutError(
+      `a SaleRules account is ${size} bytes and these are ${data.length}, so they were written by another build of the program`
+    );
+  }
+  if (raw.layout_version !== SALE_RULES_LAYOUT_VERSION) {
+    throw new PanguLayoutError(
+      `these are layout version ${raw.layout_version} and this package reads version ${SALE_RULES_LAYOUT_VERSION}, so they were written by another build of the program`
+    );
+  }
   return {
     mint: raw.mint,
     pool: raw.pool,

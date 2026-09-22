@@ -204,7 +204,8 @@ flowchart TD
 | `buyers` | u32 | wallets with a record above zero bought |
 | `total_net_bought` | u64 | sum of all records, for the largest-holder share |
 | `bump` | u8 | |
-| `reserved` | [u8; 64] | room to grow without a migration |
+| `layout_version` | u8 | 1 today. Every reader refuses another value, so an account written by an older build can never decode into nonsense; the sell path treats it as "no record" and still passes |
+| `reserved` | [u8; 63] | room to grow without a migration |
 
 Rules are set once at creation and never change. There is no update instruction.
 

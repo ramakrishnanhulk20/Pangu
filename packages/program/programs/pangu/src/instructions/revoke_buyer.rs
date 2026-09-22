@@ -36,10 +36,16 @@ pub struct RevokeBuyer<'info> {
 /// the wallet already has a record.
 ///
 /// Rejects: `NotIssuer` for any other signer, `WrongMint` when the accounts do not
-/// belong to the given mint, `InvalidAccessMode` when the sale has no list.
+/// belong to the given mint, `WrongLayoutVersion` when the rules account was
+/// written by another layout of the program, `InvalidAccessMode` when the sale
+/// has no list.
 ///
 /// Emits `BuyerRevoked`.
 pub fn handle_revoke_buyer(ctx: Context<RevokeBuyer>, wallet: Pubkey) -> Result<()> {
+    require!(
+        ctx.accounts.rules.layout_is_current(),
+        PanguError::WrongLayoutVersion
+    );
     require!(
         ctx.accounts.rules.access_mode == ACCESS_ISSUER_LIST,
         PanguError::InvalidAccessMode

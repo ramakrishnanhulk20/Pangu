@@ -62,6 +62,9 @@ const PUBKEY_LEN: u8 = 32;
 /// against real bytes.
 const RULES_CREDENTIAL_OFFSET: u8 = 145;
 const RULES_SCHEMA_OFFSET: u8 = 177;
+// The same pinning, one step stronger: `layout_version` was carved out of the
+// spare bytes, so the size has to come out of this build unchanged or an account
+// opened by an earlier one would not even be the same length.
 const _: () = assert!(SaleRules::INIT_SPACE == 354);
 
 #[derive(Accounts)]
@@ -319,7 +322,8 @@ pub fn handle_create_sale(
     rules.buyers = 0;
     rules.total_net_bought = 0;
     rules.bump = ctx.bumps.rules;
-    rules.reserved = [0u8; 64];
+    rules.layout_version = SALE_RULES_LAYOUT_VERSION;
+    rules.reserved = [0u8; 63];
 
     // Both buyer records are derived from the owner field inside a token account, so
     // the hook is handed the record of whoever really receives or sends the tokens,
