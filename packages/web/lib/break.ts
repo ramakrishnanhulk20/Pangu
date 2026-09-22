@@ -564,6 +564,26 @@ const HONEST_SHARES = [5n, 12n, 40n, 160n];
 /** Aim this far inside the room left: Meteora's quote and the chain land apart. */
 const CAP_MARGIN = 50n;
 
+/** Rows whose buy is sized to cross the cap, and so reach for a whole cap's worth. */
+function buysPastTheCap(id: AttackId): boolean {
+  return id === "over-cap" || id === "second-buy" || id === "second-account";
+}
+
+/**
+ * Raw units of the paying token this row's transaction would spend.
+ *
+ * Close enough to tell a visitor whether their wallet can run the row at all: a
+ * buy meant to cross the cap reaches for the cap's whole worth, and an honest
+ * buy for the largest share of it that fits under what is left.
+ */
+export function payingNeeded(attack: Attack, target: Target): bigint {
+  if (!attack.needsPayingToken) {
+    return 0n;
+  }
+  const largest = HONEST_SHARES[0] ?? 5n;
+  return buysPastTheCap(attack.id) ? target.capWorth : target.capWorth / largest;
+}
+
 async function buyPast(context: BuildContext, room: bigint): Promise<Transaction> {
   for (const multiple of OVER_CAP_TRIES) {
     try {
@@ -919,21 +939,17 @@ function lastSpokenLine(lines: readonly string[]): string {
  *
  * The one a visitor meets most is an empty wallet, which the token program
  * reports as insufficient funds from inside Meteora's swap, so it is named for
- * what it is rather than left as a log line.
+ * what it is rather than left as a log line, and it points at the button that
+ * fixes it.
  */
 export function plainFailure(result: AttackResult, target: Target): string {
   const line = result.logLine ?? "";
   if (/insufficient funds/i.test(line)) {
     return target.payingInSol
       ? "This wallet does not hold enough devnet SOL for this buy. Take some from the faucet above and run it again."
-      : `This wallet holds none of the token this sale is priced in (${short(target.quoteMint)}), so the buy stops at the token program before the sale's rules are reached.`;
+      : "This wallet does not hold enough of the token this sale is priced in, so the buy stops at the token program before the sale's rules are reached. Get demo dollars above first, then run it again.";
   }
   return `The chain refused this, and the reason did not come from the sale's rules: ${line}`;
-}
-
-function short(address: PublicKey): string {
-  const text = address.toBase58();
-  return `${text.slice(0, 4)}...${text.slice(-4)}`;
 }
 
 /**

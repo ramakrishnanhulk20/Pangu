@@ -99,8 +99,31 @@ async function sendOnce(transaction, signers) {
   }
 }
 
+/**
+ * The wallet the ledger runs from.
+ *
+ * lab-evidence/break-dollars.mjs hands its own throwaway wallet over in
+ * PANGU_LEDGER_WALLET, so the rows are run by the very wallet the demo dollar
+ * route topped up. That key is made in that process and never touches disk.
+ * With the variable unset a fresh throwaway is made here, as before.
+ */
+function ledgerWallet() {
+  const supplied = process.env.PANGU_LEDGER_WALLET;
+  if (supplied === undefined || supplied === "") {
+    return { wallet: Keypair.generate(), supplied: false };
+  }
+  return {
+    wallet: Keypair.fromSecretKey(Uint8Array.from(JSON.parse(supplied))),
+    supplied: true,
+  };
+}
+
 /** Devnet SOL for the throwaway wallet: the faucet first, the demo key after. */
 async function fund(wallet) {
+  const already = await funder.getBalance(wallet.publicKey, "confirmed");
+  if (already >= FALLBACK_LAMPORTS) {
+    return `what it already held, ${already / LAMPORTS_PER_SOL} SOL`;
+  }
   for (let attempt = 0; attempt < AIRDROP_TRIES; attempt += 1) {
     try {
       const signature = await funder.requestAirdrop(
@@ -265,7 +288,7 @@ if (target === null) {
   throw new Error("no Pangu sale is running on devnet, so there is nothing to attack");
 }
 
-const wallet = Keypair.generate();
+const { wallet, supplied } = ledgerWallet();
 const funding = await fund(wallet);
 
 console.log(`network  : devnet, ${connection.rpcEndpoint}`);
@@ -284,10 +307,17 @@ console.log(`holding  : ${await funder.getBalance(wallet.publicKey, "confirmed")
 await runLedger(
   wallet,
   target,
-  "PASS 1: a wallet holding only devnet SOL, which is all a visitor can get for themselves"
+  supplied
+    ? "PASS 1: the wallet the demo dollar button topped up, which is what a judge's wallet looks like after pressing it"
+    : "PASS 1: a wallet holding only devnet SOL, which is all a visitor can get for themselves"
 );
 
-if (!target.payingInSol) {
+if (supplied) {
+  console.log("");
+  console.log(
+    "PASS 2 is not run: this wallet was handed the paying token by the route before the ledger started, which is the whole point of the run."
+  );
+} else if (!target.payingInSol) {
   const handed = await fundPayingToken(wallet, target);
   console.log("");
   console.log(`paying token: ${handed}`);

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 
 import { tokenAmount } from "@/lib/format";
-import type { Target } from "@/lib/break";
+import { explorerTx, type Target } from "@/lib/break";
 
 import { Spinner } from "./strike";
 
@@ -19,6 +19,20 @@ const WalletButton = dynamic(
 
 const AIRDROP_SOL = 0.5;
 const FAUCET = "https://faucet.solana.com";
+
+/** What POST /api/break/dollars answers with when it mints. */
+interface Granted {
+  signature: string;
+  /** Raw units, as a string: JSON has no bigint. */
+  amount: string;
+  decimals: number;
+  mint: string;
+}
+
+function reasonOf(answer: unknown): string | null {
+  const reason = (answer as { reason?: unknown } | null)?.reason;
+  return typeof reason === "string" && reason !== "" ? reason : null;
+}
 
 export function WalletStrip({
   connection,
@@ -37,6 +51,9 @@ export function WalletStrip({
 }) {
   const [asking, setAsking] = useState(false);
   const [faucetNote, setFaucetNote] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
+  const [granted, setGranted] = useState<Granted | null>(null);
+  const [dollarNote, setDollarNote] = useState<string | null>(null);
 
   const askFaucet = async () => {
     if (wallet === null) {
@@ -61,6 +78,42 @@ export function WalletStrip({
       setAsking(false);
     }
   };
+
+  const askDollars = async () => {
+    if (wallet === null) {
+      return;
+    }
+    setMinting(true);
+    setDollarNote(null);
+    setGranted(null);
+    try {
+      const response = await fetch("/api/break/dollars", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ wallet }),
+      });
+      const answer: unknown = await response.json();
+      if (!response.ok) {
+        setDollarNote(
+          reasonOf(answer) ??
+            "The demo dollar mint turned this down and gave no reason. Try again in a moment."
+        );
+        return;
+      }
+      setGranted(answer as Granted);
+      // The balance on this strip and every row's sums are read again once the
+      // grant has landed, so nothing on screen is this component's guess.
+      onFunded();
+    } catch {
+      setDollarNote(
+        "This page could not reach the demo dollar mint. Check the connection and press it again."
+      );
+    } finally {
+      setMinting(false);
+    }
+  };
+
+  const dollarsOffered = target !== null && !target.payingInSol;
 
   return (
     <div className="border-t border-line pt-6">
@@ -106,20 +159,58 @@ export function WalletStrip({
                   : "not connected"
                 : `${tokenAmount(payingRaw, target.quoteDecimals)}${target.payingInSol ? " wrapped SOL" : ""}`}
             </dd>
+            {dollarsOffered && (
+              <dd className="mt-3">
+                <button
+                  type="button"
+                  onClick={askDollars}
+                  disabled={minting || wallet === null}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent px-3.5 font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-ink disabled:translate-y-0 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+                >
+                  {minting && <Spinner />}
+                  {minting ? "minting on devnet" : "get demo dollars"}
+                </button>
+              </dd>
+            )}
           </div>
         )}
       </dl>
+
+      {dollarsOffered && wallet === null && (
+        <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+          connect a devnet wallet first
+        </p>
+      )}
+
+      {granted !== null && (
+        <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">
+          {tokenAmount(BigInt(granted.amount), granted.decimals)} demo dollars landed,
+          twice what this sale&apos;s cap is worth at the price on the curve right
+          now.{" "}
+          <a
+            href={explorerTx(granted.signature)}
+            target="_blank"
+            rel="noreferrer"
+            className="border-b border-line pb-0.5 text-ink transition-colors hover:border-accent hover:text-accent"
+          >
+            open the transaction
+          </a>
+        </p>
+      )}
+
+      {dollarNote !== null && (
+        <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">{dollarNote}</p>
+      )}
 
       {faucetNote !== null && (
         <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">{faucetNote}</p>
       )}
 
-      {target !== null && !target.payingInSol && payingRaw === 0n && (
+      {target !== null && !target.payingInSol && payingRaw === 0n && granted === null && (
         <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">
           This sale is priced in a token minted for the demo, not in SOL, and your
-          wallet holds none of it. The rows that spend it stop at the token program
-          before the sale&apos;s rules are reached, and say so. The rows that spend
-          nothing still run.
+          wallet holds none of it. Take some above and every row on the ledger is
+          yours to run, including the buy, the send and the sell back.
         </p>
       )}
     </div>

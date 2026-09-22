@@ -55,6 +55,7 @@ export function AttackRow({
   state,
   connected,
   ready,
+  payingShort,
   onRun,
 }: {
   attack: Attack;
@@ -63,6 +64,8 @@ export function AttackRow({
   connected: boolean;
   /** True once devnet has answered and the sale behind the row is known. */
   ready: boolean;
+  /** True when this row spends more of the paying token than the wallet holds. */
+  payingShort: boolean;
   onRun: () => void;
 }) {
   const still = useReducedMotion() === true;
@@ -110,6 +113,12 @@ export function AttackRow({
             {expected.why !== null &&
               ` On this sale as it stands you meet ${expected.name} first, which the line above the ledger explains.`}
           </p>
+
+          {payingShort && (
+            <p className="mt-3 font-mono text-[10px] uppercase leading-none tracking-[0.16em] text-accent">
+              get demo dollars above first
+            </p>
+          )}
 
           <AnimatePresence initial={false}>
             {(state.status === "done" || state.status === "unavailable" || running) && (

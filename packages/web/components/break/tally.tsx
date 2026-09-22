@@ -31,8 +31,8 @@ export function Tally({
         {target === null
           ? "The sale, the cap and the share every wallet holds are being read off devnet now."
           : nothingSold
-            ? `No wallet has bought in this sale yet, so there is no largest holder to measure. The cap stands at ${tokenAmount(target.cap, target.baseDecimals)} ${target.symbol} a wallet.`
-            : `The largest wallet holds ${(target.largestShare * 100).toFixed(2)} percent of the ${tokenAmount(target.totalNetBought, target.baseDecimals)} ${target.symbol} sold so far, against a cap worth ${(target.capShare * 100).toFixed(2)} percent of them, across ${target.buyers} ${target.buyers === 1 ? "buyer" : "buyers"}.`}
+            ? `No wallet has bought in this sale yet, so there is no largest holder to measure. The cap stands at ${tokenAmount(target.cap, target.baseDecimals)} shares a wallet.`
+            : `The largest wallet holds ${(target.largestShare * 100).toFixed(2)} percent of the ${tokenAmount(target.totalNetBought, target.baseDecimals)} shares sold so far, against a cap worth ${(target.capShare * 100).toFixed(2)} percent of them, across ${target.buyers} ${target.buyers === 1 ? "buyer" : "buyers"}.`}
       </p>
 
       <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">

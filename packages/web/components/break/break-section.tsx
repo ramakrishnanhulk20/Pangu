@@ -8,6 +8,7 @@ import {
   breakConnection,
   buildAttack,
   payingHeld,
+  payingNeeded,
   readLanded,
   readTarget,
   simulateAttack,
@@ -239,6 +240,7 @@ export function BreakSection({
                 state={rows[attack.id] ?? IDLE}
                 connected={wallet !== null}
                 ready={target !== null}
+                payingShort={shortFor(attack, target, payingRaw)}
                 onRun={() => void run(attack)}
               />
             </Reveal>
@@ -313,7 +315,7 @@ function SaleFacts({
     { label: "who may buy", value: target.openAccess ? "anyone, under the cap" : "the issuer's list" },
     {
       label: "the cap, per wallet",
-      value: `${tokenAmount(target.cap, target.baseDecimals)} ${target.symbol}`,
+      value: `${tokenAmount(target.cap, target.baseDecimals)} shares`,
     },
     { label: "on the curve now", value: `$${target.curveDollars.toFixed(2)} a share` },
   ];
@@ -383,6 +385,20 @@ function CapMotif() {
       </svg>
     </div>
   );
+}
+
+/**
+ * True when this row would spend more of the paying token than the wallet has.
+ *
+ * Only asked of a sale priced in the demo dollar: a sale priced in wrapped SOL
+ * has the faucet for that, and a wallet that has not connected is told to
+ * connect before anything else.
+ */
+function shortFor(attack: Attack, target: Target | null, payingRaw: bigint | null): boolean {
+  if (target === null || target.payingInSol || payingRaw === null || !attack.needsPayingToken) {
+    return false;
+  }
+  return payingRaw < payingNeeded(attack, target);
 }
 
 /** A thrown value as a sentence a visitor can act on. */

@@ -90,3 +90,35 @@ PASS 2: the same wallet after the issuer handed it the paying token
 6 attacks run, 6 refused as expected, 0 allowed as expected
 
 run at 2026-09-22T16:24:43.161Z
+
+
+RUN FROM lab-evidence/break-dollars.mjs, the wallet topped up by the demo dollar route
+network  : devnet, https://api.devnet.solana.com
+sale     : Pangu Open Share (POPEN), open access
+mint     : CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7
+cap      : 59999999997545703 raw units a wallet, worth 24000000000981718 raw units of the paying token
+paying   : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 (a token a visitor cannot get)
+curve    : 400.0000 dollars a share
+ceiling  : 359.8561 dollars, against a stock at 342.7201
+standing : PriceOutsideBand
+wallet   : 3uCDezNMPTFBR4fYpuB2S87fwQzEnGECyoNr2GYsKiJZ, funded from the demo keypair, 0.05 SOL
+holding  : 50000000 lamports
+
+PASS 1: the wallet the demo dollar button topped up, which is what a judge's wallet looks like after pressing it
+#   Attack                                               C    Expected                        What the chain said                                                                              Result
+--  ---------------------------------------------------  ---  ------------------------------  -----------------------------------------------------------------------------------------------  -------
+01  Buy under the cap, the way a buyer would             C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+02  Take more than the cap in one go                     C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+03  Buy again, and cross the cap on the second try       C3   PriceOutsideBand                not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  not run
+04  Buy into a second token account of the same wallet   C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+05  Buy into an account whose owner can still change     C13  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange                                                                   ok
+06  Send tokens straight to another wallet               C4   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   not run
+07  Call the rules program on its own, with no transfer  C1   NotTransferring                 NotTransferring                                                                                  ok
+08  Buy above the price ceiling the band sets            C9   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+09  Sell back to the pool                                C5   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              not run
+
+6 attacks run, 6 refused as expected, 0 allowed as expected
+
+PASS 2 is not run: this wallet was handed the paying token by the route before the ledger started, which is the whole point of the run.
+
+run at 2026-09-22T16:42:33.148Z
