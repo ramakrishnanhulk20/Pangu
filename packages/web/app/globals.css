@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Tailwind v4 needs to be told what "dark:" means when the theme is an
+   attribute rather than a class. next-themes writes this attribute before the
+   first paint, so there is no flash. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --paper: #fbfbfa;
+  --ink: #16161a;
+  --muted: #6b6b73;
+  --line: #e2e2df;
+  --raised: #ffffff;
+}
+
+[data-theme="dark"] {
+  --paper: #0c0c0e;
+  --ink: #ededea;
+  --muted: #8b8b93;
+  --line: #26262b;
+  --raised: #141418;
+}
+
+/* Before next-themes has written the attribute, and when scripting is off, the
+   operating system setting still decides. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0c0c0e;
+    --ink: #ededea;
+    --muted: #8b8b93;
+    --line: #26262b;
+    --raised: #141418;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-raised: var(--raised);
+}
+
+html {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* The wallet adapter ships its own purple. Hold it to the neutral palette
+   until the accent colour is chosen. */
+.wallet-adapter-button-trigger {
+  background-color: var(--ink) !important;
+  color: var(--paper) !important;
+  border-radius: 8px !important;
+  height: 36px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 0 14px !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background: var(--raised) !important;
+  color: var(--ink) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

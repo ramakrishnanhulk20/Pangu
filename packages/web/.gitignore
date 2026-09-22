@@ -1,0 +1,12 @@
+# Next writes these on every build and they are machine local.
+/.next/
+/.next-verify/
+/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# next dev rewrites AGENTS.md and CLAUDE.md in this folder every time it starts,
+# and the text it writes carries an em-dash, which the repository forbids and
+# the pre-commit hook blocks. They stay local.
+AGENTS.md
+CLAUDE.md
