@@ -1,0 +1,31 @@
+Cross-check for the live sale readout. Run: node lab-evidence/readout-cross-check.mjs
+The left number is read in this process straight through pangu-sdk; the right
+number is what the page served for the same sale at the same second, from
+GET /api/readout/<mint> with no wallet and no browser.
+
+-- Pangu Listed Share, read at 2026-09-22T15:57:21.532Z --
+paid for in            SOL
+price on the curve     sdk 5e-10   page 5e-10   (pool sqrtPrice 13043817825332782)
+raised of threshold    sdk 0.100000002 of 0.1   page 0.100000002 of 0.1
+buyers                 sdk 15   page 15
+largest wallet         sdk 9.79% of a 10.00% cap   page 9.79% of a 10.00% cap
+cap on one wallet      sdk 79999967.072171 shares   page 79999967.072171 shares, 10.00% of the sale
+graduated              sdk true   page true
+damm v2 pool           sdk 2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc   page 2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc
+the binding rule       page: The curve filled, so Pangu came off the token for good and it trades freely now.
+the curve              page: 73 points, 3.1250026e-11 to 5e-10 over 799999670.721718 shares
+
+-- Pangu Open Share, read at 2026-09-22T15:57:33.577Z --
+paid for in            dollars
+price on the curve     sdk 400.00000003272396   page 400.00000003272396   (pool sqrtPrice 11666745337904259356)
+raised of threshold    sdk 0 of 360000000000   page 0 of 360000000000
+buyers                 sdk 0   page 0
+largest wallet         sdk 0.00% of a 0.00% cap   page 0.00% of a 0.00% cap
+cap on one wallet      sdk 59999999.997545704 shares   page 59999999.997545704 shares, 10.00% of the sale
+graduated              sdk false   page false
+damm v2 pool           sdk none yet   page none yet
+apple from pyth        sdk $343.44  usable=true age=3207s   page $343.44
+buys stop above        sdk $360.61   page $360.61
+the binding rule       page: Buys stop above $360.61 a share, 5 percent over Apple's own price, and the curve is at $400.00, so every buy is refused until Apple catches up.
+the curve              page: 73 points, 400.00000003272396 to 900 over 599999999.9754571 shares
+
