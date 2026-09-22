@@ -2,9 +2,11 @@ import { getTransferHook, unpackMint } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import {
   PANGU_PROGRAM_ID,
+  PanguLayoutError,
   TOKEN_2022_PROGRAM_ID,
   decodeSale,
   saleRulesAddress,
+  type Sale,
 } from "pangu-sdk";
 
 import { accessModeLabel, tokenAmount } from "./format";
@@ -52,7 +54,22 @@ export async function readBoard(): Promise<SaleRow[]> {
       return { ...base, status: "no Pangu rules at this mint" };
     }
 
-    const sale = decodeSale(ruleAccount.data);
+    // A sale opened by an older build of the program sits at the same address
+    // behind the same discriminator, so the SDK refuses it rather than hand
+    // back fields read at the wrong offsets. That is one quiet row, not a
+    // broken board. Anything else is a real fault and still surfaces.
+    let sale: Sale;
+    try {
+      sale = decodeSale(ruleAccount.data);
+    } catch (error) {
+      if (error instanceof PanguLayoutError) {
+        return {
+          ...base,
+          status: "opened by an earlier build, not readable by this one",
+        };
+      }
+      throw error;
+    }
 
     // A sale without a price band never stored its decimals, so they come off
     // the mint, the same place getSale takes them from.
