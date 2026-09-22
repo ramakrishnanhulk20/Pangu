@@ -1,0 +1,28 @@
+{
+  "name": "pangu-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The five commands that run a Pangu sale on devnet: launch, seed, prove, graduate, refresh-price.",
+  "scripts": {
+    "launch": "tsx src/launch.ts",
+    "seed": "tsx src/seed.ts",
+    "prove": "tsx src/prove.ts",
+    "graduate": "tsx src/graduate.ts",
+    "refresh-price": "tsx src/refresh-price.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@meteora-ag/dynamic-bonding-curve-sdk": "1.5.12",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.98.4",
+    "pangu-sdk": "file:../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}
