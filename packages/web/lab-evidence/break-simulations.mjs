@@ -109,7 +109,7 @@ async function fund(wallet) {
       );
       await funder.confirmTransaction(signature, "confirmed");
       return `faucet, ${AIRDROP_SOL} SOL`;
-    } catch (error) {
+    } catch {
       await wait(2_000 * (attempt + 1));
     }
   }
