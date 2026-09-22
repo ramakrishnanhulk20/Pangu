@@ -4,7 +4,9 @@
 // file loads the real build in a process where touching the DOM throws.
 //
 // Not covered: a real browser. It proves nothing is touched at import and that
-// the words are not in the bundle, not that every code path is browser safe.
+// the words are not in the bundle, not that every code path is browser safe. It
+// also does not load the `price` entry as a bare Node ES module, for the reason
+// written against that test below.
 
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -18,6 +20,17 @@ const esmodule = join(root, "dist", "index.mjs");
 const types = join(root, "dist", "index.d.ts");
 
 const entries = ["index", "dbc", "price"] as const;
+/**
+ * The entries a Next.js render or a browser can touch, and the only ones bare
+ * Node can load as ES modules.
+ *
+ * `price` is missing on purpose. Pyth's own ES module build of
+ * `@pythnetwork/solana-utils` re-exports a Jito helper that imports a
+ * CommonJS file without writing its extension, which bare Node refuses and
+ * every bundler resolves. It is loaded as CommonJS below instead, and it runs
+ * under tsx and under Next.js, which is how anything actually calls it.
+ */
+const browserEntries = ["index", "dbc"] as const;
 const built = (entry: string, extension: string): string =>
   join(root, "dist", `${entry}.${extension}`);
 
@@ -68,13 +81,14 @@ describe("the built package", () => {
     expect(existsSync(types)).toBe(true);
   });
 
-  it("keeps the Meteora and Switchboard packages out of the core bundle", () => {
+  it("keeps the Meteora and Pyth packages out of the core bundle", () => {
     // The core is what a page that only reads a sale imports. Naming either
     // heavy package there would drag it into every browser bundle, which is the
-    // whole reason `pangu-sdk/dbc` and `pangu-sdk/price` exist.
+    // whole reason `pangu-sdk/dbc` and `pangu-sdk/price` exist. The Pyth one
+    // also reaches Hermes with an API key, which no browser may ever hold.
     for (const extension of ["js", "mjs"]) {
       const code = readFileSync(built("index", extension), "utf8");
-      for (const banned of ["@switchboard-xyz", "@meteora-ag"]) {
+      for (const banned of ["@pythnetwork", "@meteora-ag"]) {
         expect(code.includes(banned), `${banned} is in the core ${extension} bundle`).toBe(
           false
         );
@@ -85,14 +99,15 @@ describe("the built package", () => {
   it("names the package each extra entry point needs, and nothing it does not", () => {
     const dbc = readFileSync(built("dbc", "mjs"), "utf8");
     expect(dbc.includes("@meteora-ag/dynamic-bonding-curve-sdk")).toBe(true);
-    expect(dbc.includes("@switchboard-xyz")).toBe(false);
+    expect(dbc.includes("@pythnetwork")).toBe(false);
 
     const price = readFileSync(built("price", "mjs"), "utf8");
-    expect(price.includes("@switchboard-xyz/on-demand")).toBe(true);
+    expect(price.includes("@pythnetwork/pyth-solana-receiver")).toBe(true);
+    expect(price.includes("@meteora-ag")).toBe(false);
   });
 
-  it("loads every entry point in a process with no browser globals", () => {
-    for (const entry of entries) {
+  it("loads the browser safe entry points in a process with no browser globals", () => {
+    for (const entry of browserEntries) {
       const output = runNode(`
         ${guard}
         const loaded = await import(${JSON.stringify(
@@ -103,6 +118,22 @@ describe("the built package", () => {
       `);
       expect(output, `${entry} did not load`).toBe("ok");
     }
+  });
+
+  it("loads the price entry as CommonJS, which is how a server route gets it", () => {
+    const file = built("price", "js");
+    const output = runNode(`
+      import { createRequire } from "node:module";
+      ${guard}
+      const require = createRequire(${JSON.stringify(pathToFileURL(file).href)});
+      const price = require(${JSON.stringify(file)});
+      if (typeof price.refreshPriceTransaction !== "function") {
+        throw new Error("no refreshPriceTransaction");
+      }
+      if (price.API_KEY_VARIABLE !== "PYTH_API_KEY") throw new Error("wrong key name");
+      console.log("ok");
+    `);
+    expect(output).toBe("ok");
   });
 
   it("loads as CommonJS with no browser globals in sight", () => {

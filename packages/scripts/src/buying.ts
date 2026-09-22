@@ -10,6 +10,53 @@
 import type { Connection, PublicKey } from "@solana/web3.js";
 import { buyTransaction, type TradeTransaction } from "pangu-sdk/dbc";
 
+/**
+ * How much more than what is left the finishing buy reaches for: 101 percent,
+ * plus a little, so the fee does not leave the curve a few units short.
+ */
+const FINISHING_HEADROOM = 10_100n;
+const FINISHING_MARGIN = 100_000n;
+
+/** When the buy that is meant to finish a curve starts: the last fifth of it. */
+const FINISHING_SHARE = 2n;
+
+/** What one more buyer should spend, and whether that buy is meant to fill the curve. */
+export interface NextBuy {
+  /** Raw units of the paying token to spend. */
+  wanted: bigint;
+  /**
+   * True when this buy is sized to finish the curve, which is a partial fill:
+   * the tokens run out before the paying side does, so Meteora takes what is
+   * left and leaves the rest in the buyer's account.
+   */
+  finishing: boolean;
+}
+
+/**
+ * Sizes the next buy from what the curve still has to raise.
+ *
+ * Everything here is in the paying token's raw units, on both sides of every
+ * comparison. That is the whole point of the function: the caller used to
+ * compare lamports still to raise against a cap counted in sale tokens, which
+ * is true for any curve worth filling, so every buy took the finishing path and
+ * the first real one was refused OverCap.
+ *
+ * Away from the end it asks for a tenth of the whole threshold, which
+ * `buyWithin` then shrinks to whatever the wallet's cap allows. Inside the last
+ * fifth it asks for what is left plus a margin, and says so, so the caller can
+ * send it as a partial fill.
+ */
+export function nextBuy(threshold: bigint, raised: bigint): NextBuy {
+  const left = threshold > raised ? threshold - raised : 0n;
+  const finishing = left < (threshold * FINISHING_SHARE) / 10n;
+  return {
+    wanted: finishing
+      ? (left * FINISHING_HEADROOM) / 10_000n + FINISHING_MARGIN
+      : threshold / 10n,
+    finishing,
+  };
+}
+
 /** Stop halving once the two ends are this close, in raw units of the paying token. */
 const SEARCH_PRECISION = 10_000n;
 

@@ -26,6 +26,8 @@ export interface SaleRecord {
   cap: string;
   thresholdSol: number;
   bandBps: number | null;
+  /** The Pyth feed the band is measured against. Missing on sales opened before. */
+  feed?: string | null;
   config: string;
   mint: string;
   pool: string;

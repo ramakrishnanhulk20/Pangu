@@ -11,13 +11,14 @@ import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
   ACCESS_MODE,
   approveBuyerInstruction,
-  canonicalQuoteAddress,
   closeBuyerRecordInstruction,
   createSaleInstruction,
   openBuyerRecordInstruction,
+  priceFeedAddress,
   revokeBuyerInstruction,
   PANGU_IDL,
   PANGU_PROGRAM_ID,
+  PANGU_SHARD_ID,
 } from "../src/index.js";
 
 interface IdlSeed {
@@ -114,20 +115,15 @@ const pool = key();
 const mint = key();
 const dbcConfig = key();
 const wallet = key();
-const queue = key();
+/** Pyth's own Equity.US.AAPL/USD feed id. */
 const PRICE_FEED =
-  "db4fa77aa3c4e909923c4767ae01f5d2a3d0c7138c953db372639122bdeceb3d";
-const CLOCK_FEED =
-  "15ff868ad9e4b29e63e75b68a527df7d8f2fa83782938b233d03ea5e259d08c5";
+  "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688";
 
 const band = {
   bps: 500,
-  priceQueue: queue,
   priceFeedId: PRICE_FEED,
-  clockFeedId: CLOCK_FEED,
-  maxPriceAgeSlots: 300,
-  maxMarketAgeSecs: 900,
-  minOracles: 2,
+  maxPriceAgeSecs: 300,
+  maxConfBps: 100,
 };
 
 describe("instruction shape", () => {
@@ -156,7 +152,7 @@ describe("instruction shape", () => {
     );
   });
 
-  it("builds a mode 2 sale with a band and derives the quote account itself", () => {
+  it("builds a mode 2 sale with a band and derives the price account itself", () => {
     const credential = key();
     const schema = key();
     const quoteMint = key();
@@ -182,7 +178,6 @@ describe("instruction shape", () => {
         schema,
         dbc_config: dbcConfig,
         quote_mint: quoteMint,
-        price_queue: queue,
         system_program: SystemProgram.programId,
       })
     );
@@ -195,9 +190,10 @@ describe("instruction shape", () => {
       band: {
         band_bps: number;
         price_account: PublicKey;
-        price_queue: PublicKey;
-        max_price_age_slots: number;
-        min_oracles: number;
+        price_feed_id: number[];
+        price_shard: number;
+        max_price_age_secs: number;
+        max_conf_bps: number;
       };
     };
     expect(decoded?.name).toBe("create_sale");
@@ -205,14 +201,35 @@ describe("instruction shape", () => {
     expect(args.access_mode).toBe(ACCESS_MODE.verifierCredential);
     expect(args.credential.equals(credential)).toBe(true);
     expect(args.band.band_bps).toBe(500);
-    expect(args.band.max_price_age_slots).toBe(300);
-    expect(args.band.min_oracles).toBe(2);
+    expect(args.band.max_price_age_secs).toBe(300);
+    expect(args.band.max_conf_bps).toBe(100);
+    // The shard is not asked for, and the price account is derived from it and
+    // the feed id rather than taken on the caller's word.
+    expect(args.band.price_shard).toBe(PANGU_SHARD_ID);
     expect(
-      args.band.price_account.equals(
-        canonicalQuoteAddress(queue, [PRICE_FEED, CLOCK_FEED])
-      )
+      args.band.price_account.equals(priceFeedAddress(PRICE_FEED, PANGU_SHARD_ID))
     ).toBe(true);
-    expect(args.band.price_queue.equals(queue)).toBe(true);
+  });
+
+  it("puts a sale on another Pyth shard when it asks for one", () => {
+    const quoteMint = key();
+    const ix = createSaleInstruction({
+      issuer,
+      pool,
+      mint,
+      cap: 5_000n,
+      accessMode: ACCESS_MODE.open,
+      band: { ...band, shard: 12 },
+      dbcConfig,
+      quoteMint,
+    });
+    const args = coder.instruction.decode(ix.data)?.data as {
+      band: { price_account: PublicKey; price_shard: number };
+    };
+    expect(args.band.price_shard).toBe(12);
+    expect(args.band.price_account.equals(priceFeedAddress(PRICE_FEED, 12))).toBe(
+      true
+    );
   });
 
   it("builds open_buyer_record for the wallet itself", () => {
@@ -304,7 +321,7 @@ describe("what create_sale refuses before it builds anything", () => {
     ).toThrow(/access mode 2/);
   });
 
-  it("refuses a band with no feeds", () => {
+  it("refuses a band with no feed", () => {
     const { priceFeedId, ...noPrice } = band;
     expect(() =>
       createSaleInstruction({
@@ -316,21 +333,21 @@ describe("what create_sale refuses before it builds anything", () => {
     expect(() =>
       createSaleInstruction({
         ...base,
-        band: { ...band, clockFeedId: `0x${"00".repeat(32)}` },
+        band: { ...band, priceFeedId: `0x${"00".repeat(32)}` },
         quoteMint: key(),
       })
     ).toThrow(/all zeros is not a feed/);
   });
 
-  it("refuses a quote age outside the 1 to 400 slots the chain can prove", () => {
-    for (const slots of [0, 401]) {
+  it("refuses a price age outside the 1 to 3600 seconds the program takes", () => {
+    for (const seconds of [0, 3_601]) {
       expect(() =>
         createSaleInstruction({
           ...base,
-          band: { ...band, maxPriceAgeSlots: slots },
+          band: { ...band, maxPriceAgeSecs: seconds },
           quoteMint: key(),
         })
-      ).toThrow(/maxPriceAgeSlots must be between 1 and 400/);
+      ).toThrow(/maxPriceAgeSecs must be between 1 and 3600/);
     }
   });
 
@@ -363,21 +380,29 @@ describe("what create_sale refuses before it builds anything", () => {
     );
   });
 
-  it("refuses a market clock or an oracle count the program would not take", () => {
+  it("refuses a confidence limit the program would not take, zero included", () => {
+    // Zero is refused the same way an out of range setting is: a band that
+    // accepted any confidence interval would be measured against a number
+    // Pyth's own publishers do not agree on.
+    for (const bps of [0, 1_001]) {
+      expect(() =>
+        createSaleInstruction({
+          ...base,
+          band: { ...band, maxConfBps: bps },
+          quoteMint: key(),
+        })
+      ).toThrow(/maxConfBps must be between 1 and 1000/);
+    }
+  });
+
+  it("refuses a shard id that is not a whole number inside two bytes", () => {
     expect(() =>
       createSaleInstruction({
         ...base,
-        band: { ...band, maxMarketAgeSecs: 0 },
+        band: { ...band, shard: 65_536 },
         quoteMint: key(),
       })
-    ).toThrow(/maxMarketAgeSecs/);
-    expect(() =>
-      createSaleInstruction({
-        ...base,
-        band: { ...band, minOracles: 0 },
-        quoteMint: key(),
-      })
-    ).toThrow(/minOracles/);
+    ).toThrow(/band.shard must be between 0 and 65535/);
   });
 
   it("refuses a missing or zero key", () => {

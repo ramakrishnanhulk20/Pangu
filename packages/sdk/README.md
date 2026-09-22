@@ -44,8 +44,19 @@ const instruction = createSaleInstruction({
 ```
 
 The builder refuses anything the program would refuse, before it builds. Pass a
-`band` to add the price ceiling against the real stock price, and the quote
-account address is derived for you.
+`band` to add the price ceiling against the real stock price:
+
+```ts
+band: {
+  bps: 1_000,
+  priceFeedId: "49f6b65c...5688",
+  maxPriceAgeSecs: 60,
+  maxConfBps: 100,
+}
+```
+
+The Pyth price account is derived for you from the feed id and the shard, which
+defaults to Pangu's own, so there is no address to get wrong.
 
 ## Run a sale on Meteora
 
@@ -91,7 +102,9 @@ transaction, so nobody else can set the rules for your mint.
 `preflightBuy` reads the chain and tells a buyer what would happen before they
 sign: no record, not approved, an approval that is missing, expired or signed by
 a key the verifier has dropped, over the cap with the room left, price above the
-ceiling, market closed, or price stale.
+ceiling, price too uncertain, or price stale. A stale price is also what a shut
+stock market looks like: Pyth stops publishing an equity outside its trading
+sessions, so the account stops moving and ages out.
 
 ## Keep the price fresh
 
@@ -101,13 +114,19 @@ Node and server only, so call it from a server route.
 ```ts
 import { refreshPriceTransaction } from "pangu-sdk/price";
 
-const { transaction, quoteAccount } = await refreshPriceTransaction({
+const { transactions, priceAccount } = await refreshPriceTransaction({
   connection,
   payer: serverWallet.publicKey,
   sale,
 });
 ```
 
+It reads Pyth's Hermes service, which has needed an API key since 26 August
+2026. The key is taken from `PYTH_API_KEY` in the server's environment and is
+never a value the browser holds or the package prints. A refresh is two
+transactions, not one: the guardian-signed update goes into a holding account
+first and the price account is written from it second, and the pair does not fit
+in one transaction. Sign and send them in the order given, then send the buy.
+
 Reading the price back is `readPrice` in the core entry point. It decodes the
-quote account itself, so it is safe in a browser and needs no Switchboard
-package.
+price account itself, so it is safe in a browser and needs no Pyth package.

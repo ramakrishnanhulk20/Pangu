@@ -14,8 +14,8 @@ export default defineConfig({
   platform: "neutral",
   // Each entry carries its own copy of the core code it uses. A shared chunk
   // would let one entry's imports show up in another's file, and the core
-  // bundle has to stay free of the Meteora and Switchboard packages so a
-  // browser never downloads them.
+  // bundle has to stay free of the Meteora and Pyth packages so a browser never
+  // downloads them, and never sees the Hermes key that the Pyth one needs.
   splitting: false,
   // The web app imports this from a server component and from the browser, so
   // nothing here may assume either environment. `neutral` makes esbuild refuse
@@ -26,7 +26,6 @@ export default defineConfig({
     "@anchor-lang/core",
     "buffer",
     "@meteora-ag/dynamic-bonding-curve-sdk",
-    "@switchboard-xyz/on-demand",
-    "@switchboard-xyz/common",
+    "@pythnetwork/pyth-solana-receiver",
   ],
 });

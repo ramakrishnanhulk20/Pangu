@@ -186,12 +186,13 @@ async function main(): Promise<void> {
   const listMode = sale.accessMode === ACCESS_MODE.issuerList;
   const price = sale.hasBand ? await readPrice(connection, sale) : null;
   // What a banded sale would refuse every buy with right now, or null when buys
-  // can go through. PriceStale, MarketClosed and PriceNotEnoughOracles are the
-  // same answer as far as the rest of the run is concerned: the band fails
+  // can go through. PriceStale, PriceTooUncertain and PriceNotFullyVerified are
+  // the same answer as far as the rest of the run is concerned: the band fails
   // closed, and nothing that needs a buy to land can be set up.
   const bandRefusal: PanguErrorName | null =
     price === null || price.usable ? null : (price.error ?? "PriceStale");
   const canBuy = bandRefusal === null;
+  const stock = record.feed ?? "the stock";
 
   console.log(`sale     : ${record.name} (${record.symbol}), ${record.mode} access`);
   console.log(`mint     : ${record.mint}`);
@@ -199,10 +200,13 @@ async function main(): Promise<void> {
   console.log(`cap      : ${sale.cap} raw units per wallet`);
   if (price !== null) {
     console.log(
-      `band     : ${sale.bandBps / 100} percent over AAPL at ${price.priceDollars.toFixed(2)} dollars, quote ${price.ageSlots} slots old`
+      `band     : ${sale.bandBps / 100} percent over ${stock} at ${price.priceDollars.toFixed(4)} dollars, from Pyth shard ${sale.priceShard}`
     );
     console.log(
-      `price    : ${price.usable ? "usable" : `not usable, ${price.error}`}, signed for slot ${price.slot}, last trade ${Math.floor(Date.now() / 1000) - price.lastTradeUnix} seconds ago`
+      `price    : ${price.usable ? "usable" : `not usable, ${price.error}`}, published ${price.ageSecs} seconds ago of an allowed ${sale.maxPriceAgeSecs}, confidence ${price.confBps} of an allowed ${sale.maxConfBps} basis points`
+    );
+    console.log(
+      `account  : ${sale.priceAccount.toBase58()}, ${price.fullyVerified ? "fully verified by the Wormhole guardians" : "not fully verified"}`
     );
   }
 
@@ -606,7 +610,7 @@ async function main(): Promise<void> {
             "buy that would push the price past the ceiling",
             "C9",
             "PriceOutsideBand",
-            `the curve cannot reach it: the largest buy this sale allows lands at ${dollars(room.curvePrice ?? 0n).toFixed(8)} against a ceiling of ${dollars(room.ceiling ?? 0n).toFixed(2)}, because this sale is priced in SOL and the ceiling is in dollars`
+            `the curve cannot reach it: the largest buy this sale allows lands at ${dollars(room.curvePrice ?? 0n).toFixed(8)} against a ceiling of ${dollars(room.ceiling ?? 0n).toFixed(4)}, because this sale is priced in SOL and the ceiling is in dollars`
           )
         );
       }

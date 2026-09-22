@@ -3,13 +3,18 @@ import {
   DBC_PROGRAM_ID,
   LIMITS,
   PANGU_PROGRAM_ID,
+  PANGU_SHARD_ID,
+  PYTH_PRICE_FEED_PROGRAM_ID,
   SAS_PROGRAM_ID,
   SEEDS,
-  SWITCHBOARD_QUOTE_PROGRAM_ID,
 } from "./constants.js";
-import { PanguInputError, requirePublicKey } from "./inputs.js";
+import {
+  PanguInputError,
+  requirePublicKey,
+  requireWholeNumber,
+} from "./inputs.js";
 
-/** A Switchboard feed id, either 32 raw bytes or the same bytes written as hex. */
+/** A Pyth feed id, either 32 raw bytes or the same bytes written as hex. */
 export type FeedId = string | Uint8Array | number[];
 
 const HEX = /^[0-9a-fA-F]+$/;
@@ -127,24 +132,30 @@ export function dbcBaseVaultAddress(mint: PublicKey, pool: PublicKey): PublicKey
 }
 
 /**
- * The one quote account a queue and a set of feeds can write to.
+ * The one price feed account a Pyth shard and feed id can produce.
  *
- * The payer is not a seed, so nobody can create a rival account for the same
- * feeds and the address is fixed before anyone has refreshed it. Feed order
- * matters: a banded sale passes the price feed and then the market clock feed.
+ * The seeds are the shard id as two little endian bytes and then the 32 byte
+ * feed id, under Pyth's price feed program. The payer is not a seed, so the
+ * address is fixed before anybody has refreshed it and nobody can create a
+ * rival account for the same shard and feed. This is the same derivation
+ * `price_feed_address` runs in programs/pangu/src/price.rs, and the same one
+ * `getPriceFeedAccountForProgram` runs in `@pythnetwork/pyth-solana-receiver`.
+ *
+ * The shard defaults to Pangu's own, which is the shard Pangu's refresher
+ * writes. Throws PanguInputError for a shard outside the two bytes it is
+ * written into, or a feed id that is not 32 bytes.
  */
-export function canonicalQuoteAddress(
-  queue: PublicKey,
-  feedIds: FeedId[]
+export function priceFeedAddress(
+  feedId: FeedId,
+  shard: number = PANGU_SHARD_ID
 ): PublicKey {
-  if (!Array.isArray(feedIds) || feedIds.length === 0) {
-    throw new PanguInputError("at least one feed id is needed for a quote address");
-  }
+  const id = feedIdBytes(feedId);
+  const shardId = requireWholeNumber(shard, "shard", 0, LIMITS.maxShard);
+  const seedBytes = new Uint8Array(2);
+  seedBytes[0] = shardId & 0xff;
+  seedBytes[1] = (shardId >> 8) & 0xff;
   return PublicKey.findProgramAddressSync(
-    [
-      requirePublicKey(queue, "queue").toBuffer(),
-      ...feedIds.map((id) => feedIdBytes(id)),
-    ],
-    SWITCHBOARD_QUOTE_PROGRAM_ID
+    [seedBytes, id],
+    PYTH_PRICE_FEED_PROGRAM_ID
   )[0];
 }

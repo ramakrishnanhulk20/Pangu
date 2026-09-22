@@ -9,12 +9,13 @@
 // Meteora's enum names for the curve parameters, which are their own input type.
 //
 // Covers: mode 1 access, the cap, the exit, both fee claims, graduation and a
-// banded sale where the preflight predicts the band and the market clock.
+// banded sale where the preflight predicts both refusals the band can raise:
+// the price leaving the band, and the price going stale.
 //
 // Does NOT cover: the credential access mode, DAMM v2's behaviour after
-// migration, and the oracle signature checks, which no local chain can run. The
-// program package's own fork tests cover the first, and the devnet refresh in
-// docs/measurements/sdk-fork-test.md covers the last.
+// migration, and the Wormhole guardian signatures behind a Pyth price, which no
+// local chain can check. The program package's own fork tests cover the first,
+// and the devnet runs in docs/measurements/sdk-pyth.md cover the last.
 
 import { strict as assert } from "node:assert";
 import {
@@ -72,13 +73,12 @@ import {
   sellTransaction,
 } from "../src/dbc/index.js";
 import {
-  CLOCK_FEED_ID,
+  BAND_BPS,
+  MAX_CONF_BPS,
   PRICE_FEED_ID,
-  encodeQuote,
   readManifest,
-  writeQuoteIx,
-  SLOT_HASHES_SYSVAR,
-} from "./fork-quote.js";
+  type SaleName,
+} from "./fork-price.js";
 
 const RPC_URL = "http://127.0.0.1:8899";
 const connection = new Connection(RPC_URL, "confirmed");
@@ -304,14 +304,11 @@ async function buildBuy(
   return best;
 }
 
-/** The newest slot and its hash, so a rewritten quote can be proven by the chain. */
-async function newestSlotHash(): Promise<{ slot: bigint; hash: Buffer }> {
-  const account = await connection.getAccountInfo(SLOT_HASHES_SYSVAR, "confirmed");
-  assert.ok(account !== null, "the SlotHashes sysvar is missing");
-  return {
-    slot: account.data.readBigUInt64LE(8),
-    hash: Buffer.from(account.data.subarray(16, 48)),
-  };
+/** Waits for the chain's own clock to pass a moment, which is how a price ages. */
+async function waitUntilUnix(target: number): Promise<void> {
+  while (Math.floor(Date.now() / 1000) < target) {
+    await new Promise((wake) => setTimeout(wake, 2_000));
+  }
 }
 
 async function main(): Promise<void> {
@@ -570,9 +567,10 @@ async function main(): Promise<void> {
 }
 
 /**
- * A banded sale on the fork, where the preflight has to predict two refusals
- * before anything is signed: the price leaving the band, and the real market
- * being shut.
+ * A banded sale on the fork, where the preflight has to predict both refusals
+ * the band can raise before anything is signed: the price leaving the band, and
+ * the price going stale, which is what a shut stock market looks like from
+ * inside the chain.
  */
 async function bandedSale(
   partner: Keypair,
@@ -645,37 +643,18 @@ async function bandedSale(
     template.config,
   ]);
 
-  const bandOf = (name: "low" | "aging", maxMarketAgeSecs: number) => ({
-    bps: 1_000,
-    priceQueue: new PublicKey(manifest[name].queue),
+  // The shard is the only thing that differs between these sales: one feed,
+  // three accounts, so three stock prices can exist on one chain at once. The
+  // price account is not passed, it is derived from the shard and the feed id.
+  const bandOf = (name: SaleName) => ({
+    bps: BAND_BPS,
     priceFeedId: PRICE_FEED_ID,
-    clockFeedId: CLOCK_FEED_ID,
-    maxPriceAgeSlots: 400,
-    maxMarketAgeSecs,
-    minOracles: 1,
+    shard: manifest[name].shard,
+    maxPriceAgeSecs: manifest[name].maxPriceAgeSecs,
+    maxConfBps: MAX_CONF_BPS,
   });
 
-  /** Puts a fresh quote, with the chain's own slot hash, into a sale's account. */
-  const refresh = async (name: "low" | "aging", marketAgeSecs: number) => {
-    const { slot, hash } = await newestSlotHash();
-    const data = encodeQuote({
-      queue: new PublicKey(manifest[name].queue),
-      slot,
-      signedSlotHash: hash,
-      stockPrice: BigInt(manifest[name].stockPrice),
-      marketClockUnix: Math.floor(Date.now() / 1000) - marketAgeSecs,
-    });
-    await send(
-      `write the ${name} quote`,
-      new Transaction().add(
-        writeQuoteIx(new PublicKey(manifest[name].quote), data)
-      ),
-      [creator]
-    );
-  };
-
   step("m. the banded sale, and a price that has to stay under the ceiling");
-  await refresh("low", 0);
   const opened = await openSaleTransaction({
     connection,
     creator: creator.publicKey,
@@ -683,7 +662,7 @@ async function bandedSale(
     name: "Pangu Banded",
     symbol: "PBD",
     uri: "https://example.invalid/pbd.json",
-    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("low", 3_600) },
+    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("low") },
   });
   await send("banded pool plus rules", opened.transaction, [
     creator,
@@ -692,7 +671,10 @@ async function bandedSale(
   const mint = opened.baseMint.publicKey;
   const sale = (await getSale(connection, mint))!;
   assert.equal(sale.hasBand, true);
-  assert.equal(sale.priceAccount.toBase58(), manifest.low.quote);
+  assert.equal(sale.priceAccount.toBase58(), manifest.low.priceAccount);
+  assert.equal(sale.priceShard, manifest.low.shard);
+  assert.equal(sale.maxPriceAgeSecs, manifest.low.maxPriceAgeSecs);
+  assert.equal(sale.maxConfBps, MAX_CONF_BPS);
 
   await send(
     "open the buyer's record",
@@ -704,17 +686,15 @@ async function bandedSale(
 
   const price = await readPrice(connection, sale);
   assert.equal(price.usable, true, `the price is not usable: ${price.reason}`);
+  assert.equal(price.price.toString(), manifest.low.stockPrice);
   console.log(
-    `   stock ${price.priceDollars.toFixed(2)} dollars, ceiling ${dollars(priceCeiling(sale, price.price)).toFixed(2)}, quote ${price.ageSlots} slots old, ${price.signatures} signature`
+    `   stock ${price.priceDollars.toFixed(4)} dollars, ceiling ${dollars(priceCeiling(sale, price.price)).toFixed(4)}, published ${price.ageSecs} seconds ago, confidence ${price.confBps} basis points`
   );
 
   step("n. buying until the preflight says the next buy leaves the band");
   const stepIn = 20_000n * 10n ** BigInt(quoteDecimals);
   let predicted = false;
   for (let round = 0; round < 40 && !predicted; round += 1) {
-    if (round > 0 && round % 8 === 0) {
-      await refresh("low", 0);
-    }
     const next = await buildBuy(buyer.publicKey, mint, stepIn, sale.cap);
     const check = await preflightBuy({
       connection,
@@ -749,7 +729,7 @@ async function bandedSale(
     `   curve sits at ${dollars(nowPrice).toFixed(4)} dollars, ceiling ${dollars(nowCeiling).toFixed(4)}`
   );
 
-  step("o. a sale whose real market has shut");
+  step("o. a sale whose price nobody keeps fresh, which is a shut market");
   const shut = await openSaleTransaction({
     connection,
     creator: creator.publicKey,
@@ -757,7 +737,7 @@ async function bandedSale(
     name: "Pangu Shut",
     symbol: "PSH",
     uri: "https://example.invalid/psh.json",
-    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("aging", 3_600) },
+    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("aging") },
   });
   await send("shut market pool plus rules", shut.transaction, [
     creator,
@@ -773,8 +753,26 @@ async function bandedSale(
     ),
     [buyer]
   );
-  // The same quote, with a market clock two hours old against a limit of one.
-  await refresh("aging", 7_200);
+
+  // Nobody has refreshed this sale's price since before the chain started, and
+  // on a local chain nobody can: Pyth's receiver program is not here. That is
+  // exactly what a shut stock market looks like from inside the program, so the
+  // test waits for the account to age past this sale's own limit.
+  await waitUntilUnix(
+    manifest.aging.publishTime + manifest.aging.maxPriceAgeSecs + 5
+  );
+
+  const shutSale = (await getSale(connection, shut.baseMint.publicKey))!;
+  const shutPrice = await readPrice(connection, shutSale);
+  assert.equal(shutPrice.usable, false);
+  assert.equal(shutPrice.error, "PriceStale");
+  // The price itself is still perfectly readable. Nothing is wrong with it
+  // except its age, and that alone shuts every buy.
+  assert.ok(shutPrice.price > 0n, "the stale sale lost its price");
+  assert.ok(
+    shutPrice.ageSecs > shutSale.maxPriceAgeSecs,
+    "the price had not aged past the sale's limit yet"
+  );
 
   const closed = await preflightBuy({
     connection,
@@ -782,23 +780,26 @@ async function bandedSale(
     mint: shut.baseMint.publicKey,
     amountOut: 1_000_000n,
   });
-  assert.equal(closed.error, "MarketClosed");
-  console.log(`   predicted MarketClosed: ${closed.reason}`);
-
-  const shutSale = (await getSale(connection, shut.baseMint.publicKey))!;
-  const shutPrice = await readPrice(connection, shutSale);
-  assert.equal(shutPrice.usable, false);
-  assert.equal(shutPrice.error, "MarketClosed");
-  assert.ok(
-    Math.floor(Date.now() / 1000) - shutPrice.lastTradeUnix >= 7_200,
-    "the market clock was not moved back"
-  );
+  assert.equal(closed.error, "PriceStale");
   console.log(
-    `   the same quote reads ${shutPrice.priceDollars.toFixed(2)} dollars, last trade ${Math.floor((Math.floor(Date.now() / 1000) - shutPrice.lastTradeUnix) / 60)} minutes ago`
+    `   predicted PriceStale at ${shutPrice.priceDollars.toFixed(4)} dollars published ${Math.floor(shutPrice.ageSecs / 60)} minutes ago, against a limit of ${Math.floor(shutSale.maxPriceAgeSecs / 60)} minutes: ${closed.reason}`
   );
 
-  // The two feeds ride together: the price itself is fine, the clock is not.
-  assert.ok(shutPrice.price > 0n, "the shut sale lost its price");
+  // And the chain agrees, which is the point of sending it.
+  const refused = await buyTransaction({
+    connection,
+    buyer: buyer.publicKey,
+    mint: shut.baseMint.publicKey,
+    amountIn: 1_000n * 10n ** BigInt(quoteDecimals),
+  });
+  assert.equal(
+    await refusal("a buy against a stale price", refused.transaction, [buyer]),
+    "PriceStale"
+  );
+
+  // The sale next door is untouched: each one names its own account and its own
+  // limit, so one going stale says nothing about the other.
+  assert.equal((await readPrice(connection, view!)).usable, true);
 }
 
 main()

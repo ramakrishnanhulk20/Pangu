@@ -41,13 +41,11 @@ const openRules = {
   credential: PublicKey.default,
   schema: PublicKey.default,
   price_account: PublicKey.default,
-  price_queue: PublicKey.default,
-  band_bps: 0,
   price_feed_id: Array<number>(32).fill(0),
-  clock_feed_id: Array<number>(32).fill(0),
-  max_price_age_slots: 0,
-  max_market_age_secs: 0,
-  min_oracles: 0,
+  price_shard: 0,
+  band_bps: 0,
+  max_price_age_secs: 0,
+  max_conf_bps: 0,
   base_decimals: 6,
   quote_decimals: 6,
   buyers: 0,
@@ -63,13 +61,11 @@ const bandedRules = {
   credential: key(),
   schema: key(),
   price_account: key(),
-  price_queue: key(),
-  band_bps: 500,
   price_feed_id: Array.from({ length: 32 }, (_, i) => i + 1),
-  clock_feed_id: Array.from({ length: 32 }, (_, i) => 255 - i),
-  max_price_age_slots: 400,
-  max_market_age_secs: 900,
-  min_oracles: 3,
+  price_shard: 7_700,
+  band_bps: 500,
+  max_price_age_secs: 900,
+  max_conf_bps: 100,
   base_decimals: 9,
   quote_decimals: 6,
   buyers: 7,
@@ -127,13 +123,11 @@ describe("decoding", () => {
     expect(sale.credential.equals(PublicKey.default)).toBe(true);
     expect(sale.schema.equals(PublicKey.default)).toBe(true);
     expect(sale.priceAccount.equals(PublicKey.default)).toBe(true);
-    expect(sale.priceQueue.equals(PublicKey.default)).toBe(true);
     expect(sale.bandBps).toBe(0);
     expect(sale.priceFeedId).toBe("0".repeat(64));
-    expect(sale.clockFeedId).toBe("0".repeat(64));
-    expect(sale.maxPriceAgeSlots).toBe(0);
-    expect(sale.maxMarketAgeSecs).toBe(0);
-    expect(sale.minOracles).toBe(0);
+    expect(sale.priceShard).toBe(0);
+    expect(sale.maxPriceAgeSecs).toBe(0);
+    expect(sale.maxConfBps).toBe(0);
     expect(sale.baseDecimals).toBe(6);
     expect(sale.quoteDecimals).toBe(6);
     expect(sale.buyers).toBe(0);
@@ -149,13 +143,11 @@ describe("decoding", () => {
     expect(sale.credential.equals(bandedRules.credential)).toBe(true);
     expect(sale.schema.equals(bandedRules.schema)).toBe(true);
     expect(sale.priceAccount.equals(bandedRules.price_account)).toBe(true);
-    expect(sale.priceQueue.equals(bandedRules.price_queue)).toBe(true);
     expect(sale.bandBps).toBe(500);
     expect(sale.priceFeedId).toBe(hex(bandedRules.price_feed_id));
-    expect(sale.clockFeedId).toBe(hex(bandedRules.clock_feed_id));
-    expect(sale.maxPriceAgeSlots).toBe(400);
-    expect(sale.maxMarketAgeSecs).toBe(900);
-    expect(sale.minOracles).toBe(3);
+    expect(sale.priceShard).toBe(7_700);
+    expect(sale.maxPriceAgeSecs).toBe(900);
+    expect(sale.maxConfBps).toBe(100);
     expect(sale.baseDecimals).toBe(9);
     expect(sale.quoteDecimals).toBe(6);
     expect(sale.buyers).toBe(7);

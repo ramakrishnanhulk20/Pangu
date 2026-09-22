@@ -3,7 +3,7 @@
  * sale's rules in one transaction.
  *
  *   npm run launch -- --mode list --cap-share-bps 1000
- *   npm run launch -- --mode open --band 500 --quote wsol
+ *   npm run launch -- --mode open --band 500 --feed Crypto.AAPLX/USD
  *
  * Everything it prints comes back off the chain after the transactions land,
  * and every sale it opens is appended to sales.json so the other commands can
@@ -42,8 +42,15 @@ import {
   sol,
   transactionLink,
 } from "./environment.js";
-import { aaplBand, aaplQuoteAccount } from "./feeds.js";
-import { refreshAaplQuote } from "./quote-refresh.js";
+import {
+  bandFor,
+  feedFor,
+  feedPriceAccount,
+  DEFAULT_FEED,
+  MAX_CONF_BPS,
+  MAX_PRICE_AGE_SECS,
+} from "./feeds.js";
+import { refreshFeedPrice } from "./price-refresh.js";
 import { appendSale } from "./sales.js";
 
 const FLAGS = [
@@ -51,6 +58,7 @@ const FLAGS = [
   "cap-share-bps",
   "quote",
   "band",
+  "feed",
   "name",
   "symbol",
   "uri",
@@ -98,6 +106,7 @@ async function main(): Promise<void> {
   const mode = choice(flags, "mode", MODES, "list");
   const capShareBps = wholeNumber(flags, "cap-share-bps", 1, 10_000, 1_000);
   const bandBps = wholeNumber(flags, "band", 1, 5_000, 0);
+  const feed = feedFor(text(flags, "feed", DEFAULT_FEED));
   const thresholdSol = amount(flags, "threshold-sol", 0.01, 100, DEFAULT_THRESHOLD_SOL);
   const quoteFlag = text(flags, "quote", "wsol");
   const name = text(
@@ -131,25 +140,30 @@ async function main(): Promise<void> {
   );
 
   if (bandBps > 0) {
+    console.log(
+      `band     : ${bandBps / 100} percent over ${feed.name}, price at most ${MAX_PRICE_AGE_SECS} seconds old and no wider than ${MAX_CONF_BPS / 100} percent`
+    );
     try {
-      const refresh = await refreshAaplQuote(connection, issuer);
+      const refresh = await refreshFeedPrice(connection, issuer, feed.symbol);
       console.log(
-        `band     : ${bandBps / 100} percent over AAPL at ${refresh.price.toFixed(2)} dollars, last trade ${refresh.secondsSinceTrade} seconds ago`
+        `           ${feed.symbol} at ${refresh.price.toFixed(4)} dollars, published ${refresh.secondsOld} seconds ago, confidence ${refresh.confBps} basis points`
       );
-      console.log(`           quote account ${refresh.quoteAccount.toBase58()}`);
-      console.log(`           ${refresh.link}`);
+      console.log(`           price account ${refresh.priceAccount.toBase58()}`);
+      for (const link of refresh.links) {
+        console.log(`           ${link}`);
+      }
     } catch (error) {
-      // The sale can still be opened. The quote account's address comes from
-      // the queue and the two feed ids, so it is known before anybody has ever
-      // written to it, and a buy is refused until somebody does. Saying so here
-      // is better than opening a sale that quietly looks priced.
+      // The sale can still be opened. The price account's address comes from
+      // the shard and the feed id, so it is known before anybody has ever
+      // written to it, and every buy is refused until somebody does. Saying so
+      // here is better than opening a sale that quietly looks priced.
       console.log(
-        `band     : ${bandBps / 100} percent over AAPL, but the price refresh did not go through: ${error instanceof Error ? error.message : String(error)}`
+        `           the price refresh did not go through: ${error instanceof Error ? error.message : String(error)}`
       );
       console.log(
         `           the sale still opens, and buys stay refused until a refresh lands`
       );
-      console.log(`           quote account ${aaplQuoteAccount().toBase58()}`);
+      console.log(`           price account ${feedPriceAccount(feed).toBase58()}`);
     }
   }
 
@@ -197,7 +211,7 @@ async function main(): Promise<void> {
       capShareBps,
       accessMode: ACCESS_MODE_OF[mode],
       ...credentialTerms,
-      ...(bandBps > 0 ? { band: aaplBand(bandBps) } : {}),
+      ...(bandBps > 0 ? { band: bandFor(feed, bandBps) } : {}),
     },
   });
   const saleLanded = await send(
@@ -252,6 +266,7 @@ async function main(): Promise<void> {
     cap: sale.cap.toString(),
     thresholdSol,
     bandBps: sale.hasBand ? sale.bandBps : null,
+    feed: sale.hasBand ? feed.symbol : null,
     config: template.config.publicKey.toBase58(),
     mint: mint.toBase58(),
     pool: sale.pool.toBase58(),

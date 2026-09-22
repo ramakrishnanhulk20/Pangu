@@ -219,14 +219,6 @@
           "optional": true
         },
         {
-          "name": "price_queue",
-          "docs": [
-            "the band names and to be owned by Switchboard's On-Demand program for this",
-            "network. Only its key and owner are read, so it is not typed."
-          ],
-          "optional": true
-        },
-        {
           "name": "rules",
           "writable": true,
           "pda": {
@@ -748,91 +740,81 @@
     },
     {
       "code": 6012,
-      "name": "MarketClosed",
-      "msg": "the real market has not traded recently enough for this sale to be open"
-    },
-    {
-      "code": 6013,
       "name": "PriceOutsideBand",
       "msg": "the price is outside the allowed band"
     },
     {
-      "code": 6014,
+      "code": 6013,
       "name": "WrongPriceAccount",
-      "msg": "the price account is not the one named in the rules, or does not hold a usable quote"
+      "msg": "the price account is not the one named in the rules, or does not hold a usable price"
+    },
+    {
+      "code": 6014,
+      "name": "PriceNotFullyVerified",
+      "msg": "the price update has not been signed by two thirds of the guardians"
     },
     {
       "code": 6015,
-      "name": "PriceNotEnoughOracles",
-      "msg": "the price quote does not carry enough oracle signatures"
+      "name": "PriceTooUncertain",
+      "msg": "the price carries a wider confidence interval than this sale accepts"
     },
     {
       "code": 6016,
-      "name": "PriceSignerNotAnOracle",
-      "msg": "a key that signed the price quote is not an oracle this queue lists"
-    },
-    {
-      "code": 6017,
-      "name": "PriceSlotHashMismatch",
-      "msg": "the slot hash the oracles signed does not match the chain's own record"
-    },
-    {
-      "code": 6018,
       "name": "NotPoolCreator",
       "msg": "the signer did not create this pool"
     },
     {
-      "code": 6019,
+      "code": 6017,
       "name": "NotAHookPool",
       "msg": "the account is not a DBC transfer-hook pool"
     },
     {
-      "code": 6020,
+      "code": 6018,
       "name": "HookProgramMismatch",
       "msg": "the mint's transfer hook does not name this program"
     },
     {
-      "code": 6021,
+      "code": 6019,
       "name": "MintAuthorityStillSet",
       "msg": "someone can still mint this token, which would go straight past the cap"
     },
     {
-      "code": 6022,
+      "code": 6020,
       "name": "WrongLaunchTemplate",
       "msg": "the launch template is not the one this pool was opened on"
     },
     {
-      "code": 6023,
+      "code": 6021,
       "name": "FeesNotInQuoteToken",
       "msg": "the launch template collects fees in the sale token instead of the paying token"
     },
     {
-      "code": 6024,
+      "code": 6022,
       "name": "ZeroCap",
       "msg": "the cap must be above zero"
     },
     {
-      "code": 6025,
+      "code": 6023,
       "name": "InvalidAccessMode",
       "msg": "that access mode is not available"
     },
     {
-      "code": 6026,
+      "code": 6024,
       "name": "InvalidBand",
       "msg": "the price band settings are incomplete, out of range, or set on a sale that has no band"
     },
     {
-      "code": 6027,
+      "code": 6025,
       "name": "SaleStillRunning",
       "msg": "the sale is still running, the mint still names this program as its hook"
     },
     {
-      "code": 6028,
+      "code": 6026,
       "name": "NotIssuer",
       "msg": "only the issuer can do this"
     },
     {
-      "code": 6029,
+      "code": 6027,
       "name": "MathOverflow",
       "msg": "the counter would overflow"
     }
@@ -962,9 +944,9 @@
       "docs": [
         "The price band settings, passed to `create_sale` as one value.",
         "",
-        "They travel together because they are only meaningful together: the quote",
-        "account's address is derived from the queue and both feed ids, so changing any",
-        "one of them changes which account the hook must read."
+        "They travel together because they are only meaningful together: the price",
+        "account's address is derived from the shard id and the feed id, so changing",
+        "either one changes which account the hook must read."
       ],
       "type": {
         "kind": "struct",
@@ -980,22 +962,15 @@
           {
             "name": "price_account",
             "docs": [
-              "The Switchboard quote account. Must be the canonical address for the queue",
-              "and the two feed ids below."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "price_queue",
-            "docs": [
-              "The Switchboard queue whose oracles sign the quote."
+              "The Pyth price feed account. Must be the address the shard id and the feed",
+              "id below produce under Pyth's price feed program."
             ],
             "type": "pubkey"
           },
           {
             "name": "price_feed_id",
             "docs": [
-              "The feed carrying the stock price in dollars."
+              "The Pyth feed carrying the stock price in dollars."
             ],
             "type": {
               "array": [
@@ -1005,37 +980,28 @@
             }
           },
           {
-            "name": "clock_feed_id",
+            "name": "price_shard",
             "docs": [
-              "The feed carrying the time of the last real market trade, in Unix seconds."
+              "Which of Pyth's shards this sale reads. A shard is just a second copy of",
+              "the same feed at a second address, so a sale can depend on a price its own",
+              "refresher keeps fresh rather than on Pyth's sponsored one."
             ],
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
+            "type": "u16"
           },
           {
-            "name": "max_price_age_slots",
+            "name": "max_price_age_secs",
             "docs": [
-              "How old the oracle quote may be on a buy, in slots."
+              "How old the published price may be on a buy, in seconds."
             ],
             "type": "u32"
           },
           {
-            "name": "max_market_age_secs",
+            "name": "max_conf_bps",
             "docs": [
-              "How old the last real market trade may be, in seconds."
+              "The widest confidence interval this sale will buy against, in basis points",
+              "of the price itself."
             ],
-            "type": "u32"
-          },
-          {
-            "name": "min_oracles",
-            "docs": [
-              "Fewest oracle signatures a quote must carry."
-            ],
-            "type": "u8"
+            "type": "u16"
           }
         ]
       }
@@ -1139,16 +1105,28 @@
           {
             "name": "price_account",
             "docs": [
-              "Band only: the Switchboard quote account, at byte 209. Zero otherwise."
+              "Band only: the Pyth price feed account, at byte 209. Zero otherwise."
             ],
             "type": "pubkey"
           },
           {
-            "name": "price_queue",
+            "name": "price_feed_id",
             "docs": [
-              "Band only: the Switchboard queue, at byte 241. Zero otherwise."
+              "Band only: the Pyth feed the price account must carry, at byte 241."
             ],
-            "type": "pubkey"
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "price_shard",
+            "docs": [
+              "Band only: the Pyth shard the price account was derived under."
+            ],
+            "type": "u16"
           },
           {
             "name": "band_bps",
@@ -1158,34 +1136,12 @@
             "type": "u16"
           },
           {
-            "name": "price_feed_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "clock_feed_id",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "max_price_age_slots",
+            "name": "max_price_age_secs",
             "type": "u32"
           },
           {
-            "name": "max_market_age_secs",
-            "type": "u32"
-          },
-          {
-            "name": "min_oracles",
-            "type": "u8"
+            "name": "max_conf_bps",
+            "type": "u16"
           },
           {
             "name": "base_decimals",

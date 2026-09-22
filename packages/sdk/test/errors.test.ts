@@ -33,7 +33,7 @@ const tested = [
   "OverCap",
   "NotApproved",
   "PriceOutsideBand",
-  "MarketClosed",
+  "PriceTooUncertain",
   "ReceivingAccountOwnerCanChange",
 ] as const;
 
@@ -97,7 +97,7 @@ describe("explaining a refusal", () => {
       (error) => explainPanguError(error.name) === explainPanguError("NotAnError")
     );
     expect(missing.map((error) => error.name)).toEqual([]);
-    expect(PANGU_ERRORS.length).toBe(30);
+    expect(PANGU_ERRORS.length).toBe(28);
   });
 
   it("says what a buyer should do about the two they will actually hit", () => {

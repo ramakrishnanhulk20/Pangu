@@ -7,14 +7,19 @@ import {
 } from "@solana/web3.js";
 import {
   buyerRecordAddress,
-  canonicalQuoteAddress,
   extraAccountListAddress,
   feedIdBytes,
+  priceFeedAddress,
   saleRulesAddress,
   type FeedId,
 } from "./addresses.js";
 import { panguCoder } from "./coder.js";
-import { ACCESS_MODE, LIMITS, PANGU_PROGRAM_ID } from "./constants.js";
+import {
+  ACCESS_MODE,
+  LIMITS,
+  PANGU_PROGRAM_ID,
+  PANGU_SHARD_ID,
+} from "./constants.js";
 import {
   PanguInputError,
   requireAbsent,
@@ -27,15 +32,14 @@ import {
 export interface PriceBandInput {
   /** How far above the live stock price a buy may leave the curve, in basis points. */
   bps: number;
-  /** The Switchboard queue whose oracles sign the quote. */
-  priceQueue: PublicKey;
-  /** The feed carrying the stock price, as hex or 32 bytes. */
+  /** The Pyth feed carrying the stock price, as hex or 32 bytes. */
   priceFeedId: FeedId;
-  /** The feed carrying the time of the last real market trade. */
-  clockFeedId: FeedId;
-  maxPriceAgeSlots: number;
-  maxMarketAgeSecs: number;
-  minOracles: number;
+  /** Which Pyth shard to read. Defaults to Pangu's own, the one it refreshes. */
+  shard?: number;
+  /** How old the published price may be on a buy, in seconds. */
+  maxPriceAgeSecs: number;
+  /** The widest confidence interval this sale will buy against, in basis points. */
+  maxConfBps: number;
 }
 
 export interface CreateSaleInput {
@@ -78,21 +82,16 @@ export interface CloseBuyerRecordInput {
   mint: PublicKey;
 }
 
-const U32_MAX = 4_294_967_295;
-const U8_MAX = 255;
-
 const ZERO_FEED = Array<number>(LIMITS.feedIdLength).fill(0);
 
 /** What the program stores for a sale with no band: every field zero. */
 const NO_BAND = {
   band_bps: 0,
   price_account: PublicKey.default,
-  price_queue: PublicKey.default,
   price_feed_id: ZERO_FEED,
-  clock_feed_id: ZERO_FEED,
-  max_price_age_slots: 0,
-  max_market_age_secs: 0,
-  min_oracles: 0,
+  price_shard: 0,
+  max_price_age_secs: 0,
+  max_conf_bps: 0,
 };
 
 function meta(
@@ -121,49 +120,43 @@ function build(name: string, keys: AccountMeta[], args: object): TransactionInst
 }
 
 function bandFields(band: PriceBandInput, field: string) {
-  const bps = requireWholeNumber(band.bps, `${field}.bps`, 1, LIMITS.maxBandBps);
-  const priceQueue = requireRealPublicKey(band.priceQueue, `${field}.priceQueue`);
+  const bps = requireWholeNumber(
+    band.bps,
+    `${field}.bps`,
+    LIMITS.minBandBps,
+    LIMITS.maxBandBps
+  );
   const priceFeedId = feedIdBytes(band.priceFeedId);
-  const clockFeedId = feedIdBytes(band.clockFeedId);
-  for (const [name, bytes] of [
-    ["priceFeedId", priceFeedId],
-    ["clockFeedId", clockFeedId],
-  ] as const) {
-    if (bytes.every((byte) => byte === 0)) {
-      throw new PanguInputError(`${field}.${name} of all zeros is not a feed`);
-    }
+  if (priceFeedId.every((byte) => byte === 0)) {
+    throw new PanguInputError(`${field}.priceFeedId of all zeros is not a feed`);
   }
-  const maxPriceAgeSlots = requireWholeNumber(
-    band.maxPriceAgeSlots,
-    `${field}.maxPriceAgeSlots`,
-    LIMITS.minPriceAgeSlots,
-    LIMITS.maxPriceAgeSlots
+  const shard =
+    band.shard === undefined
+      ? PANGU_SHARD_ID
+      : requireWholeNumber(band.shard, `${field}.shard`, 0, LIMITS.maxShard);
+  const maxPriceAgeSecs = requireWholeNumber(
+    band.maxPriceAgeSecs,
+    `${field}.maxPriceAgeSecs`,
+    LIMITS.minPriceAgeSecs,
+    LIMITS.maxPriceAgeSecs
   );
-  const maxMarketAgeSecs = requireWholeNumber(
-    band.maxMarketAgeSecs,
-    `${field}.maxMarketAgeSecs`,
-    LIMITS.minMarketAgeSecs,
-    U32_MAX
-  );
-  const minOracles = requireWholeNumber(
-    band.minOracles,
-    `${field}.minOracles`,
-    LIMITS.minOracles,
-    U8_MAX
+  const maxConfBps = requireWholeNumber(
+    band.maxConfBps,
+    `${field}.maxConfBps`,
+    LIMITS.minConfBps,
+    LIMITS.maxConfBps
   );
 
   return {
     band_bps: bps,
-    // Derived here rather than asked for: the quote account is a program address
-    // over the queue and both feed ids, and the program derives the same one and
-    // refuses anything else.
-    price_account: canonicalQuoteAddress(priceQueue, [priceFeedId, clockFeedId]),
-    price_queue: priceQueue,
+    // Derived here rather than asked for: the price account is the one program
+    // address this shard and this feed id can produce under Pyth's price feed
+    // program, and create_sale derives the same one and refuses anything else.
+    price_account: priceFeedAddress(priceFeedId, shard),
     price_feed_id: Array.from(priceFeedId),
-    clock_feed_id: Array.from(clockFeedId),
-    max_price_age_slots: maxPriceAgeSlots,
-    max_market_age_secs: maxMarketAgeSecs,
-    min_oracles: minOracles,
+    price_shard: shard,
+    max_price_age_secs: maxPriceAgeSecs,
+    max_conf_bps: maxConfBps,
   };
 }
 
@@ -174,7 +167,7 @@ function bandFields(band: PriceBandInput, field: string) {
  * The pool must already exist and the signer must be its creator. The pool's
  * launch template is needed in every mode, because the program refuses a
  * template that collects fees in the sale token. Access mode 2 needs a
- * credential and a schema; a band needs both feeds and the token buyers pay in.
+ * credential and a schema; a band needs the feed and the token buyers pay in.
  * Every input that could never pass on chain is refused here, with the same
  * limits the program holds.
  *
@@ -240,7 +233,6 @@ export function createSaleInstruction(input: CreateSaleInput): TransactionInstru
     wantsCredential ? meta(schema, false, false) : absentAccount(),
     meta(dbcConfig, false, false),
     quoteMint === null ? absentAccount() : meta(quoteMint, false, false),
-    band.band_bps > 0 ? meta(band.price_queue, false, false) : absentAccount(),
     meta(saleRulesAddress(mint), false, true),
     meta(extraAccountListAddress(mint), false, true),
     meta(SystemProgram.programId, false, false),

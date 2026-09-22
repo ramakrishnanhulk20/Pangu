@@ -2,7 +2,9 @@ export {
   PANGU_PROGRAM_ID,
   DBC_PROGRAM_ID,
   SAS_PROGRAM_ID,
-  SWITCHBOARD_QUOTE_PROGRAM_ID,
+  PYTH_PRICE_FEED_PROGRAM_ID,
+  PYTH_RECEIVER_PROGRAM_ID,
+  PANGU_SHARD_ID,
   TOKEN_2022_PROGRAM_ID,
   ACCESS_MODE,
   LIMITS,
@@ -19,7 +21,7 @@ export {
   extraAccountListAddress,
   attestationAddress,
   dbcBaseVaultAddress,
-  canonicalQuoteAddress,
+  priceFeedAddress,
   feedIdBytes,
   feedIdHex,
 } from "./addresses.js";
@@ -35,11 +37,18 @@ export {
 } from "./accounts.js";
 export type { Sale, BuyerRecord } from "./accounts.js";
 
-export { curvePriceDollars, priceCeiling, dollars, DOLLAR_SCALE } from "./band.js";
+export {
+  curvePriceDollars,
+  priceCeiling,
+  dollars,
+  stockPriceDollars,
+  confidenceBps,
+  DOLLAR_SCALE,
+} from "./band.js";
 export type { BandRules } from "./band.js";
 
-export { decodeQuote, readPrice } from "./quote.js";
-export type { QuoteFeed, QuoteReading, PriceReading } from "./quote.js";
+export { decodePriceUpdate, readPrice } from "./feed.js";
+export type { PriceUpdate, PriceReading } from "./feed.js";
 
 export { saleStanding } from "./standing.js";
 export type { SaleStanding } from "./standing.js";

@@ -2,14 +2,63 @@ import { LIMITS } from "./constants.js";
 import { PanguInputError, requireBigint, requireWholeNumber } from "./inputs.js";
 
 /**
- * Every price in this package is a dollar amount scaled by 1e18, the scale
- * Switchboard publishes its feed values in. Working in the feed's own scale
- * means the band comparison never rounds twice.
+ * Every price in this package is a dollar amount scaled by 1e18, which is the
+ * one scale the program compares on (PRICE_SCALE_DECIMALS in price.rs).
+ * Working in that scale means the band comparison never rounds twice.
  */
 export const DOLLAR_SCALE = 10n ** 18n;
 
 function pow10(exponent: number): bigint {
   return 10n ** BigInt(exponent);
+}
+
+/**
+ * Pyth's exponent range this package can read: an equity is published at -5 and
+ * a tokenised one at -8. Source: MIN_EXPONENT and MAX_EXPONENT in price.rs.
+ */
+const MIN_EXPONENT = -18;
+const MAX_EXPONENT = 0;
+
+/**
+ * A Pyth price turned into dollars scaled by 1e18, the way
+ * `stock_price_1e18` does it on chain.
+ *
+ * Pyth publishes a whole number and an exponent, and the real price is the
+ * number times ten to that exponent. A price at a finer scale than 1e18 rounds
+ * down, exactly as the program's integer division does, and a zero is what the
+ * program then refuses.
+ *
+ * Throws PanguInputError for a price that is not above zero, or an exponent no
+ * dollar price can use.
+ */
+export function stockPriceDollars(price: bigint, exponent: number): bigint {
+  const raw = requireBigint(price, "price");
+  if (raw <= 0n) {
+    throw new PanguInputError("a price of zero or less is not a price");
+  }
+  const power = requireWholeNumber(exponent, "exponent", MIN_EXPONENT, MAX_EXPONENT);
+  const shift = 18 + power;
+  return shift >= 0 ? raw * pow10(shift) : raw / pow10(-shift);
+}
+
+/**
+ * Pyth's confidence interval as basis points of the price itself, rounded UP.
+ *
+ * Rounded up, so half a basis point of doubt counts as one and never as none.
+ * The same arithmetic as `require_confidence` in price.rs.
+ *
+ * Throws PanguInputError for a price that is not above zero.
+ */
+export function confidenceBps(price: bigint, conf: bigint): bigint {
+  const raw = requireBigint(price, "price");
+  const doubt = requireBigint(conf, "conf");
+  if (raw <= 0n) {
+    throw new PanguInputError("a price of zero or less has no confidence ratio");
+  }
+  if (doubt < 0n) {
+    throw new PanguInputError("a confidence interval cannot be negative");
+  }
+  return (doubt * 10_000n + raw - 1n) / raw;
 }
 
 /**

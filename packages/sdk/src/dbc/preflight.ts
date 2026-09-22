@@ -6,7 +6,7 @@ import { curvePriceDollars, priceCeiling } from "../band.js";
 import { ACCESS_MODE } from "../constants.js";
 import { explainPanguError, type PanguErrorName } from "../errors.js";
 import { PanguInputError, requireBigint, requireRealPublicKey } from "../inputs.js";
-import { readPrice, type PriceReading } from "../quote.js";
+import { readPrice, type PriceReading } from "../feed.js";
 import { credentialRefusal } from "./credential.js";
 import { quoteExactOut } from "./quote.js";
 import { loadPool } from "./state.js";
@@ -64,9 +64,9 @@ export interface PreflightBuyInput {
  * dropped. The answer is one of the program's error names with its plain
  * sentence, so the app can say the same thing before and after a refusal.
  *
- * What it cannot see: the oracle signature and slot hash checks inside the
- * hook, and anything that changes between this read and the buy landing. A
- * "pass" here is the state now, not a promise.
+ * What it cannot see: the Wormhole guardian signatures behind the price, which
+ * only Pyth's receiver program can check, and anything that changes between
+ * this read and the buy landing. A "pass" here is the state now, not a promise.
  *
  * Throws PanguInputError for a mint with no Pangu sale.
  */

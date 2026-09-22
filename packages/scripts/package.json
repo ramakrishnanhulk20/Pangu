@@ -10,6 +10,7 @@
     "prove": "tsx src/prove.ts",
     "graduate": "tsx src/graduate.ts",
     "refresh-price": "tsx src/refresh-price.ts",
+    "sdk:refresh": "node scripts/refresh-sdk.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -18,6 +19,11 @@
     "@solana/spl-token": "0.4.15",
     "@solana/web3.js": "1.98.4",
     "pangu-sdk": "file:../sdk"
+  },
+  "overrides": {
+    "jito-ts": {
+      "@solana/web3.js": "1.98.4"
+    }
   },
   "devDependencies": {
     "@types/node": "26.6.2",

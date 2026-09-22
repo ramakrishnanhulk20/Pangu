@@ -160,19 +160,15 @@ const EXPLANATIONS = {
   WalletToWalletDuringSale:
     "This token cannot be sent from one wallet to another while the sale is running.",
   PriceStale:
-    "The stock price this sale checks against is too old to use. Refresh it and try again.",
-  MarketClosed:
-    "The real market has not traded recently enough, so this sale is closed for now.",
+    "The stock price this sale checks against is too old to use. Refresh it and try again. Outside market hours there is no fresh price to get, so the sale stays shut until the market opens.",
   PriceOutsideBand:
     "This purchase would push the price too far above the real stock price.",
   WrongPriceAccount:
     "The price account sent with this transfer is not the one this sale names.",
-  PriceNotEnoughOracles:
-    "Not enough oracles signed the price for this sale to accept it.",
-  PriceSignerNotAnOracle:
-    "A key that signed the price is not one of the oracles this sale's queue lists.",
-  PriceSlotHashMismatch:
-    "The signed price does not match the chain's own record of that moment.",
+  PriceNotFullyVerified:
+    "The price update has not been signed by two thirds of Pyth's guardians, and this sale will not price against a half signed number.",
+  PriceTooUncertain:
+    "Pyth's own publishers disagree about this stock's price by more than this sale allows, so there is no ceiling worth measuring against right now.",
   NotPoolCreator: "Only the wallet that created the pool can open its sale.",
   NotAHookPool:
     "That account is not a Meteora bonding curve pool of the kind Pangu works with.",

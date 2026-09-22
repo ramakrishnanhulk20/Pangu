@@ -23,12 +23,31 @@ export const SAS_PROGRAM_ID = new PublicKey(
 );
 
 /**
- * Switchboard's quote program, which owns every canonical quote account.
- * Source: programs/pangu/src/price.rs, QUOTE_PROGRAM_ID.
+ * Pyth's price feed program. Every price feed account is a program address of
+ * this program over a shard id and a feed id, so a sale can name the address
+ * before anybody has ever refreshed it.
+ * Source: programs/pangu/src/price.rs, PRICE_FEED_PROGRAM_ID.
  */
-export const SWITCHBOARD_QUOTE_PROGRAM_ID = new PublicKey(
-  "orac1eFjzWL5R3RbbdMV68K9H6TaCVVcL6LjvQQWAbz"
+export const PYTH_PRICE_FEED_PROGRAM_ID = new PublicKey(
+  "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT"
 );
+
+/**
+ * Pyth's receiver program, the only program that can write a price feed
+ * account, and only after checking the Wormhole guardians' signatures.
+ * Source: programs/pangu/src/price.rs, RECEIVER_PROGRAM_ID.
+ */
+export const PYTH_RECEIVER_PROGRAM_ID = new PublicKey(
+  "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ"
+);
+
+/**
+ * The Pyth shard Pangu refreshes. A shard is a second copy of the same feed at
+ * a second address, so a sale depends on a price Pangu's own refresher keeps
+ * fresh rather than on the sponsored one.
+ * Source: programs/pangu/src/price.rs, PANGU_SHARD_ID.
+ */
+export const PANGU_SHARD_ID = 7_700;
 
 export { TOKEN_2022_PROGRAM_ID };
 
@@ -60,17 +79,19 @@ export const SEEDS = {
 export const LIMITS = {
   /** price.rs MAX_BAND_BPS: half again over the live stock price. */
   maxBandBps: 5_000,
-  /** price.rs MAX_PRICE_AGE_SLOTS, and create_sale.rs check_band takes 1..=400. */
-  maxPriceAgeSlots: 400,
-  minPriceAgeSlots: 1,
-  /** create_sale.rs check_band: max_market_age_secs must be above zero. */
-  minMarketAgeSecs: 1,
-  /** create_sale.rs check_band: min_oracles must be at least one. */
-  minOracles: 1,
+  minBandBps: 1,
+  /** price.rs MAX_PRICE_AGE_SECS, and create_sale.rs check_band takes 1..=3600. */
+  maxPriceAgeSecs: 3_600,
+  minPriceAgeSecs: 1,
+  /** price.rs MAX_CONF_BPS: ten percent, and check_band takes 1..=1000. */
+  maxConfBps: 1_000,
+  minConfBps: 1,
   /** price.rs MAX_DECIMALS. */
   maxDecimals: 18,
-  /** Every Switchboard feed id is 32 bytes. */
+  /** Every Pyth feed id is 32 bytes. */
   feedIdLength: 32,
+  /** A Pyth shard id is a u16, which is what the address seed holds. */
+  maxShard: 65_535,
   /** u64 raw token units, the widest cap the program can hold. */
   maxCap: (1n << 64n) - 1n,
 } as const;

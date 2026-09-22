@@ -1,15 +1,18 @@
-// Proves `refreshPriceTransaction` against the live production AAPL feeds on
-// devnet, and reads the result back with the core entry point's `readPrice`.
+// Proves `refreshPriceTransaction` against Pyth's live AAPL feed on devnet, and
+// reads the result back with the core entry point's `readPrice`.
 //
 //   npx tsx scripts/refresh-devnet.ts
 //
-// The payer is a throwaway devnet key outside this package, at
-// spikes/switchboard/devnet-keypair.json. It is read, never printed, and nothing
-// here touches mainnet. Run it twice: the account address must not change and
-// the slot must.
+// Two things come from the environment and neither is ever printed:
+// PYTH_API_KEY, because every Hermes read has needed a key since 26 August
+// 2026, and DEVNET_PAYER_KEYPAIR, the path to the wallet that pays. Both live
+// in the repository's .env, which is read here and never committed. Nothing
+// touches mainnet.
+//
+// Run it twice: the account's address must not change and the publish time must.
 
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   Connection,
@@ -17,81 +20,107 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from "@solana/web3.js";
-import { decodeQuote, DOLLAR_SCALE } from "../src/index.js";
+import {
+  decodePriceUpdate,
+  priceFeedAddress,
+  stockPriceDollars,
+  confidenceBps,
+  DOLLAR_SCALE,
+  PANGU_SHARD_ID,
+  PYTH_RECEIVER_PROGRAM_ID,
+} from "../src/index.js";
 import { refreshPriceTransaction } from "../src/price.js";
 
-/** The queue and the two feed ids the project's own AAPL feeds resolve to. */
-const QUEUE = new PublicKey("EYiAmGSdsQTuCw413V5BzaruWuCCSDgTPtBGvLkXHbe7");
-const PRICE_FEED_ID =
-  "db4fa77aa3c4e909923c4767ae01f5d2a3d0c7138c953db372639122bdeceb3d";
-const CLOCK_FEED_ID =
-  "15ff868ad9e4b29e63e75b68a527df7d8f2fa83782938b233d03ea5e259d08c5";
+/** Pyth's own Equity.US.AAPL/USD feed id, from packages/program/feeds. */
+const AAPL_FEED_ID =
+  "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688";
 
-const RPC = process.env.DEVNET_RPC_URL ?? "https://api.devnet.solana.com";
+const here = dirname(fileURLToPath(import.meta.url));
+
+function loadEnv(): void {
+  try {
+    process.loadEnvFile(join(here, "..", "..", "..", ".env"));
+  } catch {
+    // Already in the environment, or not needed. A missing value is reported
+    // where it is used, by name.
+  }
+}
 
 function payer(): Keypair {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const file = join(here, "..", "..", "..", "spikes", "switchboard", "devnet-keypair.json");
+  const path = process.env.DEVNET_PAYER_KEYPAIR;
+  if (path === undefined || path === "") {
+    throw new Error("DEVNET_PAYER_KEYPAIR is not set, see .env.example");
+  }
   return Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(readFileSync(file, "utf8")) as number[])
+    Uint8Array.from(JSON.parse(readFileSync(resolve(path), "utf8")) as number[])
   );
 }
 
 async function main(): Promise<void> {
-  const connection = new Connection(RPC, "confirmed");
+  loadEnv();
+  const rpc = process.env.DEVNET_RPC_URL ?? "https://api.devnet.solana.com";
+  const connection = new Connection(rpc, "confirmed");
   const wallet = payer();
   const started = await connection.getBalance(wallet.publicKey);
-  console.log(`network : devnet, ${RPC}`);
+  const account: PublicKey = priceFeedAddress(AAPL_FEED_ID, PANGU_SHARD_ID);
+
+  console.log(`network : devnet, ${rpc}`);
   console.log(`payer   : ${wallet.publicKey.toBase58()}`);
   console.log(`balance : ${started / LAMPORTS_PER_SOL} SOL`);
+  console.log(`shard   : ${PANGU_SHARD_ID}`);
+  console.log(`account : ${account.toBase58()}`);
 
   const built = await refreshPriceTransaction({
     connection,
     payer: wallet.publicKey,
-    feeds: {
-      queue: QUEUE,
-      priceFeedId: PRICE_FEED_ID,
-      clockFeedId: CLOCK_FEED_ID,
-      minOracles: 1,
-    },
+    feed: { priceFeedId: AAPL_FEED_ID },
   });
-  console.log(`account : ${built.quoteAccount.toBase58()}`);
-  console.log(`bytes   : ${built.bytes} of the 1232 byte limit`);
-
-  built.transaction.sign([wallet]);
-  const signature = await connection.sendTransaction(built.transaction, {
-    skipPreflight: true,
-    maxRetries: 0,
-  });
-  await connection.confirmTransaction(signature, "confirmed");
-  const detail = await connection.getTransaction(signature, {
-    commitment: "confirmed",
-    maxSupportedTransactionVersion: 0,
-  });
-  console.log(`signature: ${signature}`);
-  console.log(`fee      : ${detail?.meta?.fee} lamports`);
-  console.log(`compute  : ${detail?.meta?.computeUnitsConsumed} units`);
-
-  const account = await connection.getAccountInfo(built.quoteAccount, "confirmed");
-  if (account === null) {
-    throw new Error("the quote account does not exist after the refresh");
-  }
-  const quote = decodeQuote(account.data);
-  const price = quote.feeds.find((feed) => feed.id === PRICE_FEED_ID);
-  const clock = quote.feeds.find((feed) => feed.id === CLOCK_FEED_ID);
-  if (price === undefined || clock === undefined) {
-    throw new Error("the quote does not carry both feeds");
-  }
-  const currentSlot = await connection.getSlot("confirmed");
-  const tradedAt = Number(clock.value / DOLLAR_SCALE);
-  console.log(`quote slot: ${quote.slot}, current slot ${currentSlot}, age ${currentSlot - Number(quote.slot)} slots`);
-  console.log(`signatures: ${quote.signatures}`);
-  console.log(`AAPL      : ${Number(price.value) / 1e18} dollars`);
   console.log(
-    `last trade: ${new Date(tradedAt * 1000).toISOString()}, ${Math.floor(Date.now() / 1000) - tradedAt} seconds ago`
+    `bytes   : ${built.bytes} across ${built.transactions.length} transactions, limit 1232 each`
+  );
+
+  for (const [index, entry] of built.transactions.entries()) {
+    entry.transaction.message.recentBlockhash = (
+      await connection.getLatestBlockhash("confirmed")
+    ).blockhash;
+    entry.transaction.sign([wallet, ...entry.signers]);
+    const signature = await connection.sendTransaction(entry.transaction, {
+      skipPreflight: true,
+      maxRetries: 0,
+    });
+    await connection.confirmTransaction(signature, "confirmed");
+    const detail = await connection.getTransaction(signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    });
+    console.log(
+      `sent ${index + 1}  : ${signature}, fee ${detail?.meta?.fee} lamports, ${detail?.meta?.computeUnitsConsumed} compute units`
+    );
+  }
+
+  const info = await connection.getAccountInfo(built.priceAccount, "confirmed");
+  if (info === null) {
+    throw new Error("the price account does not exist after the refresh");
+  }
+  if (!info.owner.equals(PYTH_RECEIVER_PROGRAM_ID)) {
+    throw new Error(`the price account is owned by ${info.owner.toBase58()}`);
+  }
+  const update = decodePriceUpdate(info.data);
+  if (update.feedId !== AAPL_FEED_ID) {
+    throw new Error(`this account carries feed 0x${update.feedId}, not ours`);
+  }
+
+  const dollars = stockPriceDollars(update.price, update.exponent);
+  console.log(`size    : ${info.data.length} bytes, owned by the receiver`);
+  console.log(`verified: ${update.fullyVerified ? "Full" : "Partial, which Pangu refuses"}`);
+  console.log(
+    `AAPL    : ${Number(dollars) / Number(DOLLAR_SCALE)} dollars, confidence ${confidenceBps(update.price, update.conf)} basis points`
   );
   console.log(
-    `spent     : ${started - (await connection.getBalance(wallet.publicKey))} lamports`
+    `published: ${update.publishTime} (${new Date(update.publishTime * 1000).toISOString()}), ${Math.floor(Date.now() / 1000) - update.publishTime} seconds ago`
+  );
+  console.log(
+    `spent   : ${started - (await connection.getBalance(wallet.publicKey))} lamports, net of the rent this reclaimed`
   );
 }
 

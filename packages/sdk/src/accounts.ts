@@ -21,15 +21,17 @@ export interface Sale {
   accessMode: number;
   credential: PublicKey;
   schema: PublicKey;
+  /** Band only: the Pyth price feed account the hook reads. */
   priceAccount: PublicKey;
-  priceQueue: PublicKey;
   bandBps: number;
   /** Lowercase hex, no prefix, the way the feed scripts print an id. */
   priceFeedId: string;
-  clockFeedId: string;
-  maxPriceAgeSlots: number;
-  maxMarketAgeSecs: number;
-  minOracles: number;
+  /** The Pyth shard the price account was derived under. */
+  priceShard: number;
+  /** How old the published price may be on a buy, in seconds. */
+  maxPriceAgeSecs: number;
+  /** The widest confidence interval this sale buys against, in basis points. */
+  maxConfBps: number;
   /**
    * Decimals of the sale token. The program only stores these on a sale with a
    * price band, so the chain holds zero for every other sale. `getSale` fills
@@ -68,13 +70,11 @@ interface RawSale {
   credential: PublicKey;
   schema: PublicKey;
   price_account: PublicKey;
-  price_queue: PublicKey;
-  band_bps: number;
   price_feed_id: number[];
-  clock_feed_id: number[];
-  max_price_age_slots: number;
-  max_market_age_secs: number;
-  min_oracles: number;
+  price_shard: number;
+  band_bps: number;
+  max_price_age_secs: number;
+  max_conf_bps: number;
   base_decimals: number;
   quote_decimals: number;
   buyers: number;
@@ -121,13 +121,11 @@ export function decodeSale(data: Uint8Array): Sale {
     credential: raw.credential,
     schema: raw.schema,
     priceAccount: raw.price_account,
-    priceQueue: raw.price_queue,
     bandBps: raw.band_bps,
     priceFeedId: feedIdHex(raw.price_feed_id),
-    clockFeedId: feedIdHex(raw.clock_feed_id),
-    maxPriceAgeSlots: raw.max_price_age_slots,
-    maxMarketAgeSecs: raw.max_market_age_secs,
-    minOracles: raw.min_oracles,
+    priceShard: raw.price_shard,
+    maxPriceAgeSecs: raw.max_price_age_secs,
+    maxConfBps: raw.max_conf_bps,
     baseDecimals: raw.base_decimals,
     quoteDecimals: raw.quote_decimals,
     buyers: raw.buyers,

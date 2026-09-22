@@ -21,7 +21,7 @@ import {
 } from "pangu-sdk";
 import { buyTransaction, graduateTransaction, saleProgress } from "pangu-sdk/dbc";
 import { readFlags } from "./arguments.js";
-import { buyWithin } from "./buying.js";
+import { buyWithin, nextBuy } from "./buying.js";
 import { send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
@@ -32,9 +32,6 @@ const MOST_BUYERS = 40;
 
 /** Rent for the token accounts and the fees, on top of what the wallet spends. */
 const OVERHEAD_LAMPORTS = 12_000_000;
-
-/** The last buy takes whatever the curve can still absorb and leaves the rest. */
-const FINISHING_HEADROOM = 10_100n;
 
 async function main(): Promise<void> {
   const flags = readFlags(process.argv.slice(2), ["mint"]);
@@ -69,12 +66,9 @@ async function main(): Promise<void> {
 
     const buyer = freshWallet();
     used.push(buyer);
-    const left = progress.threshold - progress.quoteRaised;
-    const finishing = left < sale.cap;
-    const wanted =
-      left < (progress.threshold * 2n) / 10n
-        ? (left * FINISHING_HEADROOM) / 10_000n + 100_000n
-        : progress.threshold / 10n;
+    // Both sides of this are raw units of the paying token. Nothing here may be
+    // compared against the cap, which counts sale tokens.
+    const { wanted, finishing } = nextBuy(progress.threshold, progress.quoteRaised);
 
     await fundWallets(
       connection,
@@ -97,9 +91,6 @@ async function main(): Promise<void> {
       );
     }
 
-    // The tokens run out before the paying side does, so the buy that finishes
-    // a curve is a partial fill: Meteora takes what is left and leaves the rest
-    // in the buyer's account.
     const buy = finishing
       ? await buyTransaction({
           connection,
