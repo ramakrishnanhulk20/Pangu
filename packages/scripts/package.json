@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The five commands that run a Pangu sale on devnet: launch, seed, prove, graduate, refresh-price.",
+  "description": "The commands that run a Pangu sale on devnet: mint-dollars, launch, seed, prove, graduate, refresh-price.",
   "scripts": {
     "launch": "tsx src/launch.ts",
     "seed": "tsx src/seed.ts",
     "prove": "tsx src/prove.ts",
     "graduate": "tsx src/graduate.ts",
     "refresh-price": "tsx src/refresh-price.ts",
+    "mint-dollars": "tsx src/mint-dollars.ts",
     "sdk:refresh": "node scripts/refresh-sdk.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

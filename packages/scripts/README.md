@@ -25,6 +25,7 @@ cd ../scripts && npm install && npm run sdk:refresh
 ## The commands
 
 ```bash
+npm run mint-dollars                               # a dollar token to price a sale in
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
 npm run launch -- --mode list --cap-share-bps 1000 # open a sale
@@ -36,6 +37,30 @@ npm run graduate                                   # fill the curve and migrate
 
 `prove` and `graduate` work on the last sale in `sales.json` unless you pass
 `--mint`.
+
+Run `mint-dollars` once before the first banded sale priced in dollars. Devnet
+has no dollar token anybody can get in quantity, and a ceiling that is a dollar
+price only means something when the paying token is one. It prints a mint
+address; pass that address to `launch --quote`.
+
+## What launch takes
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--mode` | `list` | Who may buy: `open`, `list` for the issuer's list, `credential` for an attestation from a verifier. A credential sale also needs `--credential` and `--schema`. |
+| `--cap-share-bps` | `1000` | The per wallet cap, in basis points of what the curve sells. 1000 is 10 percent. |
+| `--band` | none | How far over the stock price the curve may go, in basis points. 500 is 5 percent. Leave it out and the sale has no band. |
+| `--feed` | `Equity.US.AAPL/USD` | The Pyth feed the band reads. The `Equity.US.*` feeds only publish in US market hours, so those sales shut overnight. The `Crypto.*X` ones publish all week. |
+| `--quote` | `wsol` | The token buyers pay in: `wsol`, or the address of a mint with 6 to 9 decimals. Use the mint from `mint-dollars` for a dollar priced sale. |
+| `--threshold` | `0.1` | How much of the paying token the curve takes in before the sale graduates, in whole units of it. |
+| `--base-decimals` | `6` | Decimals of the sale token. Ask for 9 when a share is priced in dollars: more raw units per share is what lets the curve carry a three figure opening price. |
+| `--migration-percent` | `20` | The share of the supply carried to DAMM v2 at graduation, 10 to 40. The more kept back, the closer the opening price sits to the graduation price. |
+
+A dollar priced sale with a band is the full set:
+
+```bash
+npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40
+```
 
 ## Rebuilding the SDK
 

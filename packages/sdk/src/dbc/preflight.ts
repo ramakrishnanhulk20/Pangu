@@ -57,8 +57,12 @@ export interface PreflightBuyInput {
  * Says whether a buy would be refused, and why, before anything is signed.
  *
  * Runs the hook's own checks in the hook's own order against live chain state:
- * the record, the approval, the credential, the cap, then the price band. In
- * mode 2 the attestation and the credential's list of authorized signers are
+ * the record, the approval or the credential, the price band, then the cap.
+ * The order is the hook's and not a tidier one, because a buy that breaks two
+ * rules at once has to be given the same refusal here that the chain would
+ * give it, and handle_execute judges the band before the cap.
+ *
+ * In mode 2 the attestation and the credential's list of authorized signers are
  * decoded here the way the hook decodes them, so a wallet is told whether its
  * approval is missing, out of date, or signed by a key the verifier has since
  * dropped. The answer is one of the program's error names with its plain
@@ -96,30 +100,33 @@ export async function preflightBuy(
       return refused(refusal, capRoom);
     }
   }
+
+  let price: PriceReading | null = null;
+  let curvePrice: bigint | null = null;
+  let ceiling: bigint | null = null;
+
+  if (sale.hasBand) {
+    price = await readPrice(input.connection, sale);
+    if (!price.usable) {
+      return refused(price.error ?? "PriceStale", capRoom, { price });
+    }
+
+    // Where this buy would leave the curve, from Meteora's own exact-out quote,
+    // against the ceiling the band puts on it. Both roundings match the program's.
+    const quote = quoteExactOut(view, false, amountOut, 0);
+    curvePrice = curvePriceDollars(
+      BigInt(quote.nextSqrtPrice.toString()),
+      sale.baseDecimals,
+      sale.quoteDecimals
+    );
+    ceiling = priceCeiling(sale, price.price);
+    if (curvePrice > ceiling) {
+      return refused("PriceOutsideBand", capRoom, { curvePrice, ceiling, price });
+    }
+  }
+
   if (amountOut > capRoom) {
-    return refused("OverCap", capRoom);
-  }
-
-  if (!sale.hasBand) {
-    return { ok: true, error: null, reason: null, capRoom, curvePrice: null, ceiling: null, price: null };
-  }
-
-  const price = await readPrice(input.connection, sale);
-  if (!price.usable) {
-    return refused(price.error ?? "PriceStale", capRoom, { price });
-  }
-
-  // Where this buy would leave the curve, from Meteora's own exact-out quote,
-  // against the ceiling the band puts on it. Both roundings match the program's.
-  const quote = quoteExactOut(view, false, amountOut, 0);
-  const curvePrice = curvePriceDollars(
-    BigInt(quote.nextSqrtPrice.toString()),
-    sale.baseDecimals,
-    sale.quoteDecimals
-  );
-  const ceiling = priceCeiling(sale, price.price);
-  if (curvePrice > ceiling) {
-    return refused("PriceOutsideBand", capRoom, { curvePrice, ceiling, price });
+    return refused("OverCap", capRoom, { curvePrice, ceiling, price });
   }
 
   return { ok: true, error: null, reason: null, capRoom, curvePrice, ceiling, price };
