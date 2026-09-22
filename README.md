@@ -260,7 +260,7 @@ What exists in the app today, and where the terminal takes over.
 Everything on-chain runs inside WSL Ubuntu, because the Solana and Anchor toolchains this project pins do not build natively on Windows.
 
 ```bash
-git clone <this repository>
+git clone https://github.com/ramakrishnanhulk20/Pangu.git
 cd Meteora
 
 # check the WSL toolchain: Anchor, Solana CLI, Rust, Node, rsync

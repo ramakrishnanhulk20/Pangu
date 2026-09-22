@@ -21,9 +21,7 @@ const SUITES = [
 const REFUSAL_LINK =
   "https://explorer.solana.com/tx/5KJGDNGjZRxZcPM9pg1R9ZuhKfwKMdcm4Uijm7bbsKUCHvS9rcVYSz6iQ2rXaMNiaV3fgDa9Ep44EBo5khAA72rj?cluster=devnet";
 
-// The repository is not public yet. Until it is, the row says so rather than
-// pointing at a link that would not open.
-const REPOSITORY: string = "";
+const REPOSITORY: string = "https://github.com/ramakrishnanhulk20/Pangu";
 
 const LEDGER = [
   {

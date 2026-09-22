@@ -47,9 +47,10 @@ export function SiteFooter() {
           >
             Docs
           </Link>
-          {/* SWAP: repository URL once the repo is public */}
           <a
-            href="#"
+            href="https://github.com/ramakrishnanhulk20/Pangu"
+            target="_blank"
+            rel="noreferrer"
             className="text-muted underline decoration-transparent underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
           >
             Repository
