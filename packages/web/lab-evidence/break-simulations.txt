@@ -1,0 +1,44 @@
+network  : devnet, https://api.devnet.solana.com
+sale     : Pangu Open Share (POPEN), open access
+mint     : CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7
+cap      : 59999999997545703 raw units a wallet, worth 24000000000981718 raw units of the paying token
+paying   : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 (a token a visitor cannot get)
+curve    : 400.0000 dollars a share
+ceiling  : 360.6068 dollars, against a stock at 343.4350
+standing : PriceOutsideBand
+wallet   : 6jeGGnLqBfjG386uwF3y36mu5TcTCN83yAEQjjgYuNBr, funded from the demo keypair, 0.05 SOL
+holding  : 50000000 lamports
+
+PASS 1: a wallet holding only devnet SOL, which is all a visitor can get for themselves
+#   Attack                                               C    Expected                        What the chain said                                                                              Result
+--  ---------------------------------------------------  ---  ------------------------------  -----------------------------------------------------------------------------------------------  ---------
+01  Buy under the cap, the way a buyer would             C3   PriceOutsideBand                not Pangu: Error: insufficient funds                                                             DEVIATION
+02  Take more than the cap in one go                     C3   PriceOutsideBand                not Pangu: Error: insufficient funds                                                             DEVIATION
+03  Buy again, and cross the cap on the second try       C3   PriceOutsideBand                not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  not run
+04  Buy into a second token account of the same wallet   C3   PriceOutsideBand                not Pangu: Error: insufficient funds                                                             DEVIATION
+05  Buy into an account whose owner can still change     C13  ReceivingAccountOwnerCanChange  not Pangu: Error: insufficient funds                                                             DEVIATION
+06  Send tokens straight to another wallet               C4   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   not run
+07  Call the rules program on its own, with no transfer  C1   NotTransferring                 NotTransferring                                                                                  ok
+08  Buy above the price ceiling the band sets            C9   PriceOutsideBand                not Pangu: Error: insufficient funds                                                             DEVIATION
+09  Sell back to the pool                                C5   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              not run
+
+6 attacks run, 1 refused as expected, 0 allowed as expected, 5 off the standard
+
+paying token: 100000000000 paying tokens minted by the demo key
+
+PASS 2: the same wallet after the issuer handed it the paying token
+#   Attack                                               C    Expected                        What the chain said                                                                              Result
+--  ---------------------------------------------------  ---  ------------------------------  -----------------------------------------------------------------------------------------------  -------
+01  Buy under the cap, the way a buyer would             C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+02  Take more than the cap in one go                     C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+03  Buy again, and cross the cap on the second try       C3   PriceOutsideBand                not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  not run
+04  Buy into a second token account of the same wallet   C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+05  Buy into an account whose owner can still change     C13  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange                                                                   ok
+06  Send tokens straight to another wallet               C4   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   not run
+07  Call the rules program on its own, with no transfer  C1   NotTransferring                 NotTransferring                                                                                  ok
+08  Buy above the price ceiling the band sets            C9   PriceOutsideBand                PriceOutsideBand                                                                                 ok
+09  Sell back to the pool                                C5   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              not run
+
+6 attacks run, 6 refused as expected, 0 allowed as expected
+
+run at 2026-09-22T15:52:02.004Z

@@ -159,3 +159,71 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* The scroll story. The beat number is an attribute on the story's root, so one
+   set of rules drives both the pinned version and the five still ones, and the
+   only thing JavaScript writes while the page moves is that attribute and
+   --story-progress. */
+[data-story] [data-part] {
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+
+[data-story] :is([data-part="base"], [data-part="rider"]) {
+  opacity: 1;
+}
+
+[data-story]:is([data-beat="2"], [data-beat="3"], [data-beat="4"])
+  :is([data-part="cap"], [data-part="over-cap"]) {
+  opacity: 1;
+}
+
+[data-story]:is([data-beat="3"], [data-beat="4"])
+  :is([data-part="check"], [data-part="unapproved"]) {
+  opacity: 1;
+}
+
+[data-story][data-beat="4"] :is([data-part="apple"], [data-part="refused-run"]) {
+  opacity: 1;
+}
+
+[data-story][data-beat="5"] [data-part="damm"] {
+  opacity: 1;
+}
+
+/* Where the buying dot rests at each beat. GSAP drives it from the same points
+   when the story scrolls; this is what the still version shows. */
+[data-story] [data-part="rider"] {
+  transform: translate(400px, 520px);
+}
+
+[data-story][data-beat="2"] [data-part="rider"] {
+  transform: translate(470px, 490px);
+}
+
+[data-story][data-beat="3"] [data-part="rider"] {
+  transform: translate(540px, 452px);
+}
+
+[data-story][data-beat="4"] [data-part="rider"] {
+  transform: translate(610px, 400px);
+}
+
+[data-story][data-beat="5"] [data-part="rider"] {
+  transform: translate(860px, 190px);
+}
+
+[data-story] [data-beat-index] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 450ms ease, transform 450ms ease;
+}
+
+[data-story][data-beat="1"] [data-beat-index="1"],
+[data-story][data-beat="2"] [data-beat-index="2"],
+[data-story][data-beat="3"] [data-beat-index="3"],
+[data-story][data-beat="4"] [data-beat-index="4"],
+[data-story][data-beat="5"] [data-beat-index="5"] {
+  opacity: 1;
+  transform: none;
+}
