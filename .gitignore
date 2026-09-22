@@ -29,3 +29,6 @@ test-ledger/
 
 spikes/
 logs/
+
+# Founder drafts (video script, X post): kept local, not product
+docs/submission/
