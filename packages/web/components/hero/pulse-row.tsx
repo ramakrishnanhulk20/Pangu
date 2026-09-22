@@ -163,11 +163,7 @@ export function PulseRow({ initial }: { initial: HeroPulse }) {
 
   if (pulse.failure !== null) {
     return (
-      <p className="max-w-md text-sm text-muted">
-        Devnet did not answer just now, so there is no number to show. Nothing on
-        this page is a stored one.{" "}
-        <span className="font-mono text-[11px] opacity-70">{pulse.failure}</span>
-      </p>
+      <p className="max-w-md text-sm text-muted">{pulse.failure}</p>
     );
   }
 

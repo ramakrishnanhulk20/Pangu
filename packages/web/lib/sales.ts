@@ -16,7 +16,8 @@ export interface OpenedSale {
   quoteMint: string;
   issuer: string;
   bandBps: number | null;
-  feed?: string;
+  // A sale with no band has no price feed, and the scripts write that as null.
+  feed?: string | null;
   openedAt: string;
 }
 
