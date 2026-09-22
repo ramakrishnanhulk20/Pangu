@@ -1,25 +1,31 @@
 import { Suspense } from "react";
 
-import { SaleBoard } from "@/components/sale-board";
-import { SaleBoardSkeleton } from "@/components/sale-board-skeleton";
+import { Hero } from "@/components/hero/hero";
+import { Readout } from "@/components/readout/readout";
+import { ReadoutSkeleton } from "@/components/readout/readout-skeleton";
+import { HowItWorks } from "@/components/story/how-it-works";
+import { WhyNot } from "@/components/whynot/why-not";
+import { Proof } from "@/components/proof/proof";
 
 // Every load reads devnet rather than serving a snapshot taken at build time.
 export const dynamic = "force-dynamic";
 
+const READOUT = "the-sale";
+
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
-      <h1 className="text-4xl font-medium tracking-tight">Pangu</h1>
+    <div>
+      <Hero readoutId={READOUT} />
 
-      <p className="mt-3 text-sm text-muted">
-        Live sales on Solana devnet, read straight off the chain.
-      </p>
+      {/* The poster is in the first HTML the browser gets. Only the sale's
+          numbers wait on devnet, inside their own boundary. */}
+      <Suspense fallback={<ReadoutSkeleton id={READOUT} />}>
+        <Readout id={READOUT} />
+      </Suspense>
 
-      <div className="mt-10">
-        <Suspense fallback={<SaleBoardSkeleton />}>
-          <SaleBoard />
-        </Suspense>
-      </div>
+      <HowItWorks />
+      <WhyNot />
+      <Proof />
     </div>
   );
 }

@@ -18,8 +18,8 @@ reference/
 id.json
 
 node_modules/
-.next/
-.next-verify/
+.next*/
+.source/
 dist/
 target/
 .anchor/
