@@ -546,3 +546,211 @@ The demo keypair started this part of the run holding 0.653845 SOL and ended on
 0.624379 SOL. The dollar tokens handed to the attacking wallets are not swept
 back the way devnet SOL is: they are a demo token the same keypair can mint more
 of.
+
+# The fourth run, on the layout version build (slot 502476730)
+
+Program slot **502476730**, the build that stamps a layout version into every
+SaleRules account so a reader refuses rules written by any other layout, on
+chain since 22 September 2026 at 14:53:26 UTC (see `docs/deployments.md`).
+Program `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`, running `pangu.so`,
+sha256 `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb`,
+358,248 bytes, hash checked against the local build at 14:55 UTC.
+
+Upgrade signature
+[`fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7`](https://explorer.solana.com/tx/fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7?cluster=devnet).
+It took two attempts. The first died part way through the upload when WSL lost
+its DNS for a moment, leaving the upload buffer holding 1.82077868 SOL, and the
+same command run again picked that buffer up, landed the upgrade, and got the
+buffer's SOL back. Both attempts together cost 0.001785 SOL in fees, and no new
+rent: the program account was sized on the first deploy and this build still
+fits it.
+
+## The four earlier sales, refused by the reader
+
+The first `status` after the upgrade found every sale in `sales.json`
+unreadable, which is the point of the change. Two different reasons, both stated
+plainly rather than decoded from the wrong offsets:
+
+```
+sale PLIST 22qdWVND...  WARN  opened by an earlier build: a SaleRules account is 362 bytes
+                              and these are 427, so they were written by another build
+sale PLIST FToBcoya...  WARN  opened by an earlier build: a SaleRules account is 362 bytes
+                              and these are 427, so they were written by another build
+sale PLIST E1PSmsUo...  WARN  opened by an earlier build: these are layout version 0 and this
+                              package reads version 1, so they were written by another build
+sale PBAND 4vyCQRLe...  WARN  opened by an earlier build: these are layout version 0 and this
+                              package reads version 1, so they were written by another build
+4 passed, 4 warned, 0 failed, 1 not checked, at 2026-09-22T14:55:36Z
+```
+
+The two from the Switchboard build are caught by size, since that layout held a
+different set of fields. The two from the Pyth build are the same size as the
+new one and are caught by the version byte alone, which is the case the size
+check could never have covered. Every row said to retire the sale, so all four
+came out of `sales.json` and the rest of this run opens fresh ones.
+
+## The list mode sale
+
+`npm run launch -- --mode list --cap-share-bps 1000`, 0.018892 SOL.
+
+| What | Address or signature |
+| --- | --- |
+| Mint | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` |
+| Pool | `FXVJFvSDma6UC49Co8uukPDxJn6XMA4VxbusGPo1Az4u` |
+| Config | `6aYDwmt8PAwn5ekrYs9LECLAah38huxgKnktfRndxwqU` |
+| Rules | `7BCDcQhXeGhwu58wwQZCwSknFcADD2uVwD3ymeAo1wCb` |
+| Extra account list | `3HZrEpTb4RRhS9pPtJuGjsu9pTJk1QZPzACCk3PzzfjH` |
+| Template | [`3GfKrXvNR6bimZg6DZsdk25Yje4BXQTeRyij7K7qYJCNhn9zWjNDqgvFUFfefQSH6c3h3m6Y6oeVx9FY2YFkDxSE`](https://explorer.solana.com/tx/3GfKrXvNR6bimZg6DZsdk25Yje4BXQTeRyij7K7qYJCNhn9zWjNDqgvFUFfefQSH6c3h3m6Y6oeVx9FY2YFkDxSE?cluster=devnet) |
+| Sale | [`b8Exg5CBMy9rpGTnyFnj7bputieZUA3Bes4VSJ23SJKERahYsSLZmdPQDRZEozWbGXPSScAUrCmQqY35wq3EtAf`](https://explorer.solana.com/tx/b8Exg5CBMy9rpGTnyFnj7bputieZUA3Bes4VSJ23SJKERahYsSLZmdPQDRZEozWbGXPSScAUrCmQqY35wq3EtAf?cluster=devnet) |
+
+## Seeding it
+
+`npm run seed`, 0.078416 SOL. Six wallets bought and two of them sold part of it
+back: 389,123,803,662,293 raw units sold net of what came back, the largest
+wallet on 20.13 percent of that against a cap worth 20.56 percent.
+
+| Step | Signature |
+| --- | --- |
+| Approve buyers, first batch | `3UVoQXNvM76rKreuuTp1Y8TSzHv2eYUtNsmFw7ZSmQrBrZQJUXS1zL7Bfwftkyv6YywgAjXB8Aw3K3fRJUU2gfV9` |
+| Approve buyers, second batch | `3WbBGAnFZGcwNE3t46qhc4GgewKGQ5Sid7PGCQ2Xru8Zmami28Gi3745nCtgpMq4DVtQVPHfvWZLgouuFvrPPcQu` |
+| Buy 1 | `2GA5NNYazdXGp6xTgFc5cWZZw7wXVNZV5DbbLNmJHCdqrQJgm9f43suNx8QnVwJV2PVdpzSGuy6TEY9pZAzePboq` |
+| Buy 2 | `2qiwBX45VvjJ89CHpBFfZbV5q8TVj31FwNZFn73sgmufVho5ez9qtfruvspSRm7f2VGXPSD26PZHKSccb7qGqffV` |
+| Buy 3 | `5HQ4zC4wzLH7aswRLGyz1qrvWiqXQXzJQH3FXpaPaYLERSHYozAhued7pUYnUPMHrM1K41mBRWcLk2zGzUcMwGYJ` |
+| Buy 4 | `tvoKtCFj4gaHBLEo5dz2Xg46dLuye4YLBgUvULLy6pcVprsqXiXUmrDTsEDhjAUT2Q1ThV27EJWcs36MKbACRRw` |
+| Buy 5 | `5Smu9JcSLFEsm13VJVYYHcnuYQmK3NG8eRKtEaiKujFmMGqoZAkt1WBf8zMyz27G6HxpbTU8RmGZohvN3c88Xfnx` |
+| Buy 6 | `4esuMw8HCPE6rA5pJi2WJobhwSryHyfPmNHUZPESSVkqvqQForZ1mWVi6etWMzVYpMTN6BFKDpHMVu6SL8p8Qgbs` |
+| Sell 1 | `3YjhU2RaW1dg5pRcmdiGTFin5gHZx2Mi4RPK2QN8SdS4EjdV5FUj18qQiGY6kNs4L2c45okPdbfLM3JMkZVSvvSS` |
+| Sell 2 | `3N7HbtU7fb7fBu4rT9W9pJGrHabuVYjt5pCZadz8UoC7PkopJwcNf7kiP1NbcZDprGS4az4Pjx5cGi44H5tvJmEF` |
+
+The first two buy signatures scrolled past the console, so they were read back
+off the chain afterwards: each is a `Swap2WithTransferHook` on this mint paid
+for by one of the demo wallets, in the right place in the sale's history.
+
+## Attacking the list mode sale
+
+`npm run prove`, exit 0, 0.018713 SOL after 0.081445 SOL came back from the
+attacking wallets.
+
+| Attack | Invariant | Expected | Actual | Result | Signature |
+| --- | --- | --- | --- | --- | --- |
+| buy with no buyer record | C2 | BuyerRecordMissing | BuyerRecordMissing | ok | `2aTdo77ZoCamFFeJzbbX9EUaJy7LgBvBtt7tvbwZjWufjBSoSq7SyvnqtCUYykRU9Xv3J8CGqwQt6dxpAZQx1txL` |
+| buy while not on the approved list | C6 | NotApproved | NotApproved | ok | `3G9Zi2nmamuSL6sEEBSmMwi2ZhWrwxm3DZSihVxgRdvCUM8UQb43Ei4PtDUeD51U1vJHZH4Esrah6PXn5konnH7T` |
+| buy past the cap in one go | C3 | OverCap | OverCap | ok | `MKgaRrm3PTP8pnP1jaKVwojhVxg6z3MRdGWU3TMMCSCAy7EQhKWGJB92gZecXXQYZ7cr6bRCATkGeWz9AJY62QF` |
+| a second buy that crosses the cap | C3 | OverCap | OverCap | ok | `dKvEh8oUgDVrAKcyLwdiLdwocHSrgKA1sfHaUnSxKJaPHPndbGf4scnkQpaLDhA5jSVvauXNS5s1QDCdRTQtqxd` |
+| buy into a second token account of the same wallet | C3 | OverCap | OverCap | ok | `eogLUNtvJvTZZmtAup7kqU7uq47AUPDMgFaLzDNMVkFDdbZD3uz9d6WwjettR3o3c3sFwjoUDZyPhbDjJZZ4ria` |
+| buy into an account whose owner can still change | C13 | ReceivingAccountOwnerCanChange | ReceivingAccountOwnerCanChange | ok | `5cxM3AKXxE27yLdQjddUkfweQboLVXuX7stFQaoUAe6oWFh3fJ1voGx5kNY6Nz7vS4jyWgzrp3ChC95s1hZf8PZu` |
+| send tokens straight to another wallet | C4 | WalletToWalletDuringSale | WalletToWalletDuringSale | ok | `5WJfRUae6MXqQfYCA7dU5mwJSx6ifUsHHtzbhVD6aXpd5NmQ3ikiaFhgxbH3Bp28G5up5VpiKtC4fpM1LiCdNh6X` |
+| call the hook on its own, with no transfer | C1 | NotTransferring | NotTransferring | ok | `65FRU9jESSiNy67UCF357j5QHx68Ui8jsswGZf8gxhD8SkB5ZPD2zz56S16dAMwB3YT34YkQfgmzQ4MHmbqpyETS` |
+| a revoked wallet sells back to the pool | C5 | it goes through | it goes through | ok | `3XdFBPUSFTMRGXcxSSiHnGac5rtNMyTykNAamAHfMohtLfBvSk7aVvgMFFYZ6en7SwnGSrjGoGWb41uJFsPikv1B` |
+| buy that would push the price past the ceiling | C9 | PriceOutsideBand | this sale has no price band | skipped | not run |
+
+```
+proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units sold, against a cap worth 17.12 percent of them
+9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+```
+
+## Graduating it
+
+`npm run graduate`, 0.119753 SOL after 0.063791 SOL came back. Seven buys filled
+the curve to 100,000,002 of 100,000,000 raw units, the pool migrated to DAMM v2
+`2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc`, and the mint's transfer hook
+came back as `11111111111111111111111111111111`: the rules are gone and the
+token moves freely.
+
+| Step | Signature |
+| --- | --- |
+| Buy 1 | `2BoZKKqgpsYhZa8vy5sBASrh7jSVDZSyyshht37GdH2UQK2PXGe8QAn1xtR784rAoLkfREeWvxoSwdkZCU3ZsZUM` |
+| Buy 2 | `aw8Lwd5sYhrKhQjYatLzFCBhoEQMF3Fj42GNht6xwo36qmoVYwo2iYcnNxxpmNJz6aSmxcT4cAvnNDnfuHAp67M` |
+| Buy 3 | `5c9M7wR4GucqGruV6ZARUEY2WKpGgPBrwWU9fK879v1kLdmAh513P2DeXaSAn4Cadw9U8Zt7dtAMqYseuVTyjT5n` |
+| Buy 4 | `4H14KwtyV6FU63gA37op7Xd2p9RQyP6KtTZd8W8u4KBRpKXW9MvjoNScJgNg66cKUxrRmtZRKXTowK6zGgyrXHMz` |
+| Buy 5 | `2U4uzRHWpQ2CiT1CCgV1QpsxDwG1pWrQ6X7MmMW1D8FUwYGBBEUkyXeLacpRVTpPqj5dCHqBiucU2e82c4cFj1o9` |
+| Buy 6 | `XH47A3bXqkBhfQsAi6iqgwotCqj4QeYq91r7mEWWmANPiYSJHSEDrVGa8j3BeRU487H1i9qrLEpAhbvJra23E7K` |
+| Buy 7 | `5K1pKGMV2tq8YTCtYkTzgUBXRbDrMFBoRuR6E5tmrhTVvp8isSGP6mksrjxizKcM5SVscUfGSguGXFSHZub3ABye` |
+| Migration | [`5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT`](https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet) |
+
+## The banded dollar priced sale
+
+A fresh dollar token first, `npm run mint-dollars`, 0.002575 SOL: mint
+`2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5`, six decimals, signature
+`2WLkpF2PokMQ4SVv4oZPegrkKnZsc2HgkkhWKL5nCdqW5h2wYFzDvURvhr5STrAiSQVJkkfSFfa48JvjHRnoB4EZ`.
+
+Then `npm run launch -- --mode open --band 500 --quote 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 --threshold 360000000000 --base-decimals 9 --migration-percent 40`,
+0.019273 SOL. The curve opens at 400 dollars a share while Apple trades at
+343.4350, so the ceiling of 360.6068 sits under the curve and every buy is
+refused.
+
+| What | Address or signature |
+| --- | --- |
+| Mint | `CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7` |
+| Pool | `CNYqYEFDWDM9ePcBxwYpMESDotTRduGpjE2WUY1Uf4NJ` |
+| Config | `HVrPWgKyUKLi1tM5tGYnvmnfdHu3sQQgxSJV1rpd2DuV` |
+| Rules | `4UAEuedtkUhz5g4TNmqLsbGaKmDQZ7nwLxUxJchgm77c` |
+| Extra account list | `EXrzQG5tbZ1w344vMYFC2XwNQtN2cGwZBnanhpK6rvJH` |
+| Pyth price account | `9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb` |
+| Price refresh | `4qeN74GPHBmFGZWbL8zH5FfrnTpQEJQsDT325HPi6jj2QqW2wpsSes11NNatVLuLpjowTV9sxzb5iVPrinirfCAN` and `26qJrGxLbPLVVut3iebQKqWPxt4y5FT5VLgM3sPtkaykV81EBevkiaUkr1KSbBD4fesB2XSuAh7r5rcXEmfBtpxb` |
+| Template | `32YVAnqBt4hQeSMxUVAD5QEJgAeXADj8zEyZBhKDitT9LTnKB5f5KE8YJX7WG5MyYAPWzuvNdHAeHDgHswTLrq46` |
+| Sale | [`jcEYEoaHoEULyms1rpyBiQm3rdxFQF2vfW3rxHwUYa65MfL4YZ3ABji4hWvAdBmiKt7skxqkLkkP2yAw6GJ6eV3`](https://explorer.solana.com/tx/jcEYEoaHoEULyms1rpyBiQm3rdxFQF2vfW3rxHwUYa65MfL4YZ3ABji4hWvAdBmiKt7skxqkLkkP2yAw6GJ6eV3?cluster=devnet) |
+
+## Attacking the banded sale
+
+`npm run prove`, exit 0, 0.007609 SOL after 0.032867 SOL came back. The US
+market was open at 15:03 UTC, so the price was fresh and the refusal is the
+ceiling, `PriceOutsideBand`. Overnight or at a weekend the same line would read
+`PriceStale`, because Pyth stops publishing an equity when its market shuts.
+
+```
+band     : 5 percent over Equity.US.AAPL/USD at 343.4350 dollars, from Pyth shard 7700
+price    : usable, published 15 seconds ago of an allowed 3600, confidence 2 of an allowed 100 basis points
+account  : 9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb, fully verified by the Wormhole guardians
+curve    : 400.0000 dollars a share against a ceiling of 360.6068, so every buy is refused
+```
+
+| Attack | Invariant | Expected | Actual | Result | Signature |
+| --- | --- | --- | --- | --- | --- |
+| buy with no buyer record | C2 | BuyerRecordMissing | BuyerRecordMissing | ok | `4wj9oiAEXJhvBaJgYbL7rPKnc7U8Sp6GNTqgTqYbBLr9spFNfwaaz11JeRe1CdBvnMYvv5BAvqUpvHo3hQPcKuKZ` |
+| buy while not on the approved list | C6 | NotApproved | open access, no list to be left off | skipped | not run |
+| buy past the cap in one go | C3 | PriceOutsideBand | PriceOutsideBand | ok | `WdP9LtJJuHLmuVbmfEoYiuXpUFV9LB61TCJ4aXKsaV68ToXirizWjfMKRborVun7E2G7GmUA93wkPsfLRpBM5pq` |
+| buy while the curve stands above the ceiling | C9 | PriceOutsideBand | PriceOutsideBand | ok | `3fZ1QvhWAppPDeQ6gnRC1T2te7czBFio6i7QxxtQc2HrFnNd9iiJ7ni3qPWfYEd7KMcn82tXhoXzcbdCiYkUPWfU` |
+| a second buy that crosses the cap | C3 | OverCap | no buy can land to set this up | skipped | not run |
+| buy into a second token account of the same wallet | C3 | OverCap | no buy can land to set this up | skipped | not run |
+| buy into an account whose owner can still change | C13 | ReceivingAccountOwnerCanChange | ReceivingAccountOwnerCanChange | ok | `3HQMFmfeqcba3jzGENb9M3rGaFrNg1Z4FrzNJfgzx1CSzKZFZPfYqeM61C2tpHcXTQgW3QYK7sx2Q52W5vMk3rG5` |
+| send tokens straight to another wallet | C4 | WalletToWalletDuringSale | no buy can land to set this up | skipped | not run |
+| call the hook on its own, with no transfer | C1 | NotTransferring | NotTransferring | ok | `mfYzptwt2jZb9Ar3nthY3Mj913B3FrNNFKHYLFyG9bHwPqjdrCDGG2K1UVwmFksEQpQSf52q1r8rrrsRZMV91RP` |
+| a revoked wallet sells back to the pool | C5 | it goes through | nothing to revoke, open access | skipped | not run |
+| buy that would push the price past the ceiling | C9 | PriceOutsideBand | PriceOutsideBand | ok | `5KJGDNGjZRxZcPM9pg1R9ZuhKfwKMdcm4Uijm7bbsKUCHvS9rcVYSz6iQ2rXaMNiaV3fgDa9Ep44EBo5khAA72rj` |
+
+```
+6 attacks run, 6 refused as expected, 0 allowed as expected, 5 not applicable, 0 off the standard
+```
+
+## The demo, checked again at the end
+
+```
+program 4Nd46mDi...         PASS    executable, 358248 bytes, sha256 a937c610ab35 as recorded, slot 502476730
+sale PLIST 2ARD1Kwv...      PASS    list, 15 buyers, graduated
+sale POPEN CBckMjBp...      PASS    open, band 500 bps, 0 buyers, running
+band POPEN CBckMjBp...      PASS    Equity.US.AAPL/USD published 2026-09-22T15:04:08Z, 70 seconds ago of an allowed 3600, at 343.44 dollars
+pyth key                    PASS    HTTP 200, Apple published 0 seconds ago
+wallet demo 9QTJCGx2...     PASS    holds 0.7591 SOL
+wallet project Fwi8ejZ8...  PASS    holds 10.5379 SOL
+app                         SKIP    APP_URL is not set in .env, so there is no site to check
+7 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-22T15:05:14Z
+```
+
+## What the fourth run cost
+
+| Command | Cost |
+| --- | --- |
+| `deploy.sh devnet`, two attempts | 0.001785 SOL, from the project wallet |
+| `launch --mode list --cap-share-bps 1000` | 0.018892 SOL |
+| `seed` | 0.078416 SOL |
+| `prove` on the list sale | 0.018713 SOL |
+| `graduate` | 0.119753 SOL |
+| `mint-dollars` | 0.002575 SOL |
+| `launch --mode open --band 500 --quote <dollar mint>` | 0.019273 SOL |
+| `prove` on the banded dollar sale | 0.007609 SOL |
+
+The demo keypair held 0.624379 SOL before the run, took 0.4 SOL from the project
+wallet to give the whole run room, started on 1.024379 SOL and ended on
+0.759148 SOL. The project wallet ended on 10.53791508 SOL, which still clears
+the 1.9 SOL an upgrade's temporary upload buffer needs several times over.
