@@ -33,7 +33,22 @@ npm run launch -- --mode open --band 500           # open one with a price band
 npm run seed                                       # a few real buyers
 npm run prove                                      # attack it, print every refusal
 npm run graduate                                   # fill the curve and migrate
+npm run status                                     # is the whole devnet demo still up
 ```
+
+## Checking the demo is still alive
+
+`npm run status` is the one command to run daily through judging. It reads and
+signs nothing: it checks that the deployed program still hashes to what
+`docs/deployments.md` records, that every sale in `sales.json` still has its
+rules account on chain, that each running banded sale has a Pyth price account
+and how old the price in it is, that the Pyth key still answers, and that both
+wallets can still pay. It prints one row per check and exits non-zero if any of
+them says FAIL. A WARN is for something a person should see that does not stop
+the demo, such as an equity price that has aged out because the US market is
+shut, which the row says when that is the reason. Set `APP_URL` in `.env` to the
+live site and it checks that too: a 200 inside five seconds with the word Pangu
+on the page.
 
 `prove` and `graduate` work on the last sale in `sales.json` unless you pass
 `--mint`.

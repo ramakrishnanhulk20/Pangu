@@ -11,6 +11,7 @@
     "graduate": "tsx src/graduate.ts",
     "refresh-price": "tsx src/refresh-price.ts",
     "mint-dollars": "tsx src/mint-dollars.ts",
+    "status": "tsx src/status.ts",
     "sdk:refresh": "node scripts/refresh-sdk.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
