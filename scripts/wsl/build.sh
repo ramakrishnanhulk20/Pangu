@@ -1,8 +1,13 @@
 #!/bin/bash
 # usage: build.sh
-# Builds the Pangu program. One binary serves every network: Pyth's receiver and
-# price feed programs sit at the same addresses on mainnet and devnet, so there
-# is nothing left for a build-time feature to choose between.
+# Builds the Pangu program for devnet. Pyth's receiver and price feed programs sit
+# at the same addresses on every network, but the dollar tokens a price ceiling
+# may be set on do not, so the build turns on the program's `devnet` feature and
+# carries devnet USDC and the demo dollar instead of mainnet USDC.
+#
+# The mainnet build is the same command without the feature, run by hand from the
+# mirrored workspace, and nothing in this repo deploys it:
+#   cd ~/pangu-build && anchor build --arch v0
 NODE_BIN="$(ls -d $HOME/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
 export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/bin:$NODE_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 set -euo pipefail
@@ -20,7 +25,7 @@ rsync -a --delete \
 cd "$WORK"
 # Anchor 1.2.0 defaults to SBPF v3. The litesvm build the tests run on only loads
 # v0 bytecode, and v0 runs everywhere on chain, so v0 is what we build.
-anchor build --arch v0
+anchor build --arch v0 -- --features devnet
 
 OUT="target/deploy/pangu.so"
 
@@ -29,11 +34,11 @@ cp "$OUT" "$SRC/$OUT"
 cp target/idl/pangu.json "$SRC/target/idl/pangu.json"
 cp target/types/pangu.ts "$SRC/target/types/pangu.ts"
 
-# Proof that the build really carries Pyth's two program ids and no trace of the
-# oracle it replaced, rather than a build that looks right because nothing
-# complained. A program id is 32 raw bytes and the compiler loads them as eight
-# 4 byte immediates rather than one run of bytes, so the check looks for the
-# eight pieces of each.
+# Proof that the build really carries Pyth's two program ids, the devnet dollar
+# list and no trace of the oracle it replaced or of the mainnet dollar list,
+# rather than a build that looks right because nothing complained. A program id
+# is 32 raw bytes and the compiler loads them as eight 4 byte immediates rather
+# than one run of bytes, so the check looks for the eight pieces of each.
 SO_PATH="$WORK/$OUT" node - <<'NODE'
 const fs = require("fs");
 
@@ -63,8 +68,11 @@ function base58(text) {
 const WANTED = {
   "Pyth receiver": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
   "Pyth price feed": "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT",
+  "devnet USDC": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "demo dollar": "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5",
 };
 const UNWANTED = {
+  "mainnet USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   "Switchboard quote": "orac1eFjzWL5R3RbbdMV68K9H6TaCVVcL6LjvQQWAbz",
   "Switchboard on demand": "SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv",
 };
@@ -91,7 +99,7 @@ for (const [name, id] of Object.entries(UNWANTED)) {
   if (found !== 0) ok = false;
 }
 if (!ok) {
-  console.log("BUILD-FAILED: this build does not read exactly Pyth's two programs.");
+  console.log("BUILD-FAILED: this build does not carry exactly Pyth's two programs and the devnet dollar list.");
   process.exit(1);
 }
 NODE

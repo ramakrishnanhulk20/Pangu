@@ -11,6 +11,9 @@ name = "pangu"
 
 [features]
 default = []
+# Chooses which dollar tokens a price ceiling may be set on: without it the build
+# carries the mainnet list, with it the devnet one. scripts/wsl/build.sh turns it on.
+devnet = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-log-ix-name = []

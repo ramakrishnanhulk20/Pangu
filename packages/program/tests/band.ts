@@ -12,13 +12,19 @@
 // re-verify them. It relies on the account being a program address only Pyth's
 // price feed program can create, owned by a receiver program that checks those
 // signatures before it writes, and on the update saying `Full` rather than
-// `Partial`. The measurements file says what that leaves unproven.
+// `Partial`. The measurements file says what that leaves unproven. Nor does it
+// cover the mainnet build's dollar list: these tests run the devnet build, whose
+// list is devnet USDC and the demo dollar, and only the demo dollar is used here.
 
 import { assert } from "chai";
 import { Decimal } from "decimal.js";
 import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { NATIVE_MINT, getExtraAccountMetas } from "@solana/spl-token";
+import {
+  NATIVE_MINT,
+  TOKEN_2022_PROGRAM_ID,
+  getExtraAccountMetas,
+} from "@solana/spl-token";
 import {
   TokenDecimal,
   getPriceFromSqrtPrice,
@@ -27,6 +33,7 @@ import {
   ACCESS_ISSUER_LIST,
   ACCESS_VERIFIER_CREDENTIAL,
   BandArgs,
+  DEMO_DOLLAR_MINT,
   Env,
   SQRT_PRICE_ONE,
   accountAt,
@@ -77,6 +84,9 @@ const CAP = 1_000_000n;
 const NOW = 1_789_761_602n;
 let slotCursor = 5_000_000n;
 
+/** A sale paid in the demo dollar, a six decimal token on the devnet build's list. */
+const DOLLAR = { quoteDecimals: 6, quoteAt: DEMO_DOLLAR_MINT };
+
 describe("create_sale with a price band", () => {
   it("stores the band and publishes the mode's accounts plus two", async () => {
     const { env, priceAccount } = await bandedSale({
@@ -92,14 +102,14 @@ describe("create_sale with a price band", () => {
     assert.equal(rules.maxConfBps, MAX_CONF_BPS);
     assert.equal(rules.baseDecimals, 6);
     assert.equal(rules.quoteDecimals, 6);
-    // A dollar stand-in: an ordinary six decimal SPL token, not wrapped SOL.
+    // The demo dollar, a six decimal SPL token on the devnet build's list.
     assert.isTrue(rules.quoteMint.equals(env.quoteMint), "the paying token was not stored");
 
     assert.equal(await extraAccountCount(env), 5);
   });
 
   it("publishes eight accounts when the band runs on top of a credential, and a buy still works", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     const verifier = placeVerifier(env);
     const settings = band();
     mustSucceed(
@@ -139,7 +149,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a price account that is not the one this shard and feed produce", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, {
         band: { ...band(), priceAccount: Keypair.generate().publicKey },
@@ -152,7 +162,7 @@ describe("create_sale with a price band", () => {
     // The address is the whole promise: it binds the sale to one feed on one
     // shard. A rules account naming a real Pyth account from another shard would
     // read a price nobody in this sale is refreshing.
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, {
         band: {
@@ -167,7 +177,7 @@ describe("create_sale with a price band", () => {
   it("refuses a price account derived from another feed id", async () => {
     // Same shard, real Pyth account, wrong stock. Deriving the address in the
     // program is what makes naming another asset's price impossible.
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, {
         band: {
@@ -180,7 +190,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a band whose feed id is zero", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     const zero = Array.from({ length: 32 }, () => 0);
     expectError(
       await sendCreateSale(env, {
@@ -195,7 +205,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a price age of zero seconds and of more than an hour", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, { band: { ...band(), maxPriceAgeSecs: 0 } }),
       "InvalidBand"
@@ -210,7 +220,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a confidence limit of zero and of more than ten percent", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, { band: { ...band(), maxConfBps: 0 } }),
       "InvalidBand"
@@ -225,7 +235,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a band wider than fifty percent", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, { band: { ...band(), bandBps: 5_001 } }),
       "InvalidBand"
@@ -236,7 +246,7 @@ describe("create_sale with a price band", () => {
   });
 
   it("refuses a paying token the template does not name", async () => {
-    const env = await setupEnv({ quoteDecimals: 6 });
+    const env = await setupEnv(DOLLAR);
     // A real mint, with the decimals an attacker would want the band to use, but
     // not the token this pool's template says buyers pay in.
     const imposter = await createPlainMint(env, 9);
@@ -262,8 +272,53 @@ describe("create_sale with a price band", () => {
     assert.isNull(await accountAt(env, env.rules), "rules were written anyway");
   });
 
-  it("refuses band settings on a sale that has no band", async () => {
+  it("refuses a band on a six decimal token that is not on the dollar list", async () => {
+    // Same decimals, same token program, no freeze authority: everything a
+    // dollar stablecoin looks like except being one. Only the address can tell.
     const env = await setupEnv({ quoteDecimals: 6 });
+    expectError(
+      await sendCreateSale(env, { band: band() }),
+      "BandNeedsDollarQuote"
+    );
+    assert.isNull(await accountAt(env, env.rules), "rules were written anyway");
+  });
+
+  it("refuses a band on a Token-2022 stock token", async () => {
+    // A tokenized stock is a chosen paying token. Its units are shares, so a
+    // ceiling in dollars would compare the curve with the wrong number.
+    const env = await setupEnv({
+      quoteDecimals: 8,
+      quoteTokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    expectError(
+      await sendCreateSale(env, { band: band() }),
+      "BandNeedsDollarQuote"
+    );
+    assert.isNull(await accountAt(env, env.rules), "rules were written anyway");
+  });
+
+  it("opens a sale with no band on a Token-2022 stock token", async () => {
+    const env = await setupEnv({
+      quoteDecimals: 8,
+      quoteTokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    mustSucceed(await sendCreateSale(env));
+    const rules = await readRules(env);
+    assert.equal(rules.bandBps, 0);
+    assert.isTrue(rules.quoteMint.equals(env.quoteMint));
+  });
+
+  it("opens a band on the demo dollar", async () => {
+    const env = await setupEnv(DOLLAR);
+    mustSucceed(await sendCreateSale(env, { band: band() }));
+    const rules = await readRules(env);
+    assert.equal(rules.bandBps, 500);
+    assert.isTrue(rules.quoteMint.equals(DEMO_DOLLAR_MINT));
+    assert.equal(rules.quoteDecimals, 6);
+  });
+
+  it("refuses band settings on a sale that has no band", async () => {
+    const env = await setupEnv(DOLLAR);
     expectError(
       await sendCreateSale(env, { band: { ...band(), bandBps: 0 } }),
       "InvalidBand"
@@ -660,6 +715,7 @@ async function bandedSale(options: BandedSaleOptions): Promise<BandedSale> {
   const env = await setupEnv({
     baseDecimals: options.baseDecimals ?? 6,
     quoteDecimals: options.quoteDecimals ?? 6,
+    quoteAt: DEMO_DOLLAR_MINT,
   });
   const settings = band({ bandBps: options.bandBps ?? 500 });
   mustSucceed(

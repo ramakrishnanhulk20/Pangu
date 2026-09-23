@@ -31,15 +31,12 @@ import { assert } from "chai";
 import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import {
-  MINT_SIZE,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
-  createInitializeMint2Instruction,
   createMintToInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { SystemProgram } from "@solana/web3.js";
 import {
   DynamicBondingCurveClient,
   deriveDbcPoolAddress,
@@ -55,6 +52,7 @@ import {
   connection,
   createSaleIx,
   expectPanguError,
+  loadForkWallet,
   openBuyerRecordIx,
   readRules,
   send,
@@ -63,6 +61,8 @@ import {
 import {
   BAND_BPS,
   BASE_DECIMALS,
+  DEMO_DOLLAR_MINT,
+  DOLLAR_AUTHORITY_WALLET,
   MANIFEST_FILE,
   MAX_CONF_BPS,
   PRICE_FEED_ID,
@@ -101,7 +101,7 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
   const creator = Keypair.generate();
   const buyers = Array.from({ length: BUYER_COUNT }, () => Keypair.generate());
   const config = Keypair.generate();
-  const quoteMintKeypair = Keypair.generate();
+  const dollarAuthority = loadForkWallet(DOLLAR_AUTHORITY_WALLET);
   const baseMints: Record<SaleName, Keypair> = {
     low: Keypair.generate(),
     high: Keypair.generate(),
@@ -141,30 +141,12 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
   });
 
   it("a. the partner opens a template priced in a six decimal dollar token", async () => {
-    // The fork has no USDC faucet, so the paying token is one this test controls.
-    // A plain SPL token needs no badge from DBC, which is why it is not a
-    // Token-2022 mint here.
-    quoteMint = quoteMintKeypair.publicKey;
-    const mintTx = new Transaction().add(
-      SystemProgram.createAccount({
-        fromPubkey: partner.publicKey,
-        newAccountPubkey: quoteMint,
-        lamports: await connection.getMinimumBalanceForRentExemption(MINT_SIZE),
-        space: MINT_SIZE,
-        programId: TOKEN_PROGRAM_ID,
-      }),
-      createInitializeMint2Instruction(
-        quoteMint,
-        QUOTE_DECIMALS,
-        partner.publicKey,
-        null,
-        TOKEN_PROGRAM_ID
-      )
-    );
-    await send("create the paying token", mintTx, partner, [
-      partner,
-      quoteMintKeypair,
-    ]);
+    // The fork runs the devnet build, which only lets a ceiling be set on its
+    // listed dollars, so the paying token is the demo dollar. band-accounts.ts
+    // wrote its mint before genesis with a throwaway wallet as mint authority,
+    // which is how this test funds its buyers. A plain SPL token needs no badge
+    // from DBC.
+    quoteMint = DEMO_DOLLAR_MINT;
 
     for (const [index, buyer] of buyers.entries()) {
       const buyerQuote = getAssociatedTokenAddressSync(
@@ -184,13 +166,16 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
         createMintToInstruction(
           quoteMint,
           buyerQuote,
-          partner.publicKey,
+          dollarAuthority.publicKey,
           QUOTE_SUPPLY,
           [],
           TOKEN_PROGRAM_ID
         )
       );
-      await send(`fund buyer ${index + 1} with dollars`, fundTx, partner, [partner]);
+      await send(`fund buyer ${index + 1} with dollars`, fundTx, partner, [
+        partner,
+        dollarAuthority,
+      ]);
     }
 
     const tx = await dbcClient.partner.createConfigWithTransferHook({

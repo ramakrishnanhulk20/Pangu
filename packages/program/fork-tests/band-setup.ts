@@ -32,6 +32,21 @@ export const BASE_DECIMALS = 6;
 /** The paying token is a dollar stablecoin, so the band compares dollars. */
 export const QUOTE_DECIMALS = 6;
 
+/**
+ * The demo dollar, on the devnet build's list of tokens a price ceiling may be
+ * set on. The fork runs that build, so the banded sales are paid in it. It does
+ * not exist on mainnet, so band-accounts.ts writes the mint before genesis.
+ */
+export const DEMO_DOLLAR_MINT = new PublicKey(
+  "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"
+);
+/**
+ * The throwaway wallet band-accounts.ts names as the demo dollar's mint
+ * authority, so the test can fund its buyers. Kept with the other fork wallets,
+ * outside the repo.
+ */
+export const DOLLAR_AUTHORITY_WALLET = "band-dollar-authority";
+
 export const BAND_BPS = 1_000;
 /** One percent, wide for a liquid stock and tight enough to be a real rule. */
 export const MAX_CONF_BPS = 100;

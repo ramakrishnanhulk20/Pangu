@@ -1,8 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::spl_token,
     token_2022::spl_token_2022::{
-        self,
         extension::{transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions},
         state::Mint as MintState,
     },
@@ -77,6 +75,28 @@ const _: () = assert!(SaleRules::INIT_SPACE == 354);
 /// and against Meteora's own decoding of it, in the test at the bottom of this
 /// file. Source: Meteora's dynamic-bonding-curve source, state/config.rs.
 const CONFIG_SWAP_BASE_AMOUNT_OFFSET: usize = 256;
+
+/// The paying tokens a price ceiling may be set on, one list per network.
+///
+/// The ceiling compares the curve price, counted in paying-token units, with a
+/// stock price in dollars. That comparison only means something when one paying
+/// token is one dollar, and no on-chain predicate can tell a dollar from anything
+/// else, so the list names them. Adding a stablecoin is a program upgrade on
+/// purpose: a new dollar should be a reviewed change, not an issuer's claim.
+/// Mainnet carries USDC only.
+#[cfg(not(feature = "devnet"))]
+pub const DOLLAR_MINTS: [Pubkey; 1] = [Pubkey::from_str_const(
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+)];
+
+/// The devnet build's list: Circle's devnet USDC and the demo dollar the devnet
+/// sales are paid in. Neither address means anything on mainnet, which is why
+/// the two builds carry different lists.
+#[cfg(feature = "devnet")]
+pub const DOLLAR_MINTS: [Pubkey; 2] = [
+    Pubkey::from_str_const("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
+    Pubkey::from_str_const("2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"),
+];
 
 #[derive(Accounts)]
 #[instruction(cap: u64, access_mode: u8, credential: Pubkey, schema: Pubkey, band: PriceBand, ends_at: i64)]
@@ -174,8 +194,9 @@ pub struct CreateSale<'info> {
 /// With a price band both mints' decimals are stored so the hook never has to
 /// be handed a mint. `InvalidBand` when any band
 /// setting is missing or out of range, or when band settings are given on a sale
-/// with no band. `BandNeedsDollarQuote` when a banded sale is priced in wrapped
-/// SOL. `EndInThePast` when `ends_at` is neither zero (no end) nor later than
+/// with no band. `BandNeedsDollarQuote` when a banded sale's paying token is not
+/// on this build's `DOLLAR_MINTS`. A sale with no band opens on any paying token.
+/// `EndInThePast` when `ends_at` is neither zero (no end) nor later than
 /// the chain clock. `WrongPriceAccount` when the price account is not the address
 /// this shard and this feed id produce under Pyth's price feed program. Running
 /// twice fails, because both accounts are created here.
@@ -516,15 +537,15 @@ pub fn handle_create_sale(
 /// band by a thousand.
 ///
 /// The band compares the curve price with a stock price in dollars, so it only
-/// means anything when buyers pay in dollars. Wrapped SOL is refused, both the
-/// classic token program's and Token-2022's, with the addresses taken from the
-/// two token crates rather than typed in. Covers wrapped SOL only: any other
-/// token that is not a dollar is not recognised here, which the threat model
-/// names.
+/// means anything when buyers pay in dollars. The paying token must be one of
+/// `DOLLAR_MINTS`, so wrapped SOL, a tokenized stock, or a token that merely
+/// looks like a dollar are all refused. Covers the exact addresses on the list
+/// only: it does not check that a listed stablecoin still holds its peg.
 ///
 /// Rejects `InvalidBand` for a missing or out of range setting.
-/// `BandNeedsDollarQuote` when buyers pay in wrapped SOL. `WrongPriceAccount`
-/// when the price account is not the one this shard and this feed id produce.
+/// `BandNeedsDollarQuote` when the paying token is not on `DOLLAR_MINTS`.
+/// `WrongPriceAccount` when the price account is not the one this shard and
+/// this feed id produce.
 fn check_band(
     ctx: &Context<CreateSale>,
     band: &PriceBand,
@@ -551,9 +572,8 @@ fn check_band(
     );
 
     let quote_mint = &ctx.accounts.quote_mint;
-    let paying = quote_mint.key();
     require!(
-        paying != spl_token::native_mint::ID && paying != spl_token_2022::native_mint::ID,
+        DOLLAR_MINTS.contains(&quote_mint.key()),
         PanguError::BandNeedsDollarQuote
     );
 

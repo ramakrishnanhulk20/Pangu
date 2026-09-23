@@ -5,8 +5,8 @@
 // together with its DBC token badge, and one test wallet is handed a rewritten copy
 // of a real AAPLx token account, because nobody local holds the mint authority.
 //
-// Covers: template, pool plus rules in one transaction, a buy under the cap, and a
-// buy over it.
+// Covers: template, pool plus rules in one transaction, a price ceiling refused
+// because AAPLx is not a dollar, a buy under the cap, and a buy over it.
 // Does NOT cover: graduation with a stock quote, or anything AAPLx's issuer could
 // do with its permanent delegate.
 
@@ -49,10 +49,19 @@ import {
   expectPanguError,
   loadForkWallet,
   readRecord,
+  saleRulesPda,
   send,
   tokenBalance,
   transferHookOnMint,
 } from "./fork-sale";
+import {
+  BAND_BPS,
+  MAX_CONF_BPS,
+  PRICE_FEED_ID,
+  bandPriceAccount,
+  bandShard,
+  maxPriceAgeSecs,
+} from "./band-setup";
 
 const TOKEN_NAME = "Pangu Stock Quote";
 const TOKEN_SYMBOL = "PSQ";
@@ -220,6 +229,61 @@ describe("a Pangu sale priced in a real stock token", () => {
 
     const hook = await transferHookOnMint(baseMint);
     assert.equal(hook!.program.toBase58(), PANGU_PROGRAM_ID.toBase58());
+  });
+
+  it("c. a price ceiling on a sale paid in AAPLx is refused", async () => {
+    // The ceiling is a dollar price, and AAPLx is counted in shares. Every band
+    // setting here is valid, so the paying token is the only thing refused, and
+    // the pool it would have opened with goes down with the same transaction.
+    const bandedMint = Keypair.generate();
+    const pool = deriveDbcPoolAddress(
+      AAPLX_MINT,
+      bandedMint.publicKey,
+      config.publicKey
+    );
+    const tx = await dbcClient.creator.createPoolWithTransferHook({
+      baseMint: bandedMint.publicKey,
+      config: config.publicKey,
+      name: TOKEN_NAME,
+      symbol: TOKEN_SYMBOL,
+      uri: TOKEN_URI,
+      payer: creator.publicKey,
+      poolCreator: creator.publicKey,
+      tokenBadge: AAPLX_TOKEN_BADGE,
+      transferHookProgram: PANGU_PROGRAM_ID,
+    });
+    tx.add(
+      await createSaleIx(
+        creator.publicKey,
+        pool,
+        bandedMint.publicKey,
+        cap,
+        ACCESS_ISSUER_LIST,
+        {
+          band: {
+            bandBps: BAND_BPS,
+            priceAccount: bandPriceAccount("high"),
+            priceFeedId: PRICE_FEED_ID,
+            priceShard: bandShard("high"),
+            maxPriceAgeSecs: maxPriceAgeSecs("high"),
+            maxConfBps: MAX_CONF_BPS,
+          },
+          dbcConfig: config.publicKey,
+          quoteMint: AAPLX_MINT,
+        }
+      )
+    );
+    await expectPanguError(
+      tx,
+      creator,
+      [creator, bandedMint],
+      "BandNeedsDollarQuote"
+    );
+    assert.isNull(
+      await connection.getAccountInfo(saleRulesPda(bandedMint.publicKey)),
+      "rules were written anyway"
+    );
+    assert.isNull(await connection.getAccountInfo(pool), "the pool was left behind");
   });
 
   it("d. an approved buyer buys under the cap, paying in AAPLx", async () => {

@@ -1,6 +1,6 @@
-// Writes the Pyth price feed accounts the price-band fork test reads, before the
-// validator starts, because a validator can only be handed accounts on its
-// command line.
+// Writes the Pyth price feed accounts the price-band fork test reads, and the
+// demo dollar it pays in, before the validator starts, because a validator can
+// only be handed accounts on its command line.
 //
 // Pyth's receiver program is not on the local chain. The accounts are written
 // byte for byte in the layout its real updates use, at the one address each
@@ -15,9 +15,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { Keypair } from "@solana/web3.js";
+import { MINT_SIZE, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { encodePriceUpdate, dollarsAtExponent } from "../tests/quote";
 import {
   BASE_DECIMALS,
+  DEMO_DOLLAR_MINT,
+  DOLLAR_AUTHORITY_WALLET,
   HIGH_PRICE_MULTIPLE,
   LOW_CEILING_MULTIPLE,
   MANIFEST_FILE,
@@ -131,10 +135,56 @@ function main() {
     path.join(directory, MANIFEST_FILE),
     JSON.stringify(manifest, null, 2)
   );
+
+  writeDemoDollar(directory);
   console.error(
     `band prices written. curve opens at ${Number(startPrice) / 1e18} ` +
       `and migrates at ${Number(migrationPrice) / 1e18} dollars a token`
   );
+}
+
+/**
+ * The devnet build only lets a ceiling be set on its listed dollars, and the
+ * demo dollar's real mint authority is not on the fork. So the mint is written
+ * at its real address in the classic token layout: a throwaway wallet as mint
+ * authority, nothing minted, six decimals, no freeze authority.
+ */
+function writeDemoDollar(directory: string) {
+  const authority = loadOrCreateWallet(directory, DOLLAR_AUTHORITY_WALLET);
+  const data = Buffer.alloc(MINT_SIZE);
+  data.writeUInt32LE(1, 0);
+  authority.publicKey.toBuffer().copy(data, 4);
+  data.writeUInt8(QUOTE_DECIMALS, 44);
+  data.writeUInt8(1, 45);
+
+  const file = path.join(directory, "band-demo-dollar.json");
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      pubkey: DEMO_DOLLAR_MINT.toBase58(),
+      account: {
+        lamports: 1_461_600,
+        data: [data.toString("base64"), "base64"],
+        owner: TOKEN_PROGRAM_ID.toBase58(),
+        executable: false,
+        rentEpoch: 0,
+        space: data.length,
+      },
+    })
+  );
+  console.log(`${DEMO_DOLLAR_MINT.toBase58()} ${file}`);
+}
+
+function loadOrCreateWallet(directory: string, name: string): Keypair {
+  const file = path.join(directory, `${name}.json`);
+  if (fs.existsSync(file)) {
+    return Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(file, "utf8")))
+    );
+  }
+  const keypair = Keypair.generate();
+  fs.writeFileSync(file, JSON.stringify(Array.from(keypair.secretKey)));
+  return keypair;
 }
 
 main();

@@ -60,7 +60,7 @@ pub enum PanguError {
     MathOverflow,
     #[msg("these sale rules were written by another layout of the program")]
     WrongLayoutVersion,
-    #[msg("a price band needs buyers to pay in a dollar token, not wrapped SOL")]
+    #[msg("a price band needs buyers to pay in a dollar token on this network's list")]
     BandNeedsDollarQuote,
     #[msg("the issuer can freeze the paying token, which would let them stop sellers being paid")]
     IssuerControlsPayingToken,

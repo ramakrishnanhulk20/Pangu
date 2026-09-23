@@ -53,6 +53,13 @@ export const DBC_PROGRAM_ID = new PublicKey(
 export const SAS_PROGRAM_ID = new PublicKey(
   "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG"
 );
+/**
+ * The demo dollar the devnet sales are paid in, one of the two paying tokens
+ * the devnet build lets a price ceiling be set on. The tests run that build.
+ */
+export const DEMO_DOLLAR_MINT = new PublicKey(
+  "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"
+);
 export const CREDENTIAL_DISCRIMINATOR = 0;
 export const SCHEMA_DISCRIMINATOR = 1;
 export const ATTESTATION_DISCRIMINATOR = 2;
@@ -271,6 +278,14 @@ export interface EnvOptions {
    * SOL. The caller must have put a mint at this address.
    */
   quoteMint?: PublicKey;
+  /**
+   * Writes the paying-token mint at this address instead of a fresh one. Only
+   * a listed dollar token may carry a price band, and nobody here holds the key
+   * to a real address, so the account is set directly.
+   */
+  quoteAt?: PublicKey;
+  /** Token program of a freshly created paying-token mint. Defaults to the classic one. */
+  quoteTokenProgram?: PublicKey;
   /** Fee side written into the launch template. Defaults to the paying token. */
   collectFeeMode?: number;
   /** Tokens the launch template says its curve sells. */
@@ -361,15 +376,23 @@ export async function setupEnv(options: EnvOptions = {}): Promise<Env> {
   base.rules = saleRulesPda(mint);
   base.extraMetas = extraMetasPda(mint);
 
-  base.quoteMint =
-    options.quoteMint ??
-    (await createPlainMint(
+  const quoteFreezeAuthority =
+    options.quoteFreezeAuthority === "issuer"
+      ? issuer.publicKey
+      : options.quoteFreezeAuthority ?? null;
+  if (options.quoteMint !== undefined) {
+    base.quoteMint = options.quoteMint;
+  } else if (options.quoteAt !== undefined) {
+    placePlainMint(base, options.quoteAt, base.quoteDecimals, quoteFreezeAuthority);
+    base.quoteMint = options.quoteAt;
+  } else {
+    base.quoteMint = await createPlainMint(
       base,
       base.quoteDecimals,
-      options.quoteFreezeAuthority === "issuer"
-        ? issuer.publicKey
-        : options.quoteFreezeAuthority ?? null
-    ));
+      quoteFreezeAuthority,
+      options.quoteTokenProgram
+    );
+  }
   // Every sale reads the template and the paying token it names.
   placeDbcConfig(
     base,
@@ -1296,11 +1319,15 @@ async function createHookMint(
   return mint.publicKey;
 }
 
-/** A paying-token mint: an ordinary SPL token, the way a dollar stablecoin is. */
+/**
+ * A paying-token mint: an ordinary SPL token, the way a dollar stablecoin is, or
+ * a Token-2022 mint when asked, the way a tokenized stock is.
+ */
 export async function createPlainMint(
   env: Env,
   decimals: number,
-  freezeAuthority: PublicKey | null = null
+  freezeAuthority: PublicKey | null = null,
+  tokenProgram: PublicKey = TOKEN_PROGRAM_ID
 ): Promise<PublicKey> {
   const mint = Keypair.generate();
   const ixs = [
@@ -1309,18 +1336,45 @@ export async function createPlainMint(
       newAccountPubkey: mint.publicKey,
       lamports: await rentFor(env, MINT_SIZE),
       space: MINT_SIZE,
-      programId: TOKEN_PROGRAM_ID,
+      programId: tokenProgram,
     }),
     createInitializeMintInstruction(
       mint.publicKey,
       decimals,
       env.issuer.publicKey,
       freezeAuthority,
-      TOKEN_PROGRAM_ID
+      tokenProgram
     ),
   ];
   mustSucceed(await send(env, ixs, [mint]));
   return mint.publicKey;
+}
+
+/**
+ * Writes a classic SPL mint at a fixed address, laid out the way the token
+ * program keeps one: the issuer as mint authority, nothing minted yet, these
+ * decimals, initialized, and the freeze authority asked for.
+ */
+export function placePlainMint(
+  env: Env,
+  address: PublicKey,
+  decimals: number,
+  freezeAuthority: PublicKey | null = null
+) {
+  const data = Buffer.alloc(MINT_SIZE);
+  data.writeUInt32LE(1, 0);
+  env.issuer.publicKey.toBuffer().copy(data, 4);
+  data.writeUInt8(decimals, 44);
+  data.writeUInt8(1, 45);
+  data.writeUInt32LE(freezeAuthority === null ? 0 : 1, 46);
+  (freezeAuthority ?? PublicKey.default).toBuffer().copy(data, 50);
+  env.ctx.setAccount(address, {
+    lamports: 1_461_600,
+    data,
+    owner: TOKEN_PROGRAM_ID,
+    executable: false,
+    rentEpoch: 0,
+  });
 }
 
 /**
