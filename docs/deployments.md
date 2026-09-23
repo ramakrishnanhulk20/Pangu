@@ -9,14 +9,14 @@ there. Every number below was read back off the chain, not copied from a plan.
 | --- | --- |
 | Program id | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
 | Program data account | `58UAoZWuoMpnV4HzydaVUai9U7DFzapFtN5KtAzkzDpY` |
-| Running since slot | 502899538 |
-| Running since | 2026-09-23 10:21:01 UTC |
+| Running since slot | 502981972 |
+| Running since | 2026-09-23 14:08:42 UTC |
 | Upgrade authority (public key) | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L` |
-| Build running there | `pangu.so`, the one binary, with the rules v2 layout |
-| Build size | 363,720 bytes |
+| Build running there | `pangu.so`, the devnet build (`--features devnet`) of the rules v2 program |
+| Build size | 363,800 bytes |
 | Program account size | 442,320 bytes (the first build plus 20 percent headroom) |
 | Rent locked | 2.24786444 SOL |
-| sha256 of the deployed build | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` |
+| sha256 of the deployed build | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f` |
 | sha256 of the IDL clients build against | `48836ab193d10b8a58321a9f6777640bc43873f207a6210f2de18c1a47032772`, as the build writes it. The SDK's copy holds the same JSON with different whitespace |
 | Loader | BPF upgradeable loader, SBPF v0 bytecode |
 | Toolchain | Anchor 1.2.0, solana-cli 4.2.2 |
@@ -33,21 +33,25 @@ ON-CHAIN SHA256: 191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a1073
 HASH MATCH: YES
 ```
 
-## One build, not two
+## Two builds, one list apart
 
-There is one binary and it serves every network. The price band reads Pyth, and
-Pyth's receiver program and price feed program sit at the same addresses on
-mainnet and devnet, so nothing about the band has to be chosen when the program
-is compiled. `build.sh` takes no argument.
+The devnet and mainnet builds are the same program except for one list: the
+dollar tokens a price ceiling may be paid in. A ceiling compares the curve's
+price with a dollar price from Pyth, so it only means something when buyers pay
+in a dollar. `DOLLAR_MINTS` in `create_sale.rs` holds USDC for mainnet, and,
+with the `devnet` cargo feature, devnet USDC and the demo dollar. A sale with no
+ceiling may be paid in any token, including a tokenized stock such as AAPLx.
 
-This replaced an earlier arrangement of two binaries. While the band read
-Switchboard there had to be one build per network, because Switchboard's
-On-Demand program has a different address on each, and a sale running the devnet
-build on mainnet could have priced itself off a devnet queue where anyone can
-stand up their own oracles. Moving the band to Pyth took that whole problem away
-along with the second binary.
+`scripts/wsl/build.sh` builds the devnet binary and checks it holds both devnet
+dollars and none of mainnet USDC. The mainnet build is the same command without
+the feature, written at the top of `build.sh`; no script deploys it.
 
-## The five deploys
+Pyth's receiver program and price feed program sit at the same addresses on both
+networks, so nothing else differs between the builds. An earlier arrangement of
+two binaries existed while the band read Switchboard, whose program has a
+different address on each network; moving the band to Pyth removed that reason.
+
+## The six deploys
 
 Same address every time. An upgrade replaces the code in the account that is
 already there, so nothing a client or a saved account points at ever moves.
@@ -59,6 +63,7 @@ already there, so nothing a client or a saved account points at ever moves.
 | 3 | 502436678 | 2026-09-22 13:02:53 | The price band moved from Switchboard to Pyth | `4RdQw1FvbULYtnyjY2mxBoj8Q9XpGCwygnJuDz7qXVwLSLqbVd8tp8BvHoxDwJKd3qVsBegt76PB3MiWHtm5pq7L` |
 | 4 | 502476730 | 2026-09-22 14:53:26 | The SaleRules layout version, so a reader refuses rules written by another layout | `fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7` |
 | 5 | 502899538 | 2026-09-23 10:21:01 | Rules v2: the paying token is stored and checked, banded sales must be dollar priced, the cap stays below the curve's supply, every sale carries an offering period, and events name the sale's mint | `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
+| 6 | 502981972 | 2026-09-23 14:08:42 | A price ceiling only when buyers pay in a listed dollar for the network; the devnet build carries devnet USDC and the demo dollar | `4ep1rYGmZJXns7Efu22HmR1fHfKZQrnhznoMj3vjA7ZYxQi27yqkPPvix6fqv72ZHyrSVmFNiU6Kf4a4btauEPZ6` |
 
 | # | Build | sha256 | Size |
 | --- | --- | --- | --- |
@@ -66,6 +71,7 @@ already there, so nothing a client or a saved account points at ever moves.
 | 3 | `pangu.so`, the one binary | `08746faa7b4ac83ada7bfa0cd2fcf0b04aabc9c335ebfc310fd2a06d486d3a7c` | 356,200 bytes |
 | 4 | `pangu.so`, with the layout version | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` | 358,248 bytes |
 | 5 | `pangu.so`, rules v2 | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` | 363,720 bytes |
+| 6 | `pangu.so`, rules v2, devnet build with the dollar list | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f` | 363,800 bytes |
 
 What each one cost:
 

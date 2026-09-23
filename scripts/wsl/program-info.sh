@@ -15,6 +15,16 @@ case "$CLUSTER" in
     exit 2 ;;
 esac
 
+# The public devnet node times out on long uploads, so a keyed DEVNET_RPC_URL
+# from the repository root .env is used when one is set. The URL carries a key,
+# so what is printed is SHOWN_URL, never URL.
+SHOWN_URL="$URL"
+ENV_FILE="/mnt/d/Projects/Meteora/.env"
+if [ -f "$ENV_FILE" ]; then
+  KEYED="$(grep -E '^DEVNET_RPC_URL=https' "$ENV_FILE" | head -n 1 | cut -d= -f2- | tr -d '\r')"
+  if [ -n "$KEYED" ]; then URL="$KEYED"; SHOWN_URL="the keyed devnet node from .env"; fi
+fi
+
 SRC=/mnt/d/Projects/Meteora/packages/program
 SO="$SRC/target/deploy/pangu.so"
 PAYER="$HOME/.config/solana/pangu-devnet.json"
@@ -30,7 +40,7 @@ if ! solana program show "$PROGRAM_ID" --url "$URL" --keypair "$PAYER" > "$SHOW"
   cat "$SHOW"; rm -f "$SHOW"; exit 1
 fi
 
-echo "CLUSTER: $CLUSTER ($URL)"
+echo "CLUSTER: $CLUSTER ($SHOWN_URL)"
 echo "BUILD COMPARED AGAINST: $SO"
 echo "PROGRAM ID: $(awk '/^Program Id:/ {print $NF}' "$SHOW")"
 echo "PROGRAM DATA ADDRESS: $(awk '/^ProgramData Address:/ {print $NF}' "$SHOW")"

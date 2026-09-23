@@ -16,6 +16,16 @@ case "$CLUSTER" in
     exit 2 ;;
 esac
 
+# The public devnet node times out on long uploads, so a keyed DEVNET_RPC_URL
+# from the repository root .env is used when one is set. The URL carries a key,
+# so what is printed is SHOWN_URL, never URL.
+SHOWN_URL="$URL"
+ENV_FILE="/mnt/d/Projects/Meteora/.env"
+if [ -f "$ENV_FILE" ]; then
+  KEYED="$(grep -E '^DEVNET_RPC_URL=https' "$ENV_FILE" | head -n 1 | cut -d= -f2- | tr -d '\r')"
+  if [ -n "$KEYED" ]; then URL="$KEYED"; SHOWN_URL="the keyed devnet node from .env"; fi
+fi
+
 REPO=/mnt/d/Projects/Meteora
 SRC="$REPO/packages/program"
 # One binary serves every network. Pyth's receiver and price feed programs are at
@@ -79,7 +89,7 @@ HEADROOM="$(( RENT_MAX - RENT_LEN ))"
 PAYER_ID="$(solana-keygen pubkey "$PAYER")"
 BAL_BEFORE="$(solana balance "$PAYER" --url "$URL" --lamports | awk '{print $1}')"
 
-echo "CLUSTER: $CLUSTER ($URL)"
+echo "CLUSTER: $CLUSTER ($SHOWN_URL)"
 echo "BUILD USED: $SO"
 echo "PROGRAM ID: $PROGRAM_ID"
 echo "PAYER AND UPGRADE AUTHORITY: $PAYER_ID"
@@ -134,7 +144,7 @@ report_facts() {
   fi
   if [ "${leftovers:-0}" -gt 0 ]; then
     echo "WARNING: $leftovers upload buffer(s) still hold SOL. Reclaim with:"
-    echo "  solana program close --buffers --keypair $PAYER --url $URL"
+    echo "  solana program close --buffers --keypair $PAYER --url <DEVNET_RPC_URL from .env, or https://api.devnet.solana.com>"
   else
     echo "UPLOAD BUFFERS LEFT OPEN: none"
   fi
@@ -143,8 +153,8 @@ report_facts() {
 recovery_notes() {
   echo "The upload buffer keeps whatever was written before the failure. Nothing is lost:"
   echo "  re-run this same command and it resumes from that buffer."
-  echo "To see SOL parked in buffers:   solana program show --buffers --keypair $PAYER --url $URL"
-  echo "To take that SOL back:          solana program close --buffers --keypair $PAYER --url $URL"
+  echo "To see SOL parked in buffers:   solana program show --buffers --keypair $PAYER --url <DEVNET_RPC_URL from .env, or https://api.devnet.solana.com>"
+  echo "To take that SOL back:          solana program close --buffers --keypair $PAYER --url <DEVNET_RPC_URL from .env, or https://api.devnet.solana.com>"
 }
 
 if [ "$ONCHAIN_HASH" = "$LOCAL_HASH" ]; then
