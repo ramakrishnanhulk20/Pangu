@@ -1,7 +1,8 @@
 "use client";
 
 import Lenis from "lenis";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 // The instance lives outside React. Anything that needs it, like ScrollTrigger,
 // subscribes rather than re-rendering the tree when smooth scroll starts.
@@ -32,6 +33,9 @@ export function useLenis(): Lenis | null {
 }
 
 export function SmoothScroll({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const firstPath = useRef(true);
+
   useEffect(() => {
     // Someone who asked their system to stop animating gets the browser's own
     // scroll, untouched.
@@ -47,6 +51,26 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       publish(null);
     };
   }, []);
+
+  // Lenis keeps its own scroll position, so after a client-side page change it
+  // carries the old page's depth over and the next docs page opens halfway down.
+  // A new page starts at its top, or at the heading its link names.
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    const hash = window.location.hash;
+    const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+    if (current !== null) {
+      // The heading clears the sticky 64px site nav.
+      current.scrollTo(target ?? 0, { immediate: true, force: true, offset: target ? -80 : 0 });
+    } else if (target !== null) {
+      target.scrollIntoView();
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname]);
 
   return <>{children}</>;
 }
