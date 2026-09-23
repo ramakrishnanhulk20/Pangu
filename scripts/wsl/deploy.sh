@@ -40,7 +40,24 @@ for f in "$PROGRAM_KEY" "$PAYER"; do
   [ -f "$f" ] || { echo "DEPLOY-FAILED: missing key file $f"; exit 1; }
 done
 
-bash "$REPO/scripts/wsl/build.sh"
+# REUSE_BUILD=1 exists because WSL has dropped its network straight after a heavy
+# build, so a deploy can be run in a fresh session on a build already made. It
+# only goes ahead when BUILD_SHA256 names the hash that build printed, and both
+# copies of the binary still carry it.
+if [ "${REUSE_BUILD:-0}" = "1" ]; then
+  WORK_SO="$HOME/pangu-build/target/deploy/pangu.so"
+  WANT="${BUILD_SHA256:-}"
+  [ -n "$WANT" ] || { echo "DEPLOY-FAILED: REUSE_BUILD=1 needs BUILD_SHA256, the hash the last BUILD-OK printed"; exit 1; }
+  [ -f "$WORK_SO" ] && [ -f "$SO" ] || { echo "DEPLOY-FAILED: REUSE_BUILD=1 but there is no earlier build at $WORK_SO and $SO"; exit 1; }
+  for f in "$WORK_SO" "$SO"; do
+    GOT="$(sha256sum "$f" | cut -d' ' -f1)"
+    [ "$GOT" = "$WANT" ] || { echo "DEPLOY-FAILED: $f hashes to $GOT, not the $WANT asked for"; exit 1; }
+  done
+  echo "BUILD PATH: skipped, deploying the earlier build with sha256 $WANT"
+else
+  bash "$REPO/scripts/wsl/build.sh"
+  echo "BUILD PATH: fresh build"
+fi
 [ -f "$SO" ] || { echo "DEPLOY-FAILED: the build produced no $SO"; exit 1; }
 
 PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEY")"
