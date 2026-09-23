@@ -19,6 +19,7 @@ const PAGES = [
   { href: "/sales", label: "Sales" },
   { href: "/launch", label: "Launch" },
   { href: "/verify", label: "Verify" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/docs", label: "Docs" },
 ] as const;
 
