@@ -33,7 +33,7 @@ export function SaleTitle({ sale }: { sale: DirectorySale }) {
     { label: "state", value: `${state.word}, ${state.detail}` },
     { label: "who may buy", value: whoMayBuy(sale.accessMode).short },
     { label: "price ceiling", value: ceiling ?? "none" },
-    { label: "paid in", value: sale.money === "SOL" ? "SOL" : sale.demoDollar ? "demo dollars" : "dollars" },
+    { label: "paid in", value: sale.money === "dollars" ? (sale.demoDollar ? "demo dollars" : "dollars") : sale.money },
     {
       label: "issuer",
       value: (
