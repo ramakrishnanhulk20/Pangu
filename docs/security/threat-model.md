@@ -10,7 +10,7 @@ Our program stores, per sale: the mint, the DBC pool and its token vault, the is
 
 On a buy, tokens move from the pool vault to the buyer. On a sell, tokens move from the seller to the pool vault. Wallet-to-wallet movements are also seen by the program. When the sale fills, DBC removes the hook from the token, permanently, inside the completing trade. Our program is never called again for that token.
 
-Off-chain there is a TypeScript package and scripts that create the DBC launch template, the pool, and our accounts in one transaction, approve buyers, trade, trigger graduation and collect fees. A web app reads chain state and sends transactions through the user's wallet. There is no database and no server that holds keys.
+Off-chain there is a TypeScript package and scripts that create the DBC launch template, the pool, and our accounts in one transaction, approve buyers, trade, trigger graduation and collect fees. A web app reads chain state and sends transactions through the user's wallet. There is no database. One server route holds one key: the devnet demo dollar's mint authority, behind the demo dollars button, bounded by C15.
 
 ## A. App-class risk profile
 
@@ -29,7 +29,7 @@ This is a policy-enforcement program that is invoked by another program on every
 | Reentrancy | Not applicable in the usual sense: the hook makes no outgoing calls and Token-2022 forbids the hook from moving the tokens in flight. Stated so nobody assumes more. |
 | Off-chain transaction assembly | The scripts choose accounts and amounts for transactions the issuer or a buyer signs. A wrong pool, wrong template or wrong receiver address sends real money to the wrong place. |
 
-Does not apply: web session handling, server-side secrets, databases, user-supplied URLs. There is no server state.
+Does not apply: web session handling, databases, user-supplied URLs. Server-side secrets: one, the devnet demo dollar mint key behind the demo dollars route, bounded by C15. The only server state is that route's in-memory rate limit slots.
 
 ## B. Threat model
 
@@ -38,7 +38,8 @@ Does not apply: web session handling, server-side secrets, databases, user-suppl
 2. Issuer wallet to our admin instructions.
 3. Pyth price feed account data and attestation account data into our decision.
 4. DBC pool account data into our decision.
-5. Browser to chain: the app builds transactions a user signs.
+5. Browser to chain: the app builds transactions a user signs (C16).
+6. Browser to the demo dollars route: an unauthenticated request carrying a wallet address, answered by spending the payer's devnet SOL on rent, so the route's limits are the control (C15).
 
 ### Attacker-controlled inputs
 - Every account passed to `execute` beyond source, mint, destination, authority.
@@ -81,6 +82,9 @@ Each line is an outcome the code must uphold. A work order carries the relevant 
 | C12 | Scripts never hold or print a private key, and every address that receives money is shown to the signer before signing and read back from the chain after. |
 | C14 | During the sale no sale token can come into existence except out of the pool vault. The mint's minting power is gone before the sale opens, and create_sale refuses a mint that still has it. Minting is not a transfer and no hook sees it, so without this rule the issuer could mint to any wallet, past the cap and the approvals, and sell into the pool. Found in the code review of 22 Sep 2026, decided by the founder the same day. |
 | C13 | During the sale, tokens leave the pool vault only into a token account whose owner can never change. Handing over a whole token account is not a transfer, so no hook sees it. Without this rule a buyer could pass tokens to an unapproved wallet, or pass a full account on and buy again. Found in review of the first build, 21 Sep 2026. |
+| C15 | The one server code path that holds a key is the demo dollars route. It mints only the demo dollar token, from a devnet key that holds only devnet SOL, at most one grant per wallet per hour and ten a minute, with both slots reserved before any await so concurrent requests cannot pass the limit together and released when a grant fails, and the key bytes never reach a public variable, a client import, a response or a log. Upheld by `reserve`, `keep`, `release` and `mintAuthority` in `packages/web/lib/demo-dollars.ts`, imported only by `app/api/break/dollars/route.ts`. Found in the finishing sweep review, 23 Sep 2026. |
+| C16 | A transaction the app builds for a visitor moves value only between that visitor and the pool vault, or to an account the visitor owns, never to a party the page chose, and every row states its cost before the wallet is asked to sign, so what a visitor can lose is bounded by the stated cost even if the rule under test failed. The wallet-to-wallet row sends a fraction of a share to a key made in the browser and discarded, and the program refuses it. Upheld by the row builders in `packages/web/lib/break.ts`. Found in the finishing sweep review, 23 Sep 2026. |
+| C17 | No public route lets an outsider spend the RPC budget the live numbers depend on. The price route answers only for mints in the app's own sale list and serves each answer from a ten second cache, and the pulse and readout readings are shared across requests. Upheld by the `openedSales` check and the cache in `app/api/price/[mint]/route.ts` and the shared reading in `packages/web/lib/pulse.ts`. Found in the finishing sweep review, 23 Sep 2026. |
 
 ### General standards we commit to
 1. **Primitives over lists.** Roles are recognised by derived addresses and owning programs, not by a list of known accounts. The one constant we rely on is DBC's pool authority address, which is fixed by their program. The approved-buyer list is a product feature, not a security shortcut, and its limit is stated below.
