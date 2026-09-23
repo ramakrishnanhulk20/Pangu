@@ -16,10 +16,10 @@ Buying pauses. Every buy in a banded sale needs a price that is fresh, positive,
 Nobody, once the sale is open. A sale refuses to open at all on a token whose minting power has not already been given up. This was a finding from a code review: without it, an issuer could have minted new tokens straight into any wallet, skipping the cap and the approval list entirely.
 
 **What happens when the sale finishes?**
-Meteora's own code removes Pangu from the token, permanently, in the very same trade that completes the sale. From that moment the token trades freely with no rules from Pangu at all, and the leftover liquidity moves into a fresh Meteora trading pool automatically.
+Meteora's own code removes Pangu from the token, permanently, in the very same trade that completes the sale. From that moment the token trades freely with no rules from Pangu at all, and the leftover liquidity moves into a fresh Meteora trading pool automatically. If the sale's offering period ends before the curve fills, every rule lifts then instead, so a slow sale cannot hold its buyers forever. A sale opened with no end keeps its rules until graduation.
 
 **Can the issuer change the rules mid-sale?**
-No. A sale's cap, its approval mode, and its price ceiling are all set once, when the sale is created, and there is no instruction in the program that can change them afterward.
+No. A sale's cap, its approval mode, its price ceiling, its paying token and the end of its offering period are all set once, when the sale is created, and there is no instruction in the program that can change them afterward.
 
 **Why a cap per wallet, and not per person?**
 Because a wallet is the only identity Solana itself can verify. Enforcing a real per-person limit needs a real identity check behind it, which is exactly what the optional credential-based approval mode is for: a wallet only counts as approved if a trusted verifier has issued it a credential. Without that, a cap is a speed bump against casual bot behaviour, not a hard guarantee against one person using many wallets.

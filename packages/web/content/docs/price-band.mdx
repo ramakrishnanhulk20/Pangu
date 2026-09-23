@@ -7,7 +7,7 @@ description: How the optional price ceiling works, what the market clock means, 
 
 A banded sale (one with the price ceiling turned on) compares two numbers on every single buy: the curve's own price in dollars per token after that buy would happen, and the real stock's price read from a live Pyth price feed. If the curve's price would sit more than a set percentage above the real stock's price, the buy is refused with the program's own `PriceOutsideBand` error before it ever happens. A buy at or below the real price is never refused, because those are exactly the buys that pull an underpriced sale back toward a fair number. A sell is never refused by this rule, ever, no matter what the price is doing.
 
-This only makes sense, and only gets turned on, for a sale of a token tied to a real listed stock. An issuer of a token with no real-world price to compare against would leave the ceiling off entirely.
+This only makes sense, and only gets turned on, for a sale of a token tied to a real listed stock. An issuer of a token with no real-world price to compare against would leave the ceiling off entirely. A banded sale must also be priced in a dollar token, since the ceiling compares dollars with dollars: the program refuses a band on a sale whose buyers pay in SOL, with `BandNeedsDollarQuote`.
 
 ## The market clock
 

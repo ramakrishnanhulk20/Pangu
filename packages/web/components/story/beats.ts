@@ -12,7 +12,7 @@ export const BEATS: Beat[] = [
   { index: 2, sentence: "Every wallet has a cap" },
   { index: 3, sentence: "Only approved wallets, if the issuer wants" },
   { index: 4, sentence: "Buys stop above the real stock price" },
-  { index: 5, sentence: "At graduation the rules switch off" },
+  { index: 5, sentence: "At graduation, or when the offering ends, the rules switch off" },
 ];
 
 /**

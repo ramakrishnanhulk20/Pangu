@@ -1,6 +1,6 @@
 ---
 title: How it works
-description: The four rules, the graduation switch-off, and why Pangu has to sit inside a transfer hook.
+description: The four rules, what a sale must get right to open, when the rules switch off, and why Pangu has to sit inside a transfer hook.
 ---
 
 Meteora's Dynamic Bonding Curve can attach a small program, called a transfer hook, to a new token. From the moment the token is created, every single movement of it (every buy, every sell, every wallet-to-wallet send) has to pass through that hook before Solana lets it happen. Pangu is that hook. It has no other job.
@@ -16,9 +16,22 @@ While the sale is open, Pangu checks every movement of the token against four ru
 
 Selling back to the pool is always allowed, no matter what. Nothing about the cap, the approval list, or the price ceiling can ever block an exit.
 
-## The graduation switch-off
+## What a sale must get right to open
+
+Before any of that, the program checks how the sale was set up, and refuses to open one that would hurt its buyers. Each refusal comes back by name.
+
+- **A sale with a price ceiling must be priced in a dollar token.** The ceiling compares the curve's price with a stock price in dollars. If buyers paid in SOL the two numbers would be in different units and the ceiling would mean nothing.
+- **The issuer cannot pick a paying token they are able to freeze.** Whoever can freeze the paying token can freeze the pool's account or a seller's, and a frozen account cannot be paid. That would put the exit in the issuer's hands.
+- **The per-wallet cap must sit below what the curve sells.** A cap as large as the whole sale would let one wallet buy all of it, the one thing a cap exists to stop.
+- **Every sale names an offering period, or says plainly it has none.** The end is fixed when the sale opens and nobody can move it afterwards. An end that has already passed is refused.
+
+## When the rules switch off
+
+The rules switch off at graduation, or when the offering period ends, whichever comes first.
 
 When the curve fills (enough buyers have bought that the sale reaches its threshold) Meteora's own code removes Pangu from the token, permanently, inside that very last trade. After that moment Pangu is never called again for that token, the four rules above stop applying, and the token trades freely like any other. The remaining liquidity moves automatically into a new Meteora pool (DAMM v2) so trading can continue with real depth behind it.
+
+If the offering period ends first, Pangu stays attached to the token but lets every transfer through untouched from that moment, cap and approvals included, exactly as it would after graduation, and a buyer can close their record and take back its rent. This is what stops a curve that never fills from locking its buyers in for good. A sale opened with no end keeps its rules until graduation. The demo sale on devnet, PBAND2, ends on 7 October 2026.
 
 ## Why this has to be a transfer hook, and why that is the load-bearing choice
 

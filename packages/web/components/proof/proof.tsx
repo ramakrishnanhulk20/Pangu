@@ -8,29 +8,31 @@ import { Reveal } from "@/components/story/reveal";
 // Every figure below is copied from a file in the repository, named in the
 // comment above it. Nothing here is rounded, guessed, or live.
 
-// docs/measurements/test-counts.md: 27 Rust, 125 mocha, 36 fork, 117 sdk,
-// 49 scripts.
+// docs/measurements/test-counts.md, the runs of 23 September 2026: 31 Rust,
+// 137 litesvm, 37 fork steps from the program's own suite, 146 sdk, 109
+// scripts.
 const SUITES = [
-  { count: "27", label: "Rust tests" },
-  { count: "125", label: "unit tests" },
-  { count: "36", label: "forked mainnet steps" },
-  { count: "117", label: "package tests" },
-  { count: "49", label: "script tests" },
+  { count: "31", label: "Rust tests" },
+  { count: "137", label: "unit tests" },
+  { count: "37", label: "forked mainnet steps" },
+  { count: "146", label: "package tests" },
+  { count: "109", label: "script tests" },
 ];
 
-// docs/measurements/devnet-run.md. The link is the fifth run's buy refused at
-// the ceiling on the demo sale. The 16 of 18 below is the fifth run: 9 attacks
-// on the demo sale and 9 on the list sale, each 8 refused and 1 sell allowed.
+// docs/measurements/devnet-run.md, the sixth run. The link is PBAND2's buy
+// refused at the ceiling. The 16 of 19 below is that run: 9 attacks on PBAND2
+// and 10 on the credential sale PVRFD, 8 refused on each, and 3 allowed as
+// expected, one attested buy under the cap and two sells.
 const REFUSAL_LINK =
-  "https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet";
+  "https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet";
 
 const REPOSITORY: string = "https://github.com/ramakrishnanhulk20/Pangu";
 
 const LEDGER = [
   {
-    figure: "16 of 18",
+    figure: "16 of 19",
     title: "attacks on devnet, refused as expected",
-    body: "The other two were sells back to the pool, one by a holder of the open demo sale and one by a wallet whose approval had been taken away. Both went through, because nothing in the rules can close the exit.",
+    body: "The other three went through, as they should: a wallet the verifier had attested buying under its cap, and two sells back to the pool, because nothing in the rules can close the exit.",
     link: { href: REFUSAL_LINK, label: "the buy refused above Apple's price" },
   },
   {
@@ -158,20 +160,20 @@ export function Proof() {
             ))}
           </div>
 
-          {/* docs/measurements/devnet-run.md, "The fourth run", and
-              docs/deployments.md for the date. */}
+          {/* docs/deployments.md, the fifth deploy, and
+              docs/measurements/devnet-run.md, "The sixth run". */}
           <Reveal>
             <div className="grid grid-cols-1 gap-4 border-t border-paper/15 py-10 font-mono text-[11px] leading-[1.7] text-paper/55 sm:grid-cols-12 sm:gap-8">
               <p className="uppercase tracking-[0.18em] sm:col-span-5">
-                Fourth devnet deploy
+                Fifth devnet deploy
               </p>
               <div className="sm:col-span-7">
                 <p className="text-paper">
-                  slot 502476730, 22 September 2026, 358,248 bytes
+                  slot 502899538, 23 September 2026, 363,720 bytes
                 </p>
                 <ShortValue
                   label="sha256"
-                  value="a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb"
+                  value="191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731"
                 />
                 <ShortValue label="program" value="4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG" />
               </div>

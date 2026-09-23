@@ -10,14 +10,16 @@ Live app: coming with the Vercel deploy, the team fills in the URL · Docs: comi
 
 | Network | Program id | Deployed slot | Upgrade authority | Build hash |
 | --- | --- | --- | --- | --- |
-| Devnet | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` | 502476730 | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, held by the team, stated openly | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` |
+| Devnet | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` | 502899538 | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, held by the team, stated openly | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` |
 | Mainnet | not deployed for this submission, one script and about 4 SOL away | | | |
 
-The devnet program has been deployed and upgraded four times, always at this same address, each build checked byte for byte against the code that was tested before it went live. Full history: `docs/deployments.md`.
+The devnet program was deployed once and upgraded four times, always at this same address, each build checked byte for byte against the code that was tested before it went live. The fifth deploy, on 23 September 2026, is the rules v2 build, an upgrade in place: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, and every sale carries an offering period. Full history: `docs/deployments.md`.
 
 ## Overview
 
 A stock token's first sale is the moment that decides who ends up holding it. Meteora's Dynamic Bonding Curve already solves half of that problem: it finds a fair price by letting buyers push it up as they buy, instead of an issuer picking a number in advance. Pangu solves the other half. It sits on the token as a transfer hook, the one piece of Solana's token program that nothing can route around, and it enforces a per-wallet cap, an optional approved-buyer gate, and an optional ceiling against the real stock's market price. When the curve fills, Meteora removes Pangu from the token for good, and it trades freely from then on.
+
+Every sale also names an offering period when it opens. Once it ends, every rule lifts even if the curve never filled, so a slow sale cannot hold its buyers forever. An issuer who wants the rules to last until graduation has to say so and open the sale with no end date. Before a sale can open at all, the program checks the three things an issuer could get wrong: a sale with a price ceiling must be priced in a dollar token, the issuer cannot pick a paying token they are able to freeze, and the per-wallet cap must sit below what the curve sells.
 
 Pangu is for two kinds of teams: anyone issuing a new stock token who wants its first sale to reach real buyers instead of the fastest bot, and a stock-paired launchpad, the kind of app Meteora itself announced this quarter, that needs the same fairness rules for every token it lists.
 
@@ -39,9 +41,11 @@ An issuer already has other ways to run a first sale. Here is how Pangu compares
 - The optional price ceiling never blocks a buy at or below the real stock's price, only one that would push the curve above it.
 
 **For issuers**
-- One command opens a sale: pick a per-wallet cap, an access mode (open, an issuer-managed list, or a verifier credential), and an optional price ceiling against a live Pyth feed.
+- One command opens a sale: pick a per-wallet cap, an access mode (open, an issuer-managed list, or a verifier credential), an optional price ceiling against a live Pyth feed, and an offering period.
+- Every sale states when its offering ends (`--ends-in 336` is two weeks) or that it has none (`--no-end`). The end is fixed at launch and nobody can move it. When it passes, every rule lifts, cap and approvals included, so a curve that never fills cannot lock the token for good.
+- The program refuses a sale set up in a way that would hurt its buyers: a price ceiling on a sale not priced in a dollar token, since the ceiling compares dollars with dollars; a paying token the issuer can freeze, since freezing it would stop sellers being paid; and a cap as large as the whole sale, since one wallet could then buy everything.
 - The minting power on the sale token is revoked automatically before the sale can open, so nobody, including the issuer, can mint past the cap once it is live.
-- The rules disappear on their own at graduation. There is no separate step and no way to leave them on by accident.
+- The rules disappear on their own at graduation, or when the offering period ends. There is no separate step and no way to leave them on by accident.
 
 **For launchpads**
 - The same rules program covers a dollar-priced sale and a stock-paired one. A launchpad like Meteora's own StockLaunch is a second kind of customer for it, not only a single issuer.
@@ -49,18 +53,21 @@ An issuer already has other ways to run a first sale. Here is how Pangu compares
 
 **For developers**
 - `pangu-sdk` has three entry points: a core reader safe in a browser, `/dbc` for building and sending a sale's transactions, and `/price` for a server route that refreshes the oracle.
-- Every one of the program's 29 named errors comes back as a plain sentence a buyer can read, not an error code.
+- Every one of the program's 33 named errors comes back as a plain sentence a buyer can read, not an error code.
 - The command-line tools (`launch`, `seed`, `prove`, `graduate`, `status`) run a whole sale's life against the live devnet program and print every number back off the chain.
 
 ## Devnet deployment
 
-The current live demo (program slot 502476730, `docs/measurements/devnet-run.md`). The fifth devnet run opened the sale the app lands on first; the other two rows are from the fourth run. Four earlier sales opened on older builds of the program were retired after the layout-version build: the reader refuses to decode an account written by another layout rather than guess at it, which is exactly the point of the layout-version check.
+The current live demo (program slot 502899538, `docs/measurements/devnet-run.md`). The sixth devnet run opened the first two sales on the rules v2 build, and the app lands on the newest open one, PBAND2. PBAND (fifth run) and the list sale (fourth run) were opened under version 1 rules, which the new build still reads: they have no offering period and read as never ending.
 
 | Sale | Mode | Mint | Key facts | Explorer |
 | --- | --- | --- | --- | --- |
-| Demo sale, banded and dollar-priced (PBAND) | Open access, 10% per-wallet cap, 5% price ceiling against Apple's real price | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | The sale a judge sees first: open, banded, priced in the demo dollar. 20 shares, opened at 275.21 dollars a share with Apple at 342.45. 14 holders, 63.18% of the curve sold, largest holder 15.18% of everything sold against a cap worth 15.83%. 9 attacks run, 8 refused as expected, 1 allowed as expected: the cap and the ceiling both refused on the same sale | [mint](https://explorer.solana.com/address/2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y?cluster=devnet) · [a buy refused at the ceiling](https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet) |
-| List-mode sale | Issuer-managed list, 10% per-wallet cap | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | 15 buyers seeded and attacked, 9 attacks run, 8 refused as expected, 1 allowed as expected. Graduated: largest wallet held 16.76% of 467,347,859,706,336 raw units sold against a cap worth 17.12% of them. Migrated to Meteora DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | [mint](https://explorer.solana.com/address/2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR?cluster=devnet) · [migration tx](https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet) |
-| Banded, dollar-priced sale | Open access, 5% price ceiling against Apple's real price | `CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7` | Opened deliberately at 400 dollars a share while Apple traded at 343.44. Every buy refused on chain with the program's own `PriceOutsideBand`, 6 attacks run, 6 refused as expected | [mint](https://explorer.solana.com/address/CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7?cluster=devnet) · [an ordinary buy, refused](https://explorer.solana.com/tx/WdP9LtJJuHLmuVbmfEoYiuXpUFV9LB61TCJ4aXKsaV68ToXirizWjfMKRborVun7E2G7GmUA93wkPsfLRpBM5pq?cluster=devnet) |
+| Demo sale, banded and dollar-priced (PBAND2) | Open access, 10% per-wallet cap, 5% price ceiling against Apple's real price, offering period ends 7 October 2026 at 10:38 UTC | `5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo` | The sale a judge sees first, and the first on devnet with an end date. 20 shares, opened at 275.95 dollars a share with Apple at 340.15. 10 holders, 56.63% of the curve sold, largest holder 16.93% of everything sold against a cap worth 17.66%. 9 attacks run, 8 refused as expected, 1 allowed as expected: the cap and the ceiling both refused on the same sale | [mint](https://explorer.solana.com/address/5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo?cluster=devnet) · [a buy refused at the ceiling](https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet) |
+| Credential sale (PVRFD) | Verifier credential, 10% per-wallet cap, priced in SOL, no ceiling, no end date | `7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn` | Credential mode proven on the live program for the first time: a wallet with no attestation refused with `CredentialInvalid`, an attested wallet bought under the cap, and the cap still held it. 10 attacks run, 8 refused as expected, 2 allowed as expected. Only the attacking wallets hold it, so the largest holder's 35.80% of what has sold, against a cap worth 47.55%, is a share of a thin sale | [mint](https://explorer.solana.com/address/7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn?cluster=devnet) · [a buy with no attestation, refused](https://explorer.solana.com/tx/2dvaB2gcFvwmdmQbYHV2wuuGKtQfTdPUk6yZNWXTMyrFHE9XVkeWZM2N7tGiwysNDx8jHUTrGxMkBFWDK3G3iPGi?cluster=devnet) |
+| Earlier demo sale, banded and dollar-priced (PBAND) | Open access, 10% per-wallet cap, 5% price ceiling against Apple's real price, version 1 rules with no offering period | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | Fifth run. 20 shares, opened at 275.21 dollars a share with Apple at 342.45. After that run's attacks: 14 holders, 63.18% of the curve sold, largest holder 15.18% of everything sold against a cap worth 15.83%. 9 attacks run, 8 refused as expected, 1 allowed as expected | [mint](https://explorer.solana.com/address/2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y?cluster=devnet) · [a buy refused at the ceiling](https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet) |
+| List-mode sale | Issuer-managed list, 10% per-wallet cap | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | Fourth run. 15 buyers seeded and attacked, 9 attacks run, 8 refused as expected, 1 allowed as expected. Graduated: largest wallet held 16.76% of 467,347,859,706,336 raw units sold against a cap worth 17.12% of them. Migrated to Meteora DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | [mint](https://explorer.solana.com/address/2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR?cluster=devnet) · [migration tx](https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet) |
+
+Retired, and no longer checked by `npm run status`: POPEN (`CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7`), opened deliberately at 400 dollars a share while Apple traded at 343.44 so that [every buy was refused at the ceiling](https://explorer.solana.com/tx/WdP9LtJJuHLmuVbmfEoYiuXpUFV9LB61TCJ4aXKsaV68ToXirizWjfMKRborVun7E2G7GmUA93wkPsfLRpBM5pq?cluster=devnet), and a second list sale (`4kzCbpEZxyzwXno1ZVnTJ9BAGSjD1HVgSBSwikEsxeaE`) opened to prove changed `prove` code, both retired on 23 September 2026. Four sales opened on older builds were retired after the layout-version build: the reader refuses to decode an account written by another layout rather than guess at it, which is exactly the point of the layout-version check.
 
 How the price ceiling itself is derived, refreshed, and checked against Pyth's guardian signatures is written up in full in `docs/measurements/sdk-pyth.md`.
 
@@ -242,14 +249,25 @@ The same attacks from a terminal, against the same live program:
 cd packages/scripts && npm run prove
 ```
 
-Last lines, from the fifth devnet run against the banded dollar sale (PBAND), the sale `prove` runs on when no mint is named:
+Last lines, from the sixth devnet run against the banded dollar sale (PBAND2), the sale `prove` runs on when no mint is named:
 
 ```
+proof    : the largest wallet holds 16.93 percent of the 6229218448 raw units sold, against a cap worth 17.66 percent of them
+cost     : 0.011317 SOL, after 0.033344 SOL came back from the attacking wallets
+
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
-cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
 
-Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
+The same command on the credential sale (PVRFD), `npm run prove -- --mint 7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn`, in the same run:
+
+```
+proof    : the largest wallet holds 35.80 percent of the 168233737622413 raw units sold, against a cap worth 47.55 percent of them
+cost     : 0.017973 SOL, after 0.077115 SOL came back from the attacking wallets
+
+10 attacks run, 8 refused as expected, 2 allowed as expected, 1 not applicable, 0 off the standard
+```
+
+The row not applicable on PBAND2 is the approved-list attack, since that sale is open to anyone; on PVRFD it is the ceiling attack, since that sale has no price band. Only the attacking wallets hold PVRFD, so one capped wallet is a large share of the little that has sold.
 
 And whether the whole demo is still alive:
 
@@ -260,7 +278,7 @@ npm run status
 Last line, from the end of the same run:
 
 ```
-10 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-23T07:08:33Z
+14 passed, 0 warned, 0 failed, 2 not checked, at 2026-09-23T10:51:04Z
 ```
 
 ## Quick start
@@ -274,11 +292,11 @@ cd Meteora
 # check the WSL toolchain: Anchor, Solana CLI, Rust, Node, rsync
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/env-check.sh
 
-# build and test the on-chain program: 27 Rust tests, 125 mocha tests
+# build and test the on-chain program: 31 Rust tests, 137 litesvm tests
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/test.sh
 
 # run a full sale against a forked mainnet validator holding real Meteora and
-# Solana Attestation Service programs: 36 steps, takes about 4 minutes
+# Solana Attestation Service programs: 37 steps, takes about 4 minutes
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/fork-test.sh
 
 # build the SDK
@@ -330,12 +348,12 @@ From `ARCHITECTURE.md`.
 
 | Instruction | Who calls it | What it does |
 | --- | --- | --- |
-| `create_sale` | The pool creator, after the pool exists, in the same transaction | Checks the pool is a genuine DBC hook pool the caller created, checks fees are collected in the paying token, checks the sale token's minting power is already gone, stores the rules, creates the extra-accounts list. Runs once per mint. |
+| `create_sale(cap, access_mode, credential, schema, band, ends_at)` | The pool creator, after the pool exists, in the same transaction | Checks the pool is a genuine DBC hook pool the caller created, checks fees are collected in the paying token, checks the sale token's minting power is already gone. Checks the paying token is the one the launch template names, that the issuer cannot freeze it, and on a banded sale that it is not wrapped SOL, then stores it. Refuses a cap at or above what the curve sells, and an `ends_at` that is neither zero (no end) nor later than the chain clock. Stores the rules, creates the extra-accounts list. Runs once per mint. |
 | `open_buyer_record` | Any wallet, for itself | Creates the wallet's own record, not approved, zero bought. Safe to call twice. |
 | `approve_buyer` | Issuer | Issuer-list mode. Creates the record if missing and marks it approved. Never resets tokens bought. |
 | `revoke_buyer` | Issuer | Issuer-list mode. Marks the record not approved. The wallet can still sell. |
-| `close_buyer_record` | The wallet | After graduation, or any time the record's net bought is zero. Returns the rent to the wallet. |
-| `execute` | Token-2022 only | The transfer hook. Runs the four rules on every buy, sell, and wallet-to-wallet move of the sale token. |
+| `close_buyer_record` | The wallet | After graduation, after the offering period has ended, or any time the record's net bought is zero. Returns the rent to the wallet. |
+| `execute` | Token-2022 only | The transfer hook. Runs the four rules on every buy, sell, and wallet-to-wallet move of the sale token. Once the offering period has ended it lets every transfer through untouched, as after graduation. |
 
 ## Errors
 
@@ -372,23 +390,29 @@ Every refusal the program can return, in the plain sentence `pangu-sdk` shows a 
 | `NotIssuer` | Only the issuer of this sale can do that. |
 | `MathOverflow` | The sale's counters cannot go any higher. |
 | `WrongLayoutVersion` | These sale rules were written by an older build of the program, so this build will not act on them. |
+| `BandNeedsDollarQuote` | A price band compares the curve with a stock price in dollars, so buyers have to pay in a dollar token. Pick a launch template priced in a dollar stablecoin, or open the sale without a band. |
+| `IssuerControlsPayingToken` | You hold the freeze authority of the token buyers pay in, which would let you stop sellers being paid. Pick a paying token whose freeze authority is not yours. |
+| `CapCoversWholeSale` | The per-wallet limit is as large as everything the curve sells, so one wallet could buy the whole sale. Set a limit below the curve's supply. |
+| `EndInThePast` | The end of the offering period has to be later than now. Pick a future time, or leave it at zero for no end. |
 
 ## Test output
 
-The most recent counts, confirmed on 23 September 2026 and recorded in `docs/measurements/test-counts.md`:
+The most recent counts, from the runs of 23 September 2026, recorded in `docs/measurements/test-counts.md`:
 
 ```
-27 Rust tests
-125 mocha tests, including 6,000 randomised buy, sell, transfer, approve and
+31 Rust tests
+137 litesvm tests, including 6,000 randomised buy, sell, transfer, approve and
   revoke operations across ten sequences, checked against the chain after
   every single one
-36 steps against a forked mainnet validator running real Meteora Dynamic
+37 steps against a forked mainnet validator running real Meteora Dynamic
   Bonding Curve, DAMM v2 and Solana Attestation Service programs
-117 pangu-sdk unit tests
-49 devnet-script tests
+146 pangu-sdk unit tests
+109 devnet-script tests
 ```
 
-Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
+The 37 steps are the program's own fork suite. The SDK has a fork suite of its own, which could not copy its accounts from the public mainnet node on 23 September 2026, so it is not counted above.
+
+Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (21 September 2026: 27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
 
 Prove-it command against the live network, run again for this submission:
 
@@ -396,14 +420,16 @@ Prove-it command against the live network, run again for this submission:
 cd packages/scripts && npm run prove
 ```
 
-From the fifth devnet run, against the banded dollar sale (PBAND):
+From the sixth devnet run, against the banded dollar sale (PBAND2):
 
 ```
+proof    : the largest wallet holds 16.93 percent of the 6229218448 raw units sold, against a cap worth 17.66 percent of them
+cost     : 0.011317 SOL, after 0.033344 SOL came back from the attacking wallets
+
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
-cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
 
-Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
+Read off the chain right after that run, the largest of the sale's 10 holders had 16.93 percent of everything sold, against a cap worth 17.66 percent of it. The credential sale's lines are in the judge path above.
 
 ## Costs, in plain English
 
@@ -444,13 +470,13 @@ Read off the chain right after that run, the largest of the sale's 14 holders ha
 
 ## Security
 
-The threat model, in four lines, from `docs/security/threat-model.md`: Pangu is called by another program on every single movement of the sale token, so the biggest risks are a look-alike account standing in for the real one, someone calling the hook directly, many wallets or many token accounts used to get around the cap, and a price account that is stale, missing, or faked. The mirror-image risk is a rule that misfires on a sell and traps a holder's money, which is why a blocked sell is treated as the worst possible failure and the code is built so nothing can cause one. Seventeen defensive-programming invariants (C1 through C17). The fourteen on the program are each proven by a named test and, for all but two, by a real refused transaction on Solana devnet; the three on the app are proven by recorded devnet runs (C15, C16) and by inspection (C17). The privileged parties are the issuer, who decides who is approved, and the holder of Pangu's upgrade key, the team, stated openly.
+The threat model, in four lines, from `docs/security/threat-model.md`: Pangu is called by another program on every single movement of the sale token, so the biggest risks are a look-alike account standing in for the real one, someone calling the hook directly, many wallets or many token accounts used to get around the cap, and a price account that is stale, missing, or faked. The mirror-image risk is a rule that misfires on a sell and traps a holder's money, which is why a blocked sell is treated as the worst possible failure and the code is built so nothing can cause one. Twenty-one defensive-programming invariants (C1 through C21). The fourteen program rules C1 to C14 are each proven by a named test and, for all but two, by a real refused transaction on Solana devnet. The three on the app are proven by recorded devnet runs (C15, C16) and by inspection (C17). The four program rules added in the rules v2 build, C18 to C21 (a banded sale is priced in dollars, the issuer cannot freeze the paying token, the cap sits below the curve's supply, and the offering period), are proven by named tests and by the sixth devnet run, which opened both of its sales under them. The privileged parties are the issuer, who decides who is approved, and the holder of Pangu's upgrade key, the team, stated openly.
 
 A full code review before this submission found eight issues; all were fixed. The most serious: an issuer who still held the power to mint more of the sale token could have minted straight into any wallet, past the cap and past any approval, since minting is not a transfer and the hook never sees it. The fix: a sale now refuses to open on any token whose minting power has not already been given up. Full detail: `docs/measurements/review-fixes.md`.
 
 Four separate attempts to write a forged or stale stock price into the account a banded sale reads were all refused on Solana devnet: a signature from a key that was not a real oracle, altered price bytes after a real signature, a genuine update aimed at the wrong stock, and a genuine but aged-out update replayed later. None of them changed the account or cost more than a transaction fee. Full write-up: `docs/security/attacks/forged-quote.md`.
 
-What this does not protect against, stated plainly in `docs/security/threat-model.md`: one person can still hold many wallets, since the cap is per wallet; the issuer can approve their friends; a stock token's own issuer keeps its own powers (a permanent delegate, a pause switch) that Pangu cannot touch; and this has been reviewed by an automated pass and by the team, not by a paid third-party audit.
+What this does not protect against, stated plainly in `docs/security/threat-model.md`: one person can still hold many wallets, since the cap is per wallet; the issuer can approve their friends; a stock token's own issuer keeps its own powers (a permanent delegate, a pause switch) that Pangu cannot touch; the dollar check recognises wrapped SOL, not every token that is not a dollar; a freeze authority held by another wallet the issuer controls cannot be told apart from a stablecoin issuer's; and this has been reviewed by an automated pass and by the team, not by a paid third-party audit.
 
 Two caveats worth stating up front. Every fresh read of a Pyth price has needed an API key since 26 August 2026; the team's key has trial access to every feed through 5 October 2026, which covers judging, and a production issuer would need its own key the same way. The price ceiling first shipped reading Switchboard On-Demand for one day of testing, before Pyth granted access and Switchboard announced its own shutdown on 25 September 2026, at which point the ceiling was rebuilt on Pyth and every mention of Switchboard was removed from the live program.
 

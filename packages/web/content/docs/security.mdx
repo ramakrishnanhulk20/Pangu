@@ -11,7 +11,7 @@ Attackers in this model can create unlimited wallets for free, choose which acco
 
 ## The rules the code must always uphold
 
-Each rule on the program (C1 to C14) is proven by a named test, and most are also proven by a real, refused transaction on Solana devnet. The three rules on the app (C15 to C17) are proven by recorded devnet runs or, for C17, by inspection of the code.
+Each of the first fourteen rules on the program (C1 to C14) is proven by a named test, and most are also proven by a real, refused transaction on Solana devnet. The three rules on the app (C15 to C17) are proven by recorded devnet runs or, for C17, by inspection of the code. The four program rules added in the rules v2 build (C18 to C21) are proven by named tests and by the sixth devnet run, which opened both of its sales under them. None of their refusals has been sent on devnet, since the demo sales were set up to pass them.
 
 | Rule | In plain words | Proven by |
 | --- | --- | --- |
@@ -32,6 +32,10 @@ Each rule on the program (C1 to C14) is proven by a named test, and most are als
 | C15 | The demo dollars button is the only server code that holds a key. It mints only the demo dollar, at most once a wallet an hour and ten times a minute, and the key never leaves the server. | a race of 12 wallets on devnet: 10 let through the reservation, the other 2 refused |
 | C16 | A transaction the app builds for a visitor moves value only between that visitor and the pool, or to an account the visitor owns, and every row states its cost before the wallet signs. | a devnet run of every row, each row's promise equal to the chain's answer |
 | C17 | No public route lets an outsider spend the app's network budget: the price route answers only for the app's own sales, from a ten second cache. | by inspection of the code |
+| C18 | A sale with a price ceiling is priced in a dollar token, and every sale's paying token is checked and stored. | tests refusing a band on a sale priced in SOL; the demo sale PBAND2 opened banded and dollar-priced on devnet |
+| C19 | The issuer cannot pick a paying token they are able to freeze, so they can never stop sellers being paid. | tests refusing a paying token the issuer can freeze; both sixth run sales opened past the check |
+| C20 | The per-wallet cap sits below what the curve sells, so no wallet can buy the whole sale. | tests refusing a cap equal to the curve's supply; PBAND2's cap is a tenth of it, and held on devnet with `OverCap` |
+| C21 | The offering period is fixed when the sale opens. While it runs every rule holds; when it ends every rule lifts. | five offering period tests; PBAND2 opened with an end of 7 October 2026 and every rule held on it afterwards |
 
 ## An attack that was actually tried
 
@@ -47,4 +51,4 @@ A full code review was run on the program and the SDK before this submission. It
 - **The issuer's own approval power.** An issuer can approve their friends first. Every approval is public on chain, but Pangu does not judge who gets approved.
 - **The stock token issuer's own powers.** A tokenised stock such as Apple's AAPLx carries a permanent delegate that can move the token out of any account, including the pool itself, and a pause switch that can stop every trade. Those powers belong to the stock token's own issuer, not to Pangu, and Pangu cannot defend against them. Any sale priced in a stock token discloses this.
 - **The upgrade key.** Pangu's upgrade key is held by the team's wallet and stated openly. In theory it could be used to change the program's code during a live sale. This trade-off, and why it was chosen (so a bug found during judging can be fixed, and so the deposit stays recoverable), is recorded in the project's own planning documents.
-- **This has not been independently audited by a third party.** It has been reviewed by an automated code-review pass and by the team building it, tested with 27 Rust tests, 125 mocha tests, 36 tests against real cloned Meteora and attestation programs, 117 SDK tests, 49 script tests, and 6,000 randomized attack operations, and proven with real refused transactions on a live network. That is a strong bar for a hackathon submission, but it is not the same thing as a paid third-party security audit.
+- **This has not been independently audited by a third party.** It has been reviewed by an automated code-review pass and by the team building it, tested with 31 Rust tests, 137 litesvm tests, 37 steps against real cloned Meteora and attestation programs, 146 SDK tests, 109 script tests, and 6,000 randomized attack operations, and proven with real refused transactions on a live network. That is a strong bar for a hackathon submission, but it is not the same thing as a paid third-party security audit.

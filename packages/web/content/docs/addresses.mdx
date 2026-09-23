@@ -8,12 +8,22 @@ description: Everything Pangu depends on, where it lives on chain, and how to ch
 | Fact | Value |
 | --- | --- |
 | Program address | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
-| Running since | 22 September 2026, 14:53:26 UTC, slot 502476730 |
+| Running since | 23 September 2026, 10:21:01 UTC, slot 502899538 |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 | Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by the team and stated openly |
-| sha256 of the deployed build | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` |
+| sha256 of the deployed build | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` |
 
-The program has been deployed and upgraded three times on devnet, always at this same address, each one checked byte for byte against the code that was tested before it went live. The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
+The program was deployed once and upgraded four times on devnet, always at this same address, each build checked byte for byte against the code that was tested before it went live.
+
+| Deploy | Slot | When (UTC) | What went on chain |
+| --- | --- | --- | --- |
+| 1 | 502338042 | 22 September 2026, 08:30:39 | The first deploy |
+| 2 | 502373496 | 22 September 2026, 10:08:31 | The program and SDK review fixes |
+| 3 | 502436678 | 22 September 2026, 13:02:53 | The price ceiling moved to Pyth |
+| 4 | 502476730 | 22 September 2026, 14:53:26 | The rules layout version, so a reader refuses rules written by another layout |
+| 5 | 502899538 | 23 September 2026, 10:21:01 | Rules v2, an upgrade in place: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, every sale carries an offering period, and every event names its sale's mint. Signature `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
+
+The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
 
 ## What Pangu depends on
 
@@ -24,14 +34,20 @@ The program has been deployed and upgraded three times on devnet, always at this
 | Pyth price feed program | `pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT` | Derives the account address a banded sale reads the real stock price from. |
 | Pyth receiver program | `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` | The only program allowed to write a price feed account, and only after checking the signatures behind it. |
 
-## The demo sales run so far
+## The demo sales on devnet now
 
-The first sale below is the one the app opens on. The three after it ran on the earlier, Pyth-based build and are kept as history: the current build's reader refuses their rules accounts, because another layout wrote them.
+The app opens on the newest open sale, PBAND2. The first two below were opened in the sixth run on the rules v2 build. The two after them were opened under version 1 rules, which the new build still reads: they have no offering period and read as never ending.
 
-- **The demo sale a judge sees first: open, banded, priced in the demo dollar**, mint `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` (https://explorer.solana.com/address/2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y?cluster=devnet), 10 percent cap, ceiling 5 percent over Apple. Nine attacks run against it, eight refused and one allowed as expected, the cap and the ceiling both refused on the same sale. This buy was refused at the ceiling with `PriceOutsideBand`: https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet
-- **A list-mode sale** (an issuer's own approved-buyer list, 10 percent cap): mint `FToBcoyaCZtLpbaGFV8wdomngjwuQp5XShj6fHdzLyGv`, template transaction `526NJoSp...` (https://explorer.solana.com/tx/526NJoSpZHxJWy95YEwet2b3gUyKDXSW5rBRGjs3nDTtBuNgB3h2tFwafLHXvSNDdvjsRQtn3s9uzGzvD2ZScmGq?cluster=devnet). Six real buyers seeded it, nine attacks were run against it (eight refused, one allowed, as expected), and it was filled and migrated to a Meteora DAMM v2 pool at `DLK2xF5i18rgXui9RN6urpAYg3bJxKNtkxiMYS5KECv`.
-- **A banded sale priced in Apple's stock price**, open access, mint `E1PSmsUoxvwJas6e1UY8soQq3nhSTUsaP3oBS9eLws4f`, price account `9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb`. Nine attacks run, eight refused as expected. Later graduated to DAMM v2 pool `4NYMEmSNcUQ4n3r1Q1jT9W3Lupfxcvw5Z3W2f3oVy116`.
-- **A banded sale priced in a dollar token, deliberately opened above Apple's real price** to prove the ceiling actually refuses a buy on chain, not only in a test: mint `4vyCQRLeowhSzaZqbPVpdNy7upxVtqaCZdono2z8JeoT`, opened at 400 dollars a share while Apple traded at 344.64. Every buy was refused with the program's own `PriceOutsideBand` error, including this one: https://explorer.solana.com/tx/2iJnchxoJLgyixCS56VcxB1Aac1pRfoLhXywyK2RYmQvQmx6wYM97cZRW5R2ss7AFjPjZ27oCC9VAJeC13aEKb3B?cluster=devnet
+| Sale | Mint | Mode | Price ceiling | Offering ends | Headline transactions |
+| --- | --- | --- | --- | --- | --- |
+| PBAND2, the demo sale a judge sees first | `5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo` | Open access, 10 percent cap, priced in the demo dollar | 5 percent over Apple | 7 October 2026, 10:38 UTC | opened https://explorer.solana.com/tx/5Biy9QvCFgYNEPWFNzEA31aYF5c7vLFBu48jmSUkXa2ocb2akDLjmF6ARQQaZkTY21ZgARMVERpYWqLAocES1KYD?cluster=devnet; a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet |
+| PVRFD, the credential sale | `7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn` | Verifier credential, 10 percent cap, priced in SOL | none | no end, holds until graduation | opened https://explorer.solana.com/tx/3NGu6WxguinVc8VyQSqA79kL3jkCXWhC5kAoaK2kdesSyP8ZHgcCwM8BhZgvLfVoAuZ9okAUbuwB8hwL7PEyVw5D?cluster=devnet; a buy with no attestation refused with `CredentialInvalid` https://explorer.solana.com/tx/2dvaB2gcFvwmdmQbYHV2wuuGKtQfTdPUk6yZNWXTMyrFHE9XVkeWZM2N7tGiwysNDx8jHUTrGxMkBFWDK3G3iPGi?cluster=devnet |
+| PBAND, the fifth run's demo sale | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | Open access, 10 percent cap, priced in the demo dollar | 5 percent over Apple | none, version 1 rules | a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet |
+| PLIST, the fourth run's list sale | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | Issuer's approved list, 10 percent cap, priced in SOL | none | graduated to DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | migration https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet |
+
+Against PBAND2, 9 attacks were run in the sixth run, 8 refused and 1 allowed as expected, the cap and the ceiling both refused on the same sale. Against PVRFD, 10 attacks, 8 refused and 2 allowed as expected: the first time credential mode was attacked on the live program.
+
+History: POPEN (`CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7`, opened at 400 dollars a share so every buy was refused at the ceiling) and a second list sale (`4kzCbpEZxyzwXno1ZVnTJ9BAGSjD1HVgSBSwikEsxeaE`) were retired on 23 September 2026. Four sales from the first three runs, among them the list sale `FToBcoyaCZtLpbaGFV8wdomngjwuQp5XShj6fHdzLyGv` that graduated into DAMM v2 pool `DLK2xF5i18rgXui9RN6urpAYg3bJxKNtkxiMYS5KECv`, were retired after the layout-version build, because its reader refuses rules another layout wrote.
 
 Full transaction-by-transaction detail, including every attack and its signature, is in `docs/measurements/devnet-run.md` and `docs/measurements/sdk-pyth.md` in the repository.
 
@@ -43,7 +59,7 @@ All Rust and TypeScript tests, no network needed:
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/test.sh
 ```
 
-Prints `rust: test result: ok. 27 passed` and a mocha summary of 125 tests passing, then exits 0.
+Prints `rust: test result: ok. 31 passed` and a mocha summary of 137 tests passing, then exits 0. The counts for every suite are in `docs/measurements/test-counts.md`.
 
 The devnet prove command, against the live program:
 
@@ -51,14 +67,16 @@ The devnet prove command, against the live program:
 cd packages/scripts && npm run prove
 ```
 
-Prints a table of attacks, an exit code, and the largest holder's share against the cap. The fifth devnet run, against the banded dollar sale (PBAND), ended:
+Prints a table of attacks, an exit code, and the largest holder's share against the cap. The sixth devnet run, against the banded dollar sale (PBAND2), ended:
 
 ```
+proof    : the largest wallet holds 16.93 percent of the 6229218448 raw units sold, against a cap worth 17.66 percent of them
+cost     : 0.011317 SOL, after 0.033344 SOL came back from the attacking wallets
+
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
-cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
 
-Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
+On the credential sale, `npm run prove -- --mint 7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn`, the same run ended `10 attacks run, 8 refused as expected, 2 allowed as expected, 1 not applicable, 0 off the standard`.
 
 ## The status command
 

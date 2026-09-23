@@ -22,15 +22,15 @@ Then the commands that run a sale, in the order you would actually use them:
 npm run mint-dollars                               # a dollar token to price a sale in
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
-npm run launch -- --mode list --cap-share-bps 1000 # open a sale
-npm run launch -- --mode open --band 500           # open one with a price band
+npm run launch -- --mode list --cap-share-bps 1000 --ends-in 336   # open a sale for two weeks
+npm run launch -- --mode open --band 500 --quote <dollar mint> --no-end  # a price band, no end
 npm run seed                                       # a few real buyers
 npm run prove                                      # attack it, print every refusal
 npm run graduate                                   # fill the curve and migrate
 npm run status                                     # is the whole devnet demo still up
 ```
 
-`launch` takes several flags to shape the sale: `--mode` (`open`, `list`, or `credential`), `--cap-share-bps` (the per-wallet limit, in basis points of what the curve sells; 1000 is 10 percent), `--band` (how far over the real stock price the curve may go, in basis points; leave it out for no ceiling), `--feed` (which Pyth price the ceiling checks against), and `--quote` (what token buyers pay in: `wsol`, or a dollar mint from `mint-dollars`). The full flag table is in `packages/scripts/README.md`.
+`launch` takes several flags to shape the sale: `--ends-in` or `--no-end`, one of which is required (`--ends-in 336` lifts every rule 336 hours after launch; `--no-end` keeps the rules until the curve graduates), `--mode` (`open`, `list`, or `credential`), `--cap-share-bps` (the per-wallet limit, in basis points of what the curve sells; 1000 is 10 percent), `--band` (how far over the real stock price the curve may go, in basis points; leave it out for no ceiling), `--feed` (which Pyth price the ceiling checks against), and `--quote` (what token buyers pay in: `wsol`, or a dollar mint from `mint-dollars`; a sale with `--band` must be paid in a dollar mint). The full flag table is in `packages/scripts/README.md`.
 
 ## For a buyer: what preflight tells you before you sign anything
 
