@@ -1,5 +1,7 @@
 "use client";
 
+import "@/lib/buffer-shim";
+
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
