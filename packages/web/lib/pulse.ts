@@ -15,6 +15,8 @@ import {
 } from "pangu-sdk";
 import { loadPool } from "pangu-sdk/dbc";
 
+import { feedWords } from "./feeds";
+import { chooseLiveSale, lastLiveSale, type LiveSale } from "./live-sale";
 import { oldestFirst } from "./readout";
 import { openedSales, type OpenedSale } from "./sales";
 import { firstReadableSharing, type Standing } from "./sharing";
@@ -74,8 +76,8 @@ export interface HeroPulse {
   priceOffering: Offering;
   /** Dollars per whole share, off the pool's own square root price. */
   priceDollars: number | null;
-  /** Apple, as Pyth published it into the account the program reads. */
-  stockName: string;
+  /** The feed the ceiling follows, in its short label, as Pyth published it into the account the program reads. */
+  stockLabel: string;
   stockDollars: number | null;
   /** The highest curve price this sale still accepts a buy at. */
   ceilingDollars: number | null;
@@ -101,7 +103,7 @@ const EMPTY: HeroPulse = {
   priceSaleName: "",
   priceOffering: NO_END,
   priceDollars: null,
-  stockName: "Apple",
+  stockLabel: feedWords(null).label,
   stockDollars: null,
   ceilingDollars: null,
   priceWarning: null,
@@ -121,6 +123,15 @@ function pricedSale(sales: OpenedSale[]): OpenedSale | null {
     (sale) => sale.bandBps !== null && sale.quoteMint !== WRAPPED_SOL
   );
   return priced.length === 0 ? null : priced[priced.length - 1];
+}
+
+/**
+ * The sale the hero leads with: the live sale lib/live-sale.ts chose, or the
+ * newest priced sale when no banded sale is live.
+ */
+function leadSale(sales: OpenedSale[], live: LiveSale | null): OpenedSale | null {
+  const chosen = live === null ? undefined : sales.find((sale) => sale.mint === live.mint);
+  return chosen ?? pricedSale(sales);
 }
 
 /** The sales that show how the tokens got shared out, newest last. */
@@ -174,7 +185,9 @@ async function runningFirst(candidates: OpenedSale[]): Promise<OpenedSale[]> {
 /** The name of the sale the hero is about, for the poster's metadata row. */
 export function heroSaleName(): string {
   const sales = oldestFirst(openedSales());
-  const priced = pricedSale(sales);
+  // The poster renders before any devnet read finishes, so it takes the last
+  // choice already made rather than waiting on a new one.
+  const priced = leadSale(sales, lastLiveSale());
   const listed = listedSales(sales, "");
   return priced?.name ?? listed[listed.length - 1]?.name ?? "";
 }
@@ -211,6 +224,7 @@ async function standingOfMint(
 interface PricedNumbers {
   name: string;
   offering: Offering;
+  stockLabel: string;
   priceDollars: number | null;
   stockDollars: number | null;
   ceilingDollars: number | null;
@@ -237,6 +251,7 @@ async function readPricedSale(
     const numbers: PricedNumbers = {
       name: opened.name,
       offering: offeringOf(sale),
+      stockLabel: feedWords(sale.hasBand ? sale.priceFeedId : null).label,
       priceDollars: null,
       stockDollars: null,
       ceilingDollars: null,
@@ -291,7 +306,7 @@ async function readPricedSale(
  */
 async function readFromChain(): Promise<HeroPulse> {
   const sales = oldestFirst(openedSales());
-  const priced = pricedSale(sales);
+  const priced = leadSale(sales, await chooseLiveSale());
   const candidates = listedSales(sales, priced?.mint ?? "");
 
   if (priced === null && candidates.length === 0) {
@@ -311,6 +326,7 @@ async function readFromChain(): Promise<HeroPulse> {
     pulse.priceSaleName = pricedNumbers.name;
     pulse.priceOffering = pricedNumbers.offering;
     pulse.priceDollars = pricedNumbers.priceDollars;
+    pulse.stockLabel = pricedNumbers.stockLabel;
     pulse.stockDollars = pricedNumbers.stockDollars;
     pulse.ceilingDollars = pricedNumbers.ceilingDollars;
     pulse.priceWarning = pricedNumbers.priceWarning;

@@ -4,6 +4,7 @@ import { useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { timeUntil } from "@/components/readout/format";
+import { feedWords } from "@/lib/feeds";
 import type { HeroPulse, Offering } from "@/lib/pulse";
 
 const POLL_MS = 15_000;
@@ -129,7 +130,7 @@ export function PulseFallback() {
       <Cell label="on the curve now">
         <span className="text-muted">$ ---</span>
       </Cell>
-      <Cell label="apple, from pyth">
+      <Cell label={feedWords(null).label}>
         <span className="text-muted">$ ---</span>
       </Cell>
       <Cell label="shared out so far">
@@ -223,7 +224,7 @@ export function PulseRow({ initial }: { initial: HeroPulse }) {
       )}
 
       {pulse.stockDollars !== null && (
-        <Cell label={`${pulse.stockName}, from Pyth`} note={priceNote}>
+        <Cell label={pulse.stockLabel} note={priceNote}>
           <Counting value={pulse.stockDollars} format={money} still={still} />
         </Cell>
       )}

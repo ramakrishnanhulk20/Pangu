@@ -389,12 +389,15 @@ export function explorerAddress(address: PublicKey | string): string {
  * with NotApproved before any of these rules is reached. Among open sales the
  * newest wins, because the demo sale is opened last on purpose, priced under
  * the real stock so its buys can pass and the demo dollars button funds them.
+ * A `preferred` mint, the sale the server chose because its price is live,
+ * comes before all of that whenever it is running.
  *
  * Returns null when no sale is running.
  */
 export async function readTarget(
   connection: Connection,
-  candidates: readonly SaleCandidate[]
+  candidates: readonly SaleCandidate[],
+  preferred: string | null = null
 ): Promise<Target | null> {
   // Asked side by side: a paced connection still sends them one at a time, and
   // an unpaced one answers in the time of the slowest.
@@ -415,7 +418,9 @@ export async function readTarget(
   }
 
   const open = running.filter((entry) => entry.sale.accessMode === ACCESS_MODE.open);
-  const chosen = (open.length > 0 ? open : running)[0];
+  const chosen =
+    running.find((entry) => preferred !== null && entry.candidate.mint === preferred) ??
+    (open.length > 0 ? open : running)[0];
   if (chosen === undefined) {
     return null;
   }
@@ -616,6 +621,16 @@ export interface TargetReading {
   readAt: number;
   /** True when devnet missed the latest read and this is the last one it answered. */
   stale: boolean;
+  /**
+   * True when this is the round-the-clock sale because Apple's exchange price
+   * is not usable right now, so the ledger says why it is not the exchange one.
+   */
+  exchangeShut: boolean;
+  /**
+   * The other live banded sales, so the ledger can tell a wallet holding their
+   * shares that a row needs shares of this one.
+   */
+  others: { mint: string; feedId: string }[];
 }
 
 /** What the program will answer one row with, and why when that is not the rule the row is about. */

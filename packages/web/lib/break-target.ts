@@ -2,6 +2,7 @@ import { Connection } from "@solana/web3.js";
 import { PanguLayoutError } from "pangu-sdk";
 
 import { breakConnection, readTarget, targetToWire, type TargetReading } from "./break";
+import { chooseLiveSale, forgetLiveSale } from "./live-sale";
 import { openedSales } from "./sales";
 import { devnetConnection } from "./solana";
 
@@ -41,6 +42,8 @@ let generation = 0;
  * price is stale, and would for up to ten more seconds.
  */
 export function forgetBreakTarget(): void {
+  // The price that just landed may change which sale the page leads with.
+  forgetLiveSale();
   generation += 1;
   held = null;
   missed = null;
@@ -62,13 +65,22 @@ async function readFresh(): Promise<TargetReading> {
     new URL(endpoint).hostname === PUBLIC_HOST
       ? breakConnection(endpoint)
       : new Connection(endpoint, "confirmed");
-  const target = await readTarget(connection, candidates);
+  const live = await chooseLiveSale();
+  const target = await readTarget(connection, candidates, live?.mint ?? null);
   return {
     target: target === null ? null : targetToWire(target),
     failure: target === null ? NO_SALE : null,
     unanswered: false,
     readAt: Date.now(),
     stale: false,
+    exchangeShut:
+      target !== null && live !== null && live.exchangeShut && target.mint.toBase58() === live.mint,
+    others:
+      target === null || live === null
+        ? []
+        : live.candidates
+            .filter((candidate) => candidate.mint !== target.mint.toBase58())
+            .map(({ mint, feedId }) => ({ mint, feedId })),
   };
 }
 
@@ -88,7 +100,15 @@ export async function readBreakTarget(): Promise<TargetReading> {
   const started = readFresh()
     .catch((error: unknown): TargetReading => {
       if (error instanceof PanguLayoutError) {
-        return { target: null, failure: OLD_BUILD, unanswered: false, readAt: Date.now(), stale: false };
+        return {
+          target: null,
+          failure: OLD_BUILD,
+          unanswered: false,
+          readAt: Date.now(),
+          stale: false,
+          exchangeShut: false,
+          others: [],
+        };
       }
       console.error(
         `break target: ${error instanceof Error ? error.message : String(error)}`
@@ -98,7 +118,15 @@ export async function readBreakTarget(): Promise<TargetReading> {
       if (held !== null) {
         return { ...held.reading, stale: true };
       }
-      return { target: null, failure: NO_ANSWER, unanswered: true, readAt: Date.now(), stale: false };
+      return {
+        target: null,
+        failure: NO_ANSWER,
+        unanswered: true,
+        readAt: Date.now(),
+        stale: false,
+        exchangeShut: false,
+        others: [],
+      };
     })
     .then((reading) => {
       if (startedIn !== generation) {

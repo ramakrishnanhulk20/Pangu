@@ -3,6 +3,7 @@
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { feedWords } from "@/lib/feeds";
 import type { SaleChoice, SaleReadout as Readout } from "@/lib/readout";
 
 import {
@@ -23,6 +24,10 @@ import { PriceCurve } from "./price-curve";
 
 const POLL_MS = 15_000;
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+// The sale a visitor picked, kept for the rest of the visit, so a reload does
+// not hand them back whichever sale the server leads with at that moment.
+const PICKED = "pangu-readout-sale";
 
 function Dot({ tone, beating }: { tone: "accent" | "pending"; beating: boolean }) {
   const colour = tone === "accent" ? "bg-accent" : "bg-pending";
@@ -69,7 +74,7 @@ function everyBuyRefused(readout: Readout): string | null {
     return null;
   }
   if (readout.priceWarning !== null) {
-    return `there is no fresh ${readout.stockName} price`;
+    return `there is no fresh ${feedWords(readout.feedId).fresh}`;
   }
   if (
     readout.priceNow !== null &&
@@ -326,6 +331,30 @@ export function SaleReadout({
     [read, nameOf]
   );
 
+  const pick = useCallback(
+    (mint: string) => {
+      try {
+        window.sessionStorage.setItem(PICKED, mint);
+      } catch {
+        // Storage can be switched off. The pick still holds until the page reloads.
+      }
+      choose(mint);
+    },
+    [choose]
+  );
+
+  useEffect(() => {
+    let picked: string | null = null;
+    try {
+      picked = window.sessionStorage.getItem(PICKED);
+    } catch {
+      return;
+    }
+    if (picked !== null && choices.some((choice) => choice.mint === picked)) {
+      choose(picked);
+    }
+  }, [choices, choose]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!document.hidden) {
@@ -337,6 +366,7 @@ export function SaleReadout({
   }, [read, nameOf]);
 
   const banded = readout.stockDollars !== null;
+  const feed = feedWords(readout.feedId);
   const stockNote =
     readout.stockStale && readout.stockPublishedAt !== null
       ? `stale since ${clock(readout.stockPublishedAt, readout.readAt)}, so buying is paused`
@@ -345,8 +375,8 @@ export function SaleReadout({
   // last one is named as history, never shown as the live number.
   const ceilingNote =
     readout.ceilingDollars === null
-      ? "the ceiling waits on a fresh Apple price"
-      : `until a fresh Apple price lands. It was ${money(readout.ceilingDollars, "dollars")} on the last one`;
+      ? `the ceiling waits on a fresh ${feed.fresh}`
+      : `until a fresh ${feed.fresh} lands. It was ${money(readout.ceilingDollars, "dollars")} on the last one`;
   const quietLine =
     notice ??
     (readout.stale && readout.missedAt !== null
@@ -422,7 +452,7 @@ export function SaleReadout({
             chosen={readout.mint}
             asking={asking}
             refusing={refusal !== null}
-            onChoose={choose}
+            onChoose={pick}
           />
         </motion.div>
       </div>
@@ -503,7 +533,7 @@ export function SaleReadout({
               </Stat>
 
               {banded && (
-                <Stat label="Apple, from Pyth" quiet note={stockNote}>
+                <Stat label={feed.label} quiet note={stockNote}>
                   {readout.stockDollars === null || readout.stockDollars <= 0 ? (
                     <span className="text-muted">not published yet</span>
                   ) : (

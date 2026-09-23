@@ -15,6 +15,7 @@ import {
   readTarget,
   type Target,
 } from "@/lib/break";
+import { chooseLiveSale } from "@/lib/live-sale";
 import { openedSales } from "@/lib/sales";
 import { devnetConnection } from "@/lib/solana";
 
@@ -356,7 +357,9 @@ async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<Gran
     symbol: sale.symbol,
     mode: sale.mode,
   }));
-  const target = await readTarget(connection, candidates);
+  // Sized for the sale the page leads with, the same one the ledger attacks.
+  const live = await chooseLiveSale();
+  const target = await readTarget(connection, candidates, live?.mint ?? null);
   if (target === null) {
     throw new Refused(
       503,

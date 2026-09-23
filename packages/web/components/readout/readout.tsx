@@ -1,3 +1,4 @@
+import { chooseLiveSale } from "@/lib/live-sale";
 import { defaultChoice, readReadout, readSaleChoices } from "@/lib/readout";
 
 import { SaleReadout } from "./sale-readout";
@@ -10,8 +11,8 @@ import { SaleReadout } from "./sale-readout";
  * pool's square root price and its curve, which no browser should download.
  */
 export async function Readout({ id }: { id: string }) {
-  const choices = await readSaleChoices();
-  const chosen = defaultChoice(choices);
+  const [choices, live] = await Promise.all([readSaleChoices(), chooseLiveSale()]);
+  const chosen = defaultChoice(choices, live?.mint ?? null);
 
   if (chosen === null) {
     return (

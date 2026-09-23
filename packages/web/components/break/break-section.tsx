@@ -3,10 +3,12 @@
 import "@/lib/buffer-shim";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ATTACKS,
+  NEEDS_REAL_BUY,
   breakConnection,
   buildAttack,
   needsRealBuy,
@@ -23,6 +25,7 @@ import {
   type TargetReading,
 } from "@/lib/break";
 import { utcDay, utcMoment } from "@/components/readout/format";
+import { feedWords, isAppleExchange } from "@/lib/feeds";
 import { tokenAmount } from "@/lib/format";
 
 import {
@@ -42,6 +45,9 @@ type Mode = "simulate" | "send";
 
 type Rows = Partial<Record<string, RowState>>;
 
+/** Another live banded sale, as the server named it beside the ledger's own. */
+type OtherSale = TargetReading["others"][number];
+
 const POLL_MS = 15_000;
 const RETRY_MS = 5_000;
 
@@ -54,6 +60,9 @@ type PriceRefresh =
   | { state: "running" }
   | { state: "closed"; lastPublishedAt: number }
   | { state: "failed"; reason: string };
+
+const EXCHANGE_SHUT =
+  "Apple's exchange is closed, so this is the round-the-clock sale, whose ceiling follows AAPLx. When the exchange opens the page switches back.";
 
 const UNREACHABLE =
   "This page could not reach its own server to read the sale. Check the connection, then press try again.";
@@ -75,6 +84,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   const { publicKey, sendTransaction } = useWallet();
 
   const [target, setTarget] = useState<Target | null>(null);
+  const [exchangeShut, setExchangeShut] = useState(false);
   const [reading, setReading] = useState(true);
   const [readFailure, setReadFailure] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
@@ -83,6 +93,9 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   const [lamports, setLamports] = useState<number | null>(null);
   const [payingRaw, setPayingRaw] = useState<bigint | null>(null);
   const [saleHeld, setSaleHeld] = useState<bigint | null>(null);
+  const [others, setOthers] = useState<OtherSale[]>([]);
+  // The feed of another live sale this wallet holds shares of, if any.
+  const [otherHeld, setOtherHeld] = useState<string | null>(null);
   const [priceRefresh, setPriceRefresh] = useState<PriceRefresh>({ state: "idle" });
   const [refreshAsked, setRefreshAsked] = useState(false);
 
@@ -104,6 +117,22 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     setLamports(null);
     setPayingRaw(null);
     setSaleHeld(null);
+    setOtherHeld(null);
+  }
+
+  // Shares and verdicts belong to one sale. When the ledger moves to the other
+  // sale, the holdings read for the last one go, so no row unlocks on them, and
+  // so do its results, so the tally never mixes two sales' answers.
+  const targetMint = target === null ? null : target.mint.toBase58();
+  const [heldFor, setHeldFor] = useState(targetMint);
+  if (targetMint !== null && heldFor !== targetMint) {
+    const first = heldFor === null;
+    setHeldFor(targetMint);
+    setPayingRaw(null);
+    setSaleHeld(null);
+    if (!first) {
+      setRows((current) => stopRunning(current));
+    }
   }
 
   // Bumped on every change of wallet, so a run can tell after each await whether
@@ -226,6 +255,9 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
             }
             shown.current = next;
             setTarget(next);
+            setExchangeShut(answer.exchangeShut === true);
+            const named = answer.others ?? [];
+            setOthers((current) => (sameSales(current, named) ? current : named));
             setReadFailure(null);
             setCanRetry(false);
             setReading(false);
@@ -298,6 +330,59 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
       alive = false;
     };
   }, [connection, publicKey, target, reload]);
+
+  useEffect(() => {
+    if (publicKey === null || others.length === 0) {
+      return;
+    }
+    let alive = true;
+    Promise.all(
+      others.map((other) =>
+        tokensHeld(connection, new PublicKey(other.mint), publicKey).then((held) => ({
+          feedId: other.feedId,
+          held,
+        }))
+      )
+    ).then(
+      (holdings) => {
+        if (alive) {
+          setOtherHeld(holdings.find((holding) => holding.held > 0n)?.feedId ?? null);
+        }
+      },
+      () => {
+        // A missed read leaves the last real answer on screen, never a guess.
+      }
+    );
+    return () => {
+      alive = false;
+    };
+  }, [connection, publicKey, others, reload]);
+
+  const otherSale = wallet !== null && others.length > 0 ? otherHeld : null;
+
+  /**
+   * One line under a row that needs shares, when the wallet holds shares of
+   * the other live sale rather than this one, naming which sale they must
+   * come from.
+   */
+  const wrongSaleLine = (attack: Attack): string | null => {
+    if (target === null || otherSale === null || !needsRealBuy(attack)) {
+      return null;
+    }
+    const state = rows[attack.id] ?? IDLE;
+    if (state.status === "building" || state.status === "waiting") {
+      return null;
+    }
+    const gated = state.status === "unavailable" && state.message === NEEDS_REAL_BUY;
+    if (!gated && !realBuyOffer(attack, target, saleHeld)) {
+      return null;
+    }
+    const held = feedWords(otherSale).sale;
+    const needed = feedWords(target.sale.priceFeedId).sale;
+    return held === needed
+      ? `Your wallet holds shares of another sale, but this row needs shares of ${target.name}.`
+      : `Your wallet holds shares of ${held}, but this row needs shares of ${needed}.`;
+  };
 
   const setRow = (attack: Attack, state: RowState) => {
     setRows((current) => ({ ...current, [attack.id]: state }));
@@ -470,6 +555,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
         <Reveal delay={0.1} className="mt-16 sm:mt-20">
           <SaleFacts
             target={target}
+            exchangeShut={exchangeShut}
             reading={reading}
             failure={readFailure}
             onTryAgain={canRetry ? tryAgain : null}
@@ -501,6 +587,14 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
                 firstBuy={firstBuy}
                 onRealBuy={() => void run(FIRST_BUY, "send")}
               />
+              {wrongSaleLine(attack) !== null && (
+                <p
+                  data-testid="break-wrong-sale"
+                  className="-mt-3 mb-7 ml-[3.5rem] max-w-[62ch] border-l-2 border-accent/60 pl-4 text-[13px] leading-relaxed text-muted sm:-mt-5 sm:mb-9 sm:ml-[6rem]"
+                >
+                  {wrongSaleLine(attack)}
+                </p>
+              )}
             </Reveal>
           ))}
         </ol>
@@ -547,6 +641,7 @@ function ModeToggle({ mode, onPick }: { mode: Mode; onPick: (mode: Mode) => void
 
 function SaleFacts({
   target,
+  exchangeShut,
   reading,
   failure,
   onTryAgain,
@@ -554,6 +649,8 @@ function SaleFacts({
   onRefreshAgain,
 }: {
   target: Target | null;
+  /** True when this is the round-the-clock sale because Apple's exchange is shut. */
+  exchangeShut: boolean;
   reading: boolean;
   failure: string | null;
   /** Set when the read failed and asking again may help. */
@@ -608,9 +705,15 @@ function SaleFacts({
       value: `$${target.ceilingDollars.toFixed(2)} a share`,
     });
   }
+  if (target.sale.hasBand) {
+    facts.push({
+      label: "the ceiling follows",
+      value: feedWords(target.sale.priceFeedId).name,
+    });
+  }
   if (target.stockDollars !== null) {
     facts.push({
-      label: "the real stock, from Pyth",
+      label: feedWords(target.sale.priceFeedId).label,
       value: `$${target.stockDollars.toFixed(2)}`,
     });
   }
@@ -628,7 +731,7 @@ function SaleFacts({
     <div>
       <dl
         data-testid="break-facts"
-        className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
+        className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-4"
       >
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
@@ -639,6 +742,15 @@ function SaleFacts({
           </div>
         ))}
       </dl>
+
+      {exchangeShut && (
+        <p
+          data-testid="break-exchange-shut"
+          className="mt-7 max-w-[68ch] text-[14px] leading-relaxed text-muted"
+        >
+          {EXCHANGE_SHUT}
+        </p>
+      )}
 
       {target.standingRefusal === "PriceStale" ? (
         <StalePrice
@@ -670,6 +782,7 @@ function StalePrice({
   priceRefresh: PriceRefresh;
   onRefreshAgain: (() => void) | null;
 }) {
+  const feed = feedWords(target.sale.priceFeedId);
   if (priceRefresh.state === "running") {
     return (
       <p
@@ -677,16 +790,18 @@ function StalePrice({
         className="mt-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending"
       >
         <Spinner />
-        bringing Apple&rsquo;s price up to date on devnet
+        {`bringing ${feed.price} up to date on devnet`}
       </p>
     );
   }
 
   const sentence =
     priceRefresh.state === "closed"
-      ? `Apple's market is closed and Pyth has no new price since ${utcMoment(
+      ? `${isAppleExchange(target.sale.priceFeedId) ? "Apple's market is closed and " : ""}Pyth has no new ${
+          feed.fresh
+        } since ${utcMoment(
           priceRefresh.lastPublishedAt * 1000
-        )}. Buys on this sale wait for the next session; selling back is never affected.`
+        )}. Buys on this sale wait for a fresh one; selling back is never affected.`
       : priceRefresh.state === "failed"
         ? `${target.standingReason ?? ""} ${priceRefresh.reason}`.trim()
         : target.standingReason;
@@ -792,6 +907,13 @@ function realBuyOffer(attack: Attack, target: Target | null, saleHeld: bigint | 
     return false;
   }
   return !(attack.id === "second-buy" && target.offeringOver);
+}
+
+function sameSales(left: OtherSale[], right: OtherSale[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((sale, place) => sale.mint === right[place]?.mint && sale.feedId === right[place]?.feedId)
+  );
 }
 
 /** A thrown value as a sentence a visitor can act on. */

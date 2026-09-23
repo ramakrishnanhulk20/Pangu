@@ -15,6 +15,7 @@ import {
 } from "pangu-sdk";
 import { loadPool, saleProgress, type PoolView } from "pangu-sdk/dbc";
 
+import { feedWords, type FeedWords } from "./feeds";
 import { openedSales, type OpenedSale } from "./sales";
 import { devnetConnection } from "./solana";
 
@@ -57,6 +58,8 @@ export interface SaleReadout {
   priceNow: number | null;
   /** The real stock behind the token, on a sale with a price band. */
   stockName: string | null;
+  /** The Pyth feed the ceiling follows, lowercase hex, on a sale with a price band. */
+  feedId: string | null;
   stockDollars: number | null;
   /** The highest curve price this sale still takes a buy at. */
   ceilingDollars: number | null;
@@ -251,6 +254,7 @@ function bindingRule(
     priceNow: number | null;
     priceWarning: string | null;
     offeringOver: boolean;
+    feed: FeedWords;
   }
 ): string {
   if (input.graduated) {
@@ -266,17 +270,17 @@ function bindingRule(
   const capLine = `any wallet may buy up to ${percentWords(input.capOfSale)} of the sale`;
 
   if (sale.hasBand && input.priceWarning !== null) {
-    return `There is no fresh Apple price right now, so every buy is refused until one arrives. When it does, ${capLine}.`;
+    return `There is no fresh ${input.feed.fresh} right now, so every buy is refused until one arrives. When it does, ${capLine}.`;
   }
 
   if (sale.hasBand && input.ceilingDollars !== null) {
     const ceiling = `Buys stop above ${dollarWords(input.ceilingDollars)} a share, ${(
       sale.bandBps / 100
-    ).toFixed(0)} percent over Apple's own price`;
+    ).toFixed(0)} percent over ${input.feed.price}`;
     if (input.priceNow !== null && input.priceNow > input.ceilingDollars) {
       return `${ceiling}, and the curve is at ${dollarWords(
         input.priceNow
-      )}, so every buy is refused until Apple catches up.`;
+      )}, so every buy is refused until ${input.feed.price} catches up.`;
     }
     return `${ceiling}.`;
   }
@@ -304,6 +308,7 @@ function refused(
     dammPool: null,
     priceNow: null,
     stockName: null,
+    feedId: null,
     stockDollars: null,
     ceilingDollars: null,
     priceWarning: null,
@@ -447,6 +452,7 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
     dammPool,
     priceNow: priceAt(now, baseDecimals, quoteDecimals),
     stockName: sale.hasBand ? "Apple" : null,
+    feedId: sale.hasBand ? sale.priceFeedId : null,
     stockDollars,
     ceilingDollars,
     priceWarning,
@@ -474,6 +480,7 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
       priceNow: priceAt(now, baseDecimals, quoteDecimals),
       priceWarning,
       offeringOver: standing.offeringOver,
+      feed: feedWords(sale.hasBand ? sale.priceFeedId : null),
     }),
     endsAt: sale.endsAt,
     offeringOver: standing.offeringOver,
@@ -600,7 +607,18 @@ export async function readSaleChoices(): Promise<SaleChoice[]> {
   });
 }
 
-/** The sale the readout opens on: the newest one still taking buys. */
-export function defaultChoice(choices: SaleChoice[]): SaleChoice | null {
-  return choices.find((choice) => choice.running === true) ?? choices[0] ?? null;
+/**
+ * The sale the readout opens on: the live sale lib/live-sale.ts chose when it
+ * is in the list, otherwise the newest one still taking buys.
+ */
+export function defaultChoice(
+  choices: SaleChoice[],
+  preferred: string | null = null
+): SaleChoice | null {
+  return (
+    choices.find((choice) => preferred !== null && choice.mint === preferred) ??
+    choices.find((choice) => choice.running === true) ??
+    choices[0] ??
+    null
+  );
 }

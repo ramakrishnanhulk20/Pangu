@@ -1,0 +1,37 @@
+node lab-evidence/live-sale-check.mjs, run 2026-09-23T13:36:02Z
+
+case      : as the chain stands now
+took      : 1.1 s
+candidate : Pangu Priced Share, round the clock (8FaBUEjM) follows AAPLx, price really usable, published 2026-09-23T13:05:35.000Z
+candidate : Pangu Priced Share, second offering (5VrNEfV1) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+candidate : Pangu Priced Share (2dp5caL9) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+chosen    : Pangu Priced Share, second offering (5VrNEfV1), ceiling follows Apple's exchange price, closed false, exchangeShut false
+ok    wanted    : the sale following Apple's exchange price, closed false, exchangeShut false
+
+case      : exchange forced stale
+took      : 1.1 s
+candidate : Pangu Priced Share, round the clock (8FaBUEjM) follows AAPLx, price really usable, published 2026-09-23T13:05:35.000Z
+candidate : Pangu Priced Share, second offering (5VrNEfV1) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+candidate : Pangu Priced Share (2dp5caL9) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+chosen    : Pangu Priced Share, round the clock (8FaBUEjM), ceiling follows AAPLx, closed false, exchangeShut true
+ok    wanted    : the sale following AAPLx, closed false, exchangeShut true
+
+case      : aaplx forced stale
+took      : 1.2 s
+candidate : Pangu Priced Share, round the clock (8FaBUEjM) follows AAPLx, price really usable, published 2026-09-23T13:05:35.000Z
+candidate : Pangu Priced Share, second offering (5VrNEfV1) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+candidate : Pangu Priced Share (2dp5caL9) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+chosen    : Pangu Priced Share, second offering (5VrNEfV1), ceiling follows Apple's exchange price, closed false, exchangeShut false
+ok    wanted    : the sale following Apple's exchange price, closed false, exchangeShut false
+
+case      : both forced stale
+refresh   : 5VrNEfV1 answered closed (forced)
+refresh   : 8FaBUEjM answered closed (forced)
+took      : 1.1 s
+candidate : Pangu Priced Share, round the clock (8FaBUEjM) follows AAPLx, price really usable, published 2026-09-23T13:05:35.000Z
+candidate : Pangu Priced Share, second offering (5VrNEfV1) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+candidate : Pangu Priced Share (2dp5caL9) follows Apple's exchange price, price really usable, published 2026-09-23T12:37:56.000Z
+chosen    : Pangu Priced Share, second offering (5VrNEfV1), ceiling follows Apple's exchange price, closed true, exchangeShut false
+ok    wanted    : the sale following Apple's exchange price, closed true, exchangeShut false
+
+every case chose the right sale
