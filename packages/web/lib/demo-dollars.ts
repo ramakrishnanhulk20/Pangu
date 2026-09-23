@@ -43,6 +43,13 @@ const GRANT_MULTIPLE = 4n;
 /** One wallet may take a grant this often. */
 const WALLET_WAIT_MS = 60 * 60 * 1000;
 
+/**
+ * A pending slot older than this was never kept or handed back: the function
+ * holding it was killed mid-mint. It is dropped, so a warm instance never locks
+ * the wallet out for good.
+ */
+const PENDING_EXPIRY_MS = 5 * 60 * 1000;
+
 /** And the route as a whole hands out this many inside one minute. */
 const MINUTE_MS = 60 * 1000;
 const GRANTS_A_MINUTE = 10;
@@ -143,7 +150,11 @@ function reserve(wallet: PublicKey): Reservation {
     );
   }
   const key = wallet.toBase58();
-  const held = walletSlots.get(key);
+  let held = walletSlots.get(key);
+  if (held !== undefined && held.pending && now - held.at >= PENDING_EXPIRY_MS) {
+    walletSlots.delete(key);
+    held = undefined;
+  }
   if (held !== undefined && held.pending) {
     throw new Refused(
       429,
@@ -169,6 +180,11 @@ function reserve(wallet: PublicKey): Reservation {
 function keep(reservation: Reservation): void {
   reservation.walletSlot.pending = false;
   reservation.walletSlot.at = Date.now();
+  // A mint that outlived its expiry still landed, so it still starts the
+  // wallet's hour, unless a newer request holds the slot by now.
+  if (!walletSlots.has(reservation.wallet)) {
+    walletSlots.set(reservation.wallet, reservation.walletSlot);
+  }
 }
 
 /** Nothing was minted: both slots go back, and the wallet may press again at once. */

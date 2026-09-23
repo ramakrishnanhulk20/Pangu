@@ -8,6 +8,8 @@ import {
   type ConnectionConfig,
   type TransactionInstruction,
 } from "@solana/web3.js";
+import { BN } from "@anchor-lang/core";
+import { swapQuoteExactOut } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import {
   ExtensionType,
   NATIVE_MINT,
@@ -257,7 +259,7 @@ export const ATTACKS: readonly Attack[] = [
     gloss: "the exit is always open",
     promise: "it goes through",
     kind: "pass",
-    cost: FEE,
+    cost: `sells a fifth of what you hold back to the pool, and ${FEE}`,
     needsTokens: true,
     needsPayingToken: false,
   },
@@ -487,6 +489,7 @@ async function programAnswer(context: BuildContext, shares: bigint): Promise<Exp
   // none, so a missing record is never what the chain answers. preflightBuy
   // stops at the missing record and cannot be told the record will be there, so
   // the rest of the hook's order is worked out here instead.
+  // When pangu-sdk's preflightBuy takes `openingRecord`, it answers this case itself and the rest of this function goes.
   if (target.sale.accessMode === ACCESS_MODE.issuerList) {
     // A record a wallet opens for itself starts off the list; only the issuer
     // puts it on. So the approval refuses before the band is read.
@@ -501,14 +504,22 @@ async function programAnswer(context: BuildContext, shares: bigint): Promise<Exp
     );
   }
 
-  // The band's answer is the same for every wallet: it turns only on the curve,
-  // the size of the buy and the stock price. So it is read from preflightBuy for
-  // a wallet that does hold a record here, and the cap is then judged from this
-  // wallet's own capRoom, which is the whole cap for a record opened in this
-  // transaction. Band first, then cap, as execute.rs reads them.
-  const band = await bandAt(context, shares);
-  if (band.refusal !== null) {
-    return answerOf(band.reading, shares, target);
+  // Band first, then cap, as execute.rs reads them. The band turns only on the
+  // curve, the size of the buy and the stock price, so it is worked out for
+  // this buy alone and never through another wallet's record. The cap is this
+  // wallet's own capRoom, the whole cap for a record opened in this transaction.
+  if (target.sale.hasBand) {
+    if (target.standingRefusal !== null) {
+      return {
+        name: target.standingRefusal,
+        why: target.standingReason ?? explainPanguError(target.standingRefusal),
+      };
+    }
+    const read = await bandReader(context);
+    const band = read === null ? null : read(shares);
+    if (band !== null && band.refusal !== null) {
+      return answerOf({ error: band.refusal, reason: null, ...band }, shares, target);
+    }
   }
   if (shares > own.capRoom) {
     return { name: "OverCap", why: explainPanguError("OverCap") };
@@ -516,7 +527,11 @@ async function programAnswer(context: BuildContext, shares: bigint): Promise<Exp
   return { name: "it goes through", why: null };
 }
 
-function answerOf(reading: BuyPreflight, shares: bigint, target: Target): Expected {
+function answerOf(
+  reading: Pick<BuyPreflight, "error" | "reason" | "curvePrice" | "ceiling">,
+  shares: bigint,
+  target: Target
+): Expected {
   if (reading.error === null) {
     return { name: "it goes through", why: null };
   }
@@ -632,6 +647,17 @@ const ROOM_DOUBLINGS = 8;
 /** How long one measurement of the room is trusted before it is taken again. */
 const ROOM_FRESH_MS = 20_000;
 
+/*
+ * The two rows that move tokens the wallet already holds stay small, so what a
+ * visitor can lose is bounded even if the rule under test failed (C16). The
+ * send to a stranger is the smaller of half the holding and a fiftieth of the
+ * cap. The sell back is a fifth of the holding: part of it, never all, the
+ * way the prove command sells part.
+ */
+const SEND_HELD_PART = 2n;
+const SEND_CAP_PART = 50n;
+const SELL_HELD_PART = 5n;
+
 /** How far a built buy may land from the shares it was sized for: a two hundredth of them. */
 const SIZE_SLACK_PART = 200n;
 const SIZE_TRIES = 6;
@@ -653,60 +679,61 @@ export function payingNeeded(attack: Attack, target: Target): bigint {
   return target.capWorth + target.capWorth / 20n;
 }
 
-/** The band's answer to a buy of this size, the same for every wallet. */
+/** The band's answer to a buy of one size, the same for every wallet. */
 interface BandReading {
   refusal: PanguErrorName | null;
-  reading: BuyPreflight;
+  /** Where the buy would leave the curve, in dollars scaled by 1e18. */
+  curvePrice: bigint | null;
+  ceiling: bigint | null;
 }
 
-const probes = new WeakMap<Target, Promise<PublicKey>>();
+type BandReader = (shares: bigint) => BandReading;
+
+/** The one number read off Meteora's quote. Its published type does not resolve here. */
+interface QuoteLanding {
+  nextSqrtPrice: { toString(): string };
+}
 
 /**
- * A wallet that holds a record on this sale, to read the band's answer through.
+ * Answers the band for any size of buy from one read of the pool and the price.
  *
- * preflightBuy stops at a missing record before it reaches the band, so a fresh
- * wallet cannot be asked about the band directly. The visitor's own wallet is
- * used when it has a record, and any other buyer's otherwise.
+ * The same sum preflightBuy does: Meteora's own exact-out quote says where the
+ * buy would leave the curve, and that is held against the ceiling the live stock
+ * price sets, with the program's roundings. Nothing in it depends on who buys,
+ * so it works on a sale nobody has bought into yet. Null when the sale has no
+ * band. The reader throws when the curve cannot fill the size asked.
  */
-function bandProbe(context: BuildContext): Promise<PublicKey> {
-  let found = probes.get(context.target);
-  if (found === undefined) {
-    found = findProbe(context);
-    probes.set(context.target, found);
-    found.catch(() => probes.delete(context.target));
+async function bandReader(context: BuildContext): Promise<BandReader | null> {
+  const { connection, target } = context;
+  if (!target.sale.hasBand) {
+    return null;
   }
-  return found;
-}
-
-async function findProbe({ connection, target, wallet }: BuildContext): Promise<PublicKey> {
-  const records = await listBuyerRecords(connection, target.mint);
-  const listed = target.sale.accessMode === ACCESS_MODE.issuerList;
-  const usable =
-    records.find((record) => record.wallet.equals(wallet)) ??
-    records.find((record) => !listed || record.approved);
-  if (usable === undefined) {
-    throw new Error(
-      "no wallet holds a record on this sale yet, so the band's answer cannot be read ahead of the first buy"
+  const view = await loadPool(connection, target.mint);
+  const price = await readPrice(connection, view.sale);
+  if (!price.usable) {
+    const refusal = price.error ?? "PriceStale";
+    return () => ({ refusal, curvePrice: null, ceiling: null });
+  }
+  const ceiling = priceCeiling(view.sale, price.price);
+  return (shares) => {
+    const quote = swapQuoteExactOut(
+      view.poolAccount,
+      view.configState,
+      false,
+      new BN(shares.toString()),
+      0,
+      false,
+      view.currentPoint,
+      // Pangu's template leaves the first swap minimum fee off, as pangu-sdk's quote does.
+      false
+    ) as unknown as QuoteLanding;
+    const curvePrice = curvePriceDollars(
+      BigInt(quote.nextSqrtPrice.toString()),
+      view.sale.baseDecimals,
+      view.sale.quoteDecimals
     );
-  }
-  return usable.wallet;
-}
-
-async function bandAt(context: BuildContext, shares: bigint): Promise<BandReading> {
-  const reading = await preflightBuy({
-    connection: context.connection,
-    buyer: await bandProbe(context),
-    mint: context.target.mint,
-    amountOut: shares,
-  });
-  if (reading.error === null || reading.error === "OverCap") {
-    // OverCap here is the probe wallet's own cap, judged after the band passed.
-    return { refusal: null, reading };
-  }
-  if (PRICE_REFUSALS.includes(reading.error)) {
-    return { refusal: reading.error, reading };
-  }
-  throw new Error(`the band could not be read on this sale: ${reading.reason ?? reading.error}`);
+    return { refusal: curvePrice > ceiling ? "PriceOutsideBand" : null, curvePrice, ceiling };
+  };
 }
 
 /** Where the ceiling sits, measured in shares a buy can take from here. */
@@ -753,10 +780,10 @@ function depthOf(price: bigint | null): number | null {
   return price === null || price <= 0n ? null : 1 / Math.sqrt(Number(price));
 }
 
-async function pointAt(context: BuildContext, shares: bigint): Promise<Point | PanguErrorName> {
+function pointAt(read: BandReader, shares: bigint): Point | PanguErrorName {
   let band: BandReading;
   try {
-    band = await bandAt(context, shares);
+    band = read(shares);
   } catch (error) {
     if (/liquidity/i.test(error instanceof Error ? error.message : String(error))) {
       return { shares, side: "unfillable", depth: null, ceilingDepth: null };
@@ -769,8 +796,8 @@ async function pointAt(context: BuildContext, shares: bigint): Promise<Point | P
   return {
     shares,
     side: band.refusal === null ? "under" : "over",
-    depth: depthOf(band.reading.curvePrice),
-    ceilingDepth: depthOf(band.reading.ceiling),
+    depth: depthOf(band.curvePrice),
+    ceilingDepth: depthOf(band.ceiling),
   };
 }
 
@@ -782,8 +809,8 @@ async function pointAt(context: BuildContext, shares: bigint): Promise<Point | P
  * straight line between the last buy under and the first over, in the measure
  * where the curve is straight, says where the ceiling sits, and the chain is
  * asked just either side of that point to pin it. When the line stops closing
- * in, the gap is halved instead. Every question is a real preflightBuy against
- * live state, usually three on a sale whose curve is one stretch.
+ * in, the gap is halved instead. Every question is Meteora's own quote against
+ * one live read of the pool and the price, the same sum preflightBuy does.
  */
 async function measureRoom(context: BuildContext): Promise<CeilingRoom | null> {
   const { target } = context;
@@ -798,6 +825,10 @@ async function measureRoom(context: BuildContext): Promise<CeilingRoom | null> {
   if (target.standingRefusal !== null && PRICE_REFUSALS.includes(target.standingRefusal)) {
     return null;
   }
+  const read = await bandReader(context);
+  if (read === null) {
+    return null;
+  }
 
   let under: Point = {
     shares: 0n,
@@ -808,7 +839,7 @@ async function measureRoom(context: BuildContext): Promise<CeilingRoom | null> {
   let over: Point | null = null;
   let reach = target.cap;
   for (let doubling = 0; doubling < ROOM_DOUBLINGS && over === null; doubling += 1) {
-    const point = await pointAt(context, reach);
+    const point = pointAt(read, reach);
     if (typeof point === "string") {
       return null;
     }
@@ -846,7 +877,7 @@ async function measureRoom(context: BuildContext): Promise<CeilingRoom | null> {
     if (next <= under.shares || next >= over.shares) {
       next = under.shares + gap / 2n;
     }
-    const point = await pointAt(context, next);
+    const point = pointAt(read, next);
     if (typeof point === "string") {
       return null;
     }
@@ -1184,7 +1215,7 @@ export async function buildAttack(
       false,
       TOKEN_2022_PROGRAM_ID
     );
-    const amount = held / 2n > 0n ? held / 2n : held;
+    const amount = max(min(held / SEND_HELD_PART, target.cap / SEND_CAP_PART), 1n);
     const transfer = createTransferCheckedInstruction(
       ownAccount,
       target.mint,
@@ -1275,13 +1306,14 @@ export async function buildAttack(
   if (held === 0n) {
     throw new Error("this one needs tokens to sell back. Run the buy under the cap above first.");
   }
+  const part = max(held / SELL_HELD_PART, 1n);
   const exit = await sellTransaction({
     connection,
     seller: wallet,
     mint: target.mint,
-    amountIn: held,
+    amountIn: part,
   });
-  return promised(exit.transaction, held);
+  return promised(exit.transaction, part);
 }
 
 async function ready(
@@ -1308,6 +1340,10 @@ export interface AttackResult {
   sentence: string | null;
   /** The last log line, when the refusal came from somewhere else. */
   logLine: string | null;
+  /** The node's own error value for a failed transaction, as text. Null when it went through. */
+  rpcError: string | null;
+  /** Every log line the node returned, kept so a failure can be named for what it is. */
+  logs: string[];
   signature: string | null;
   link: string | null;
 }
@@ -1321,12 +1357,24 @@ function unseen(signature: string | null): AttackResult {
     errorName: null,
     sentence: UNSEEN,
     logLine: null,
+    rpcError: null,
+    logs: [],
     signature,
     link: null,
   };
 }
 
-function readLogs(logs: string[] | null, failed: boolean): AttackResult {
+/** The node's error value as text: a bare name such as AccountNotFound, or the object it sent. */
+function errorText(error: unknown): string | null {
+  if (error === null || error === undefined) {
+    return null;
+  }
+  return typeof error === "string" ? error : JSON.stringify(error);
+}
+
+function readLogs(logs: string[] | null, error: unknown): AttackResult {
+  const rpcError = errorText(error);
+  const failed = rpcError !== null;
   if (!failed && logs === null) {
     // No error and no logs is no answer at all. Calling it allowed would claim
     // a transaction went through with nothing on chain to show for it.
@@ -1338,6 +1386,8 @@ function readLogs(logs: string[] | null, failed: boolean): AttackResult {
       errorName: null,
       sentence: null,
       logLine: null,
+      rpcError: null,
+      logs: logs ?? [],
       signature: null,
       link: null,
     };
@@ -1349,6 +1399,8 @@ function readLogs(logs: string[] | null, failed: boolean): AttackResult {
     errorName: found?.name ?? null,
     sentence: found === null ? null : explainPanguError(found.name),
     logLine: found === null ? lastSpokenLine(lines) : null,
+    rpcError,
+    logs: lines,
     signature: null,
     link: null,
   };
@@ -1375,22 +1427,50 @@ function lastSpokenLine(lines: readonly string[]): string {
   return anything[anything.length - 1] ?? "the node returned no logs";
 }
 
+/** What a failure the sale's rules did not cause says to a visitor. */
+export interface PlainFailure {
+  /** What to do about it, when the failure is one a visitor can fix. */
+  sentence: string | null;
+  /** The node's own words, shown as they came when there is nothing plainer to say. */
+  raw: string | null;
+}
+
+/** The runtime's names for a fee payer or a new account that has no SOL behind it. */
+const NO_SOL_ERRORS = /AccountNotFound|InsufficientFundsForFee|InsufficientFundsForRent/;
+const NO_SOL_LOGS = /insufficient lamports/i;
+/** The token program's words for an account short of the token, or not opened at all. */
+const SHORT_TOKEN_LOGS = /insufficient funds|AccountNotInitialized|account not initialized/i;
+
+const NO_SOL = "This wallet has no devnet SOL: use the faucet link above.";
+
 /**
- * A sentence for a failure the sale's rules did not cause.
+ * Names a failure the sale's rules did not cause.
  *
- * The one a visitor meets most is an empty wallet, which the token program
- * reports as insufficient funds from inside Meteora's swap, so it is named for
- * what it is rather than left as a log line, and it points at the button that
- * fixes it.
+ * The ones a visitor meets most are an empty wallet, which the runtime reports
+ * before any program runs, and a wallet short of the token the sale is priced
+ * in, which the token program reports from inside Meteora's swap. Both point at
+ * the button that fixes them. Anything else is shown in the node's own words.
  */
-export function plainFailure(result: AttackResult, target: Target): string {
-  const line = result.logLine ?? "";
-  if (/insufficient funds/i.test(line)) {
-    return target.payingInSol
-      ? "This wallet does not hold enough devnet SOL for this buy. Take some from the faucet above and run it again."
-      : "This wallet does not hold enough of the token this sale is priced in, so the buy stops at the token program before the sale's rules are reached. Get demo dollars above first, then run it again.";
+export function plainFailure(
+  result: AttackResult,
+  target: Target | null,
+  attack: Attack
+): PlainFailure {
+  const logs = result.logs.join("\n");
+  if (NO_SOL_ERRORS.test(result.rpcError ?? "") || NO_SOL_LOGS.test(logs)) {
+    return { sentence: NO_SOL, raw: null };
   }
-  return `The chain refused this, and the reason did not come from the sale's rules: ${line}`;
+  if (attack.needsPayingToken && SHORT_TOKEN_LOGS.test(logs)) {
+    return {
+      sentence:
+        target !== null && target.payingInSol
+          ? NO_SOL
+          : "Get demo dollars above first. This wallet does not hold enough of the token this sale is priced in, so the token program stopped the buy before the sale's rules were reached.",
+      raw: null,
+    };
+  }
+  const raw = [result.logLine, result.rpcError].filter((part) => part !== null).join("  |  ");
+  return { sentence: null, raw: raw === "" ? "the node gave no reason" : raw };
 }
 
 /**
@@ -1412,7 +1492,7 @@ export async function simulateAttack(
     new VersionedTransaction(transaction.compileMessage()),
     { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" }
   );
-  return readLogs(simulated.value.logs, simulated.value.err !== null);
+  return readLogs(simulated.value.logs, simulated.value.err);
 }
 
 /**
@@ -1449,10 +1529,7 @@ export async function readLanded(
   if (detail === null) {
     return unseen(signature);
   }
-  const result = readLogs(
-    detail.meta?.logMessages ?? null,
-    (detail.meta?.err ?? null) !== null
-  );
+  const result = readLogs(detail.meta?.logMessages ?? null, detail.meta?.err ?? null);
   return result.outcome === "unseen"
     ? unseen(signature)
     : { ...result, signature, link: explorerTx(signature) };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ATTACKS,
@@ -13,12 +13,14 @@ import {
   readTarget,
   simulateAttack,
   type Attack,
+  type AttackId,
+  type AttackResult,
   type SaleCandidate,
   type Target,
 } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
 
-import { AttackRow, IDLE, asExpected, type RowState } from "./attack-row";
+import { AttackRow, IDLE, STOPPED, asExpected, type RowState } from "./attack-row";
 import { Reveal } from "./strike";
 import { Tally } from "./tally";
 import { WalletStrip } from "./wallet-strip";
@@ -62,6 +64,29 @@ export function BreakSection({
   const [reload, setReload] = useState(0);
 
   const wallet = publicKey === null ? null : publicKey.toBase58();
+
+  // Everything on the ledger belongs to one wallet. When the wallet changes or
+  // disconnects, its rows, its tally and its balances go with it, and a row
+  // still running for the old wallet ends as stopped so it is never counted
+  // for the new one.
+  const [ledgerFor, setLedgerFor] = useState(wallet);
+  if (ledgerFor !== wallet) {
+    setLedgerFor(wallet);
+    setRows((current) => stopRunning(current));
+    setLamports(null);
+    setPayingRaw(null);
+  }
+
+  // Bumped on every change of wallet, so a run can tell after each await whether
+  // the wallet it started under is still the one on screen. A count rather than
+  // the address, so switching away and back still stops the old run.
+  const walletTurn = useRef(0);
+  useEffect(() => {
+    walletTurn.current += 1;
+  }, [wallet]);
+
+  // The latest run of each row. An older run finishing late never overwrites it.
+  const latestRun = useRef(new Map<AttackId, number>());
   // The list of sales comes from the server and does not change while the page
   // is open, so it is taken once. Reading it every render would restart the
   // chain read on every keystroke of state above.
@@ -130,15 +155,53 @@ export function BreakSection({
     if (publicKey === null || target === null) {
       return;
     }
-    setRow(attack, { ...IDLE, status: "building" });
+    const startedUnder = walletTurn.current;
+    const turn = (latestRun.current.get(attack.id) ?? 0) + 1;
+    latestRun.current.set(attack.id, turn);
+
+    // Writes the row only while this is its latest run and the wallet has not
+    // changed. Returns false when the run should stop.
+    const settle = (state: RowState): boolean => {
+      if (latestRun.current.get(attack.id) !== turn) {
+        return false;
+      }
+      if (walletTurn.current !== startedUnder) {
+        setRow(attack, STOPPED);
+        return false;
+      }
+      setRow(attack, state);
+      return true;
+    };
+
+    // A row that was sent but never read back is read again, never sent again:
+    // the transaction is already on its way and a second send would be a
+    // second attempt the visitor did not ask for.
+    const before = rows[attack.id];
+    if (before !== undefined && before.status === "unanswered" && before.signature !== null) {
+      const signature = before.signature;
+      settle({ ...before, status: "waiting" });
+      try {
+        const result = await readLanded(connection, signature);
+        if (settle({ ...before, status: "done", result })) {
+          setReload((count) => count + 1);
+        }
+      } catch {
+        settle(before);
+      }
+      return;
+    }
+
+    settle({ ...IDLE, status: "building" });
     try {
       const built = await buildAttack(attack.id, { connection, target, wallet: publicKey });
       const promised = { expected: built.expected, shares: built.shares };
-      setRow(attack, { ...IDLE, ...promised, status: "waiting" });
+      if (!settle({ ...IDLE, ...promised, status: "waiting" })) {
+        return;
+      }
 
       if (mode === "simulate") {
         const result = await simulateAttack(connection, built);
-        setRow(attack, { ...promised, status: "done", result, message: null });
+        settle({ ...IDLE, ...promised, status: "done", result });
         return;
       }
 
@@ -149,11 +212,23 @@ export function BreakSection({
         skipPreflight: true,
         maxRetries: 3,
       });
-      const result = await readLanded(connection, signature);
-      setRow(attack, { ...promised, status: "done", result, message: null });
-      setReload((count) => count + 1);
+      if (!settle({ ...IDLE, ...promised, status: "waiting", signature })) {
+        return;
+      }
+      let result: AttackResult;
+      try {
+        result = await readLanded(connection, signature);
+      } catch {
+        // Sent, but the node did not answer the read. The signature is kept so
+        // the visitor can open it, and Run reads it again rather than resending.
+        settle({ ...IDLE, ...promised, status: "unanswered", signature });
+        return;
+      }
+      if (settle({ ...IDLE, ...promised, status: "done", result, signature })) {
+        setReload((count) => count + 1);
+      }
     } catch (error) {
-      setRow(attack, { ...IDLE, status: "unavailable", message: messageOf(error) });
+      settle({ ...IDLE, status: "unavailable", message: messageOf(error) });
     }
   };
 
@@ -391,6 +466,17 @@ function CapMotif() {
       </svg>
     </div>
   );
+}
+
+/** A row still running for the wallet that just left is stopped; every other row is cleared. */
+function stopRunning(rows: Rows): Rows {
+  const kept: Rows = {};
+  for (const [id, state] of Object.entries(rows)) {
+    if (state !== undefined && (state.status === "building" || state.status === "waiting")) {
+      kept[id] = STOPPED;
+    }
+  }
+  return kept;
 }
 
 /**

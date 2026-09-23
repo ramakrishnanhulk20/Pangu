@@ -1,7 +1,8 @@
 /**
  * Proves the Try to break it builders against the live devnet sale.
  *
- *   node lab-evidence/break-simulations.mjs
+ *   node lab-evidence/break-simulations.mjs          the sale the screen picks
+ *   node lab-evidence/break-simulations.mjs POPEN    one sale, by its symbol
  *
  * A headless browser cannot run this screen, because every row needs a wallet
  * extension to be there. So the same functions the screen calls are called here
@@ -43,6 +44,7 @@ import {
   readTarget,
   simulateAttack,
   tallyLine,
+  tokensHeld,
 } from "../lib/break.ts";
 import sales from "../../scripts/sales.json" with { type: "json" };
 
@@ -270,6 +272,8 @@ async function runLedger(wallet, firstTarget, label) {
   let unseen = 0;
   const sent = [];
 
+  const sizes = [];
+
   for (const attack of ATTACKS) {
     let expected = attack.promise;
     let shares = "-";
@@ -277,6 +281,14 @@ async function runLedger(wallet, firstTarget, label) {
     let how = "simulated";
     let result;
     try {
+      if (attack.needsTokens) {
+        const held = await tokensHeld(connection, target.mint, wallet.publicKey);
+        sizes.push(
+          attack.id === "wallet-to-wallet"
+            ? `${attack.index} holds ${sharesOf(held, target.baseDecimals)}: half is ${sharesOf(held / 2n, target.baseDecimals)}, a fiftieth of the cap is ${sharesOf(target.cap / 50n, target.baseDecimals)}, the row sends the smaller`
+            : `${attack.index} holds ${sharesOf(held, target.baseDecimals)}: the row sells a fifth, ${sharesOf(held / 5n, target.baseDecimals)}`
+        );
+      }
       const built = await buildAttack(attack.id, {
         connection,
         target,
@@ -306,7 +318,7 @@ async function runLedger(wallet, firstTarget, label) {
       } else if (answer.outcome === "unseen") {
         actual = "not seen";
       } else {
-        actual = `not Pangu: ${answer.logLine}`;
+        actual = `not Pangu: ${answer.logLine ?? answer.rpcError}`;
       }
       if (answer.outcome === "unseen") {
         result = "not seen";
@@ -344,6 +356,9 @@ async function runLedger(wallet, firstTarget, label) {
 
   console.log(table(rows));
   console.log("");
+  for (const line of sizes) {
+    console.log(`sizes    : ${line}`);
+  }
   console.log("* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen");
   for (const link of sent) {
     console.log(`sent     : ${link}`);
@@ -353,7 +368,10 @@ async function runLedger(wallet, firstTarget, label) {
   console.log(`off the standard: ${off}`);
 }
 
-const candidates = sales.filter((sale) => sale.network === "devnet");
+const only = process.argv[2];
+const candidates = sales.filter(
+  (sale) => sale.network === "devnet" && (only === undefined || sale.symbol === only)
+);
 const target = await readTarget(connection, candidates);
 if (target === null) {
   throw new Error("no Pangu sale is running on devnet, so there is nothing to attack");
@@ -372,6 +390,7 @@ if (target.ceilingDollars !== null) {
   console.log(`ceiling  : ${target.ceilingDollars.toFixed(4)} dollars, against a stock at ${(target.stockDollars ?? 0).toFixed(4)}`);
 }
 console.log(`standing : ${target.standingRefusal ?? "a buy can reach the cap rule"}`);
+console.log(`buyers   : ${target.buyers}`);
 console.log(`wallet   : ${wallet.publicKey.toBase58()}, funded from the ${funding}`);
 console.log(`holding  : ${await funder.getBalance(wallet.publicKey, "confirmed")} lamports`);
 

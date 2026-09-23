@@ -2,7 +2,7 @@
 
 import { LAMPORTS_PER_SOL, type Connection } from "@solana/web3.js";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { tokenAmount } from "@/lib/format";
 import { explorerTx, type Target } from "@/lib/break";
@@ -55,27 +55,53 @@ export function WalletStrip({
   const [granted, setGranted] = useState<Granted | null>(null);
   const [dollarNote, setDollarNote] = useState<string | null>(null);
 
+  // The notes and the "demo dollars landed" line belong to the wallet that
+  // asked. A new wallet, or none, starts with a clean strip.
+  const [shownFor, setShownFor] = useState(wallet);
+  if (shownFor !== wallet) {
+    setShownFor(wallet);
+    setAsking(false);
+    setFaucetNote(null);
+    setMinting(false);
+    setGranted(null);
+    setDollarNote(null);
+  }
+
+  // The wallet on screen now, for an answer that arrives after a switch to check against.
+  const walletNow = useRef(wallet);
+  useEffect(() => {
+    walletNow.current = wallet;
+  }, [wallet]);
+
   const askFaucet = async () => {
     if (wallet === null) {
       return;
     }
+    const asked = wallet;
+    const stillHere = () => walletNow.current === asked;
     setAsking(true);
     setFaucetNote(null);
     try {
       const { PublicKey } = await import("@solana/web3.js");
       const signature = await connection.requestAirdrop(
-        new PublicKey(wallet),
+        new PublicKey(asked),
         AIRDROP_SOL * LAMPORTS_PER_SOL
       );
       await connection.confirmTransaction(signature, "confirmed");
-      setFaucetNote(`${AIRDROP_SOL} devnet SOL landed.`);
-      onFunded();
+      if (stillHere()) {
+        setFaucetNote(`${AIRDROP_SOL} devnet SOL landed.`);
+        onFunded();
+      }
     } catch {
-      setFaucetNote(
-        "The devnet faucet turned this wallet down, which it does when an address or an address range has asked recently. Take some from faucet.solana.com instead."
-      );
+      if (stillHere()) {
+        setFaucetNote(
+          "The devnet faucet turned this wallet down, which it does when an address or an address range has asked recently. Take some from faucet.solana.com instead."
+        );
+      }
     } finally {
-      setAsking(false);
+      if (stillHere()) {
+        setAsking(false);
+      }
     }
   };
 
@@ -83,6 +109,8 @@ export function WalletStrip({
     if (wallet === null) {
       return;
     }
+    const asked = wallet;
+    const stillHere = () => walletNow.current === asked;
     setMinting(true);
     setDollarNote(null);
     setGranted(null);
@@ -90,9 +118,12 @@ export function WalletStrip({
       const response = await fetch("/api/break/dollars", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ wallet }),
+        body: JSON.stringify({ wallet: asked }),
       });
       const answer: unknown = await response.json();
+      if (!stillHere()) {
+        return;
+      }
       if (!response.ok) {
         setDollarNote(
           reasonOf(answer) ??
@@ -105,11 +136,15 @@ export function WalletStrip({
       // grant has landed, so nothing on screen is this component's guess.
       onFunded();
     } catch {
-      setDollarNote(
-        "This page could not reach the demo dollar mint. Check the connection and press it again."
-      );
+      if (stillHere()) {
+        setDollarNote(
+          "This page could not reach the demo dollar mint. Check the connection and press it again."
+        );
+      }
     } finally {
-      setMinting(false);
+      if (stillHere()) {
+        setMinting(false);
+      }
     }
   };
 
@@ -146,7 +181,11 @@ export function WalletStrip({
         <div>
           <dt>your devnet SOL</dt>
           <dd className="mt-1.5 text-[15px] normal-case tracking-normal text-ink tabular-nums">
-            {lamports === null ? "not connected" : (lamports / LAMPORTS_PER_SOL).toFixed(4)}
+            {lamports !== null
+              ? (lamports / LAMPORTS_PER_SOL).toFixed(4)
+              : wallet === null
+                ? "not connected"
+                : "reading devnet"}
           </dd>
         </div>
         {target !== null && (
@@ -156,7 +195,9 @@ export function WalletStrip({
               {payingRaw === null
                 ? target.payingInSol
                   ? "wrapped SOL"
-                  : "not connected"
+                  : wallet === null
+                    ? "not connected"
+                    : "reading devnet"
                 : `${tokenAmount(payingRaw, target.quoteDecimals)}${target.payingInSol ? " wrapped SOL" : ""}`}
             </dd>
             {dollarsOffered && (

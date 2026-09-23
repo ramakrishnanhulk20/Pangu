@@ -3,13 +3,20 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import type { Attack, AttackResult, Expected, Target } from "@/lib/break";
-import { plainFailure } from "@/lib/break";
+import { explorerTx, plainFailure } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
 
 import { Spinner, Strike } from "./strike";
 
 /** Where one row has got to. */
-export type RowStatus = "idle" | "building" | "waiting" | "done" | "unavailable";
+export type RowStatus =
+  | "idle"
+  | "building"
+  | "waiting"
+  | "done"
+  | "unavailable"
+  | "stopped"
+  | "unanswered";
 
 export interface RowState {
   status: RowStatus;
@@ -23,6 +30,8 @@ export interface RowState {
   expected: Expected | null;
   /** Raw units of the sale token that transaction moves. */
   shares: bigint | null;
+  /** The signature of a transaction really sent, kept even when reading it back failed. */
+  signature: string | null;
 }
 
 export const IDLE: RowState = {
@@ -31,6 +40,14 @@ export const IDLE: RowState = {
   message: null,
   expected: null,
   shares: null,
+  signature: null,
+};
+
+/** A run the wallet changed under before it finished. It says nothing about either wallet. */
+export const STOPPED: RowState = {
+  ...IDLE,
+  status: "stopped",
+  message: "stopped: the wallet changed",
 };
 
 /** The verdict the cap line is drawn for. A transaction the chain never saw gets none. */
@@ -139,7 +156,11 @@ export function AttackRow({
           )}
 
           <AnimatePresence initial={false}>
-            {(state.status === "done" || state.status === "unavailable" || running) && (
+            {(state.status === "done" ||
+              state.status === "unavailable" ||
+              state.status === "stopped" ||
+              state.status === "unanswered" ||
+              running) && (
               <motion.div
                 initial={still ? false : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -153,13 +174,44 @@ export function AttackRow({
                       <Spinner />
                       {state.status === "building"
                         ? "sizing the buy in shares and asking the program"
-                        : "waiting for the chain"}
+                        : state.signature !== null
+                          ? "sent, reading it back from the chain"
+                          : "waiting for the chain"}
                     </p>
                   )}
 
                   {state.status === "unavailable" && state.message !== null && (
                     <p className="max-w-[62ch] text-[14px] leading-relaxed text-muted">
                       {state.message}
+                    </p>
+                  )}
+
+                  {state.status === "unanswered" && state.signature !== null && (
+                    <div>
+                      <p className="max-w-[62ch] text-[14px] leading-relaxed">
+                        Sent, the chain has not answered yet; open the link or press Run to
+                        read it again.
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] uppercase tracking-[0.18em]">
+                        <span className="text-muted">not counted until it is read</span>
+                        <a
+                          href={explorerTx(state.signature)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="border-b border-line pb-0.5 text-ink transition-colors hover:border-accent hover:text-accent"
+                        >
+                          open the transaction
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {state.status === "stopped" && (
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+                      {state.message}
+                      <span className="mt-2 block normal-case tracking-normal">
+                        Not counted. Press Run to try it from the wallet connected now.
+                      </span>
                     </p>
                   )}
 
@@ -184,7 +236,11 @@ export function AttackRow({
                   : "border-line text-ink hover:-translate-y-0.5 hover:border-ink"
               } focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent`}
             >
-              {running ? "running" : state.status === "done" ? "Run again" : "Run it"}
+              {running
+                ? "running"
+                : state.status === "done" || state.status === "unanswered"
+                  ? "Run again"
+                  : "Run it"}
               <span className="transition-transform duration-200 group-hover:translate-x-0.5">
                 &rarr;
               </span>
@@ -215,6 +271,7 @@ function Verdict({
   }
   const matched = asExpected(attack, state);
   const seen = result.outcome !== "unseen";
+  const failure = result.outcome === "unclear" ? plainFailure(result, target, attack) : null;
   const tone =
     result.outcome === "allowed"
       ? "text-accent"
@@ -229,18 +286,27 @@ function Verdict({
           ? "It went through"
           : result.outcome === "unseen"
             ? "Not seen"
-            : (result.errorName ?? "Refused, but not by Pangu")}
+            : (result.errorName ?? "Refused, but not by the sale's rules")}
       </p>
 
-      <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">
-        {result.outcome === "allowed"
-          ? "The pool paid out and the sale's counters moved. This is the one row that has to work."
-          : result.outcome === "refused" || result.outcome === "unseen"
-            ? result.sentence
-            : target === null
-              ? result.logLine
-              : plainFailure(result, target)}
-      </p>
+      {failure === null ? (
+        <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">
+          {result.outcome === "allowed"
+            ? "The pool paid out and the sale's counters moved. This is the one row that has to work."
+            : result.sentence}
+        </p>
+      ) : (
+        <>
+          {failure.sentence !== null && (
+            <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">{failure.sentence}</p>
+          )}
+          {failure.raw !== null && (
+            <p className="mt-3 max-w-[62ch] break-words font-mono text-[12px] leading-relaxed text-muted">
+              {failure.raw}
+            </p>
+          )}
+        </>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] uppercase tracking-[0.18em]">
         <span className={!seen || matched ? "text-muted" : "text-refused"}>

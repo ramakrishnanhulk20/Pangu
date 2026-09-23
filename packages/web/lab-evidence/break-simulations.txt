@@ -158,3 +158,120 @@ off the standard: 0
 PASS 2 is not run: this wallet was handed the paying token by the route before the ledger started, which is the whole point of the run.
 
 run at 2026-09-23T08:00:17.250Z
+
+
+RUN AGAINST POPEN, node lab-evidence/break-simulations.mjs POPEN: a sale nobody has bought into, with the band answered from Meteora's quote instead of another buyer's record
+Pyth's AAPL feed was stale at run time, outside US market hours, so every buy row meets PriceStale and no buy passes; rows 06 and 09 have no holding to size.
+network  : devnet, https://api.devnet.solana.com
+sale     : Pangu Open Share (POPEN), open access
+mint     : CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7
+cap      : 59999999997545703 raw units a wallet, worth 24000000000981718 raw units of the paying token
+paying   : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 (a token a visitor cannot get)
+curve    : 400.0000 dollars a share
+standing : PriceStale
+buyers   : 0
+wallet   : AquUhxfE6ajhQCNQcq8saparyK4rbGhGQQBh4MrXvGp4, funded from the demo keypair, 0.05 SOL
+holding  : 50000000 lamports
+
+PASS 1: a wallet holding only devnet SOL, which is all a visitor can get for themselves
+#   Attack                                               C    Shares              Promise                         What the chain said                                                                              How        Result
+--  ---------------------------------------------------  ---  ------------------  ------------------------------  -----------------------------------------------------------------------------------------------  ---------  ---------
+01  Buy under the cap, the way a buyer would             C3   11996293.053604031  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+02  Take more than the cap in one go                     C3   60012678.318355194  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+03  Buy again, and cross the cap on the second try       C3   -                   OverCap                         not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  -          not run
+04  Buy into a second token account of the same wallet   C3   60012678.318355194  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+05  Buy into an account whose owner can still change     C13  11996293.053604031  ReceivingAccountOwnerCanChange  not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+06  Send tokens straight to another wallet               C4   -                   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   -          not run
+07  Call the rules program on its own, with no transfer  C1   0.000000001         NotTransferring                 NotTransferring                                                                                  simulated  ok
+08  Buy above the price ceiling the band sets            C9   12002252.694890983  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+09  Sell back to the pool                                C5   -                   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              -          not run
+
+sizes    : 06 holds 0.000000000: half is 0.000000000, a fiftieth of the cap is 1199999.999950914, the row sends the smaller
+sizes    : 09 holds 0.000000000: the row sells a fifth, 0.000000000
+* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen
+
+6 attacks run, 1 refused as expected, 0 allowed as expected, 5 off the standard
+off the standard: 5
+
+paying token: 100000000000 paying tokens minted by the demo key
+
+PASS 2: the same wallet after the issuer handed it the paying token
+#   Attack                                               C    Shares              Promise                         What the chain said                                                                              How        Result
+--  ---------------------------------------------------  ---  ------------------  ------------------------------  -----------------------------------------------------------------------------------------------  ---------  -------
+01  Buy under the cap, the way a buyer would             C3   11996293.053604031  PriceStale *                    PriceStale                                                                                       sent       ok
+02  Take more than the cap in one go                     C3   60012678.318355194  PriceStale *                    PriceStale                                                                                       simulated  ok
+03  Buy again, and cross the cap on the second try       C3   -                   OverCap                         not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  -          not run
+04  Buy into a second token account of the same wallet   C3   60012678.318355194  PriceStale *                    PriceStale                                                                                       simulated  ok
+05  Buy into an account whose owner can still change     C13  11996293.053604031  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange                                                                   simulated  ok
+06  Send tokens straight to another wallet               C4   -                   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   -          not run
+07  Call the rules program on its own, with no transfer  C1   0.000000001         NotTransferring                 NotTransferring                                                                                  simulated  ok
+08  Buy above the price ceiling the band sets            C9   12002252.694890983  PriceStale *                    PriceStale                                                                                       simulated  ok
+09  Sell back to the pool                                C5   -                   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              -          not run
+
+sizes    : 06 holds 0.000000000: half is 0.000000000, a fiftieth of the cap is 1199999.999950914, the row sends the smaller
+sizes    : 09 holds 0.000000000: the row sells a fifth, 0.000000000
+* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen
+sent     : https://explorer.solana.com/tx/2u6neR5aD3Au79Mt5Yxxw1DvPdd5g7Nzm5fpaKUtQVhay3uX8P71udiY7xDKVKyeHhNYTwNTQ2m4e6topCUfQUAP?cluster=devnet
+
+6 attacks run, 6 refused as expected, 0 allowed as expected
+off the standard: 0
+
+run at 2026-09-23T09:03:54.474Z
+
+
+RUN AGAINST PBAND, node lab-evidence/break-simulations.mjs PBAND: same build, same stale feed
+network  : devnet, https://api.devnet.solana.com
+sale     : Pangu Priced Share (PBAND), open access
+mint     : 2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y
+cap      : 1099999999 raw units a wallet, worth 391453369 raw units of the paying token
+paying   : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 (a token a visitor cannot get)
+curve    : 355.8667 dollars a share
+standing : PriceStale
+buyers   : 16
+wallet   : GcWmQ5yqpmMzFPAGj5aEMNLdBN4dFjiXzZH3B549Upt5, funded from the demo keypair, 0.05 SOL
+holding  : 50000000 lamports
+
+PASS 1: a wallet holding only devnet SOL, which is all a visitor can get for themselves
+#   Attack                                               C    Shares       Promise                         What the chain said                                                                              How        Result
+--  ---------------------------------------------------  ---  -----------  ------------------------------  -----------------------------------------------------------------------------------------------  ---------  ---------
+01  Buy under the cap, the way a buyer would             C3   0.219939222  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+02  Take more than the cap in one go                     C3   1.100264228  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+03  Buy again, and cross the cap on the second try       C3   -            OverCap                         not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  -          not run
+04  Buy into a second token account of the same wallet   C3   1.100264228  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+05  Buy into an account whose owner can still change     C13  0.219939222  ReceivingAccountOwnerCanChange  not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+06  Send tokens straight to another wallet               C4   -            WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   -          not run
+07  Call the rules program on its own, with no transfer  C1   0.000000001  NotTransferring                 NotTransferring                                                                                  simulated  ok
+08  Buy above the price ceiling the band sets            C9   0.220048768  PriceStale *                    not Pangu: Error: insufficient funds                                                             simulated  DEVIATION
+09  Sell back to the pool                                C5   -            it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              -          not run
+
+sizes    : 06 holds 0.000000000: half is 0.000000000, a fiftieth of the cap is 0.021999999, the row sends the smaller
+sizes    : 09 holds 0.000000000: the row sells a fifth, 0.000000000
+* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen
+
+6 attacks run, 1 refused as expected, 0 allowed as expected, 5 off the standard
+off the standard: 5
+
+paying token: 100000000000 paying tokens minted by the demo key
+
+PASS 2: the same wallet after the issuer handed it the paying token
+#   Attack                                               C    Shares       Promise                         What the chain said                                                                              How        Result
+--  ---------------------------------------------------  ---  -----------  ------------------------------  -----------------------------------------------------------------------------------------------  ---------  -------
+01  Buy under the cap, the way a buyer would             C3   0.219939222  PriceStale *                    PriceStale                                                                                       sent       ok
+02  Take more than the cap in one go                     C3   1.100264228  PriceStale *                    PriceStale                                                                                       simulated  ok
+03  Buy again, and cross the cap on the second try       C3   -            OverCap                         not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  -          not run
+04  Buy into a second token account of the same wallet   C3   1.100264228  PriceStale *                    PriceStale                                                                                       simulated  ok
+05  Buy into an account whose owner can still change     C13  0.219939222  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange                                                                   simulated  ok
+06  Send tokens straight to another wallet               C4   -            WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   -          not run
+07  Call the rules program on its own, with no transfer  C1   0.000000001  NotTransferring                 NotTransferring                                                                                  simulated  ok
+08  Buy above the price ceiling the band sets            C9   0.220048768  PriceStale *                    PriceStale                                                                                       simulated  ok
+09  Sell back to the pool                                C5   -            it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              -          not run
+
+sizes    : 06 holds 0.000000000: half is 0.000000000, a fiftieth of the cap is 0.021999999, the row sends the smaller
+sizes    : 09 holds 0.000000000: the row sells a fifth, 0.000000000
+* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen
+sent     : https://explorer.solana.com/tx/56dKeQvZMCkwJZsq6XsbLt259FPSUHsjHz6FhdGyRTKMvvvqWqXUwfFLMMa6vWxpN4nAdGHzNLeoGHR3qiq9gW5t?cluster=devnet
+
+6 attacks run, 6 refused as expected, 0 allowed as expected
+off the standard: 0
+
+run at 2026-09-23T09:08:08.513Z
