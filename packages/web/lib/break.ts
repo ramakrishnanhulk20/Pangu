@@ -310,9 +310,9 @@ export function explorerAddress(address: PublicKey | string): string {
  *
  * A graduated sale has no rules left to break, so only running ones are
  * considered, and an open one comes first: a list sale refuses a stranger's buy
- * with NotApproved before any of these rules is reached. Among open sales one
- * priced in wrapped SOL comes first, because that is the only paying token a
- * visitor can get for themselves.
+ * with NotApproved before any of these rules is reached. Among open sales the
+ * newest wins, because the demo sale is opened last on purpose, priced under
+ * the real stock so its buys can pass and the demo dollars button funds them.
  *
  * Returns null when no sale is running.
  */
@@ -321,7 +321,7 @@ export async function readTarget(
   candidates: readonly SaleCandidate[]
 ): Promise<Target | null> {
   const running: { candidate: SaleCandidate; sale: Sale }[] = [];
-  for (const candidate of candidates) {
+  for (const candidate of [...candidates].reverse()) {
     const mint = new PublicKey(candidate.mint);
     const sale = await getSale(connection, mint);
     if (sale !== null && (await isSaleRunning(connection, mint))) {
@@ -332,34 +332,12 @@ export async function readTarget(
     return null;
   }
 
-  // Loading a pool costs several reads, so it is only done to break a tie
-  // between sales a visitor could both attack.
   const open = running.filter((entry) => entry.sale.accessMode === ACCESS_MODE.open);
-  const shortlist = open.length > 0 ? open : running;
-  const first = shortlist[0];
-  if (first === undefined) {
+  const chosen = (open.length > 0 ? open : running)[0];
+  if (chosen === undefined) {
     return null;
   }
-  if (shortlist.length === 1) {
-    return readSale(connection, first.candidate, first.sale);
-  }
-
-  const ranked = await Promise.all(
-    shortlist.map(async (entry) => ({ ...entry, rank: await rankOf(connection, entry.sale) }))
-  );
-  ranked.sort((left, right) => right.rank - left.rank);
-  const chosen = ranked[0] ?? first;
   return readSale(connection, chosen.candidate, chosen.sale);
-}
-
-/** A sale priced in wrapped SOL comes first: it is the one token anyone can get. */
-async function rankOf(connection: Connection, sale: Sale): Promise<number> {
-  try {
-    const view = await loadPool(connection, sale.mint);
-    return view.quoteMint.equals(NATIVE_MINT) ? 1 : 0;
-  } catch {
-    return 0;
-  }
 }
 
 async function readSale(
