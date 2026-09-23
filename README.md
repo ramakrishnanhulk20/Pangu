@@ -54,10 +54,11 @@ An issuer already has other ways to run a first sale. Here is how Pangu compares
 
 ## Devnet deployment
 
-The current live demo, from the fourth devnet run (program slot 502476730, `docs/measurements/devnet-run.md`). Two earlier sales opened on older builds of the program were retired: the reader refuses to decode an account written by another layout rather than guess at it, which is exactly the point of the layout-version check.
+The current live demo (program slot 502476730, `docs/measurements/devnet-run.md`). The fifth devnet run opened the sale the app lands on first; the other two rows are from the fourth run. Four earlier sales opened on older builds of the program were retired after the layout-version build: the reader refuses to decode an account written by another layout rather than guess at it, which is exactly the point of the layout-version check.
 
 | Sale | Mode | Mint | Key facts | Explorer |
 | --- | --- | --- | --- | --- |
+| Demo sale, banded and dollar-priced (PBAND) | Open access, 10% per-wallet cap, 5% price ceiling against Apple's real price | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | The sale a judge sees first: open, banded, priced in the demo dollar. 20 shares, opened at 275.21 dollars a share with Apple at 342.45. 14 holders, 63.18% of the curve sold, largest holder 15.18% of everything sold against a cap worth 15.83%. 9 attacks run, 8 refused as expected, 1 allowed as expected: the cap and the ceiling both refused on the same sale | [mint](https://explorer.solana.com/address/2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y?cluster=devnet) · [a buy refused at the ceiling](https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet) |
 | List-mode sale | Issuer-managed list, 10% per-wallet cap | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | 15 buyers seeded and attacked, 9 attacks run, 8 refused as expected, 1 allowed as expected. Graduated: largest wallet held 16.76% of 467,347,859,706,336 raw units sold against a cap worth 17.12% of them. Migrated to Meteora DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | [mint](https://explorer.solana.com/address/2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR?cluster=devnet) · [migration tx](https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet) |
 | Banded, dollar-priced sale | Open access, 5% price ceiling against Apple's real price | `CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7` | Opened deliberately at 400 dollars a share while Apple traded at 343.44. Every buy refused on chain with the program's own `PriceOutsideBand`, 6 attacks run, 6 refused as expected | [mint](https://explorer.solana.com/address/CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7?cluster=devnet) · [an ordinary buy, refused](https://explorer.solana.com/tx/WdP9LtJJuHLmuVbmfEoYiuXpUFV9LB61TCJ4aXKsaV68ToXirizWjfMKRborVun7E2G7GmUA93wkPsfLRpBM5pq?cluster=devnet) |
 
@@ -241,12 +242,14 @@ The same attacks from a terminal, against the same live program:
 cd packages/scripts && npm run prove
 ```
 
-Last lines, from the current live run against the list-mode sale:
+Last lines, from the fifth devnet run against the banded dollar sale (PBAND), the sale `prove` runs on when no mint is named:
 
 ```
-proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units sold, against a cap worth 17.12 percent of them
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
+
+Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
 
 And whether the whole demo is still alive:
 
@@ -254,10 +257,10 @@ And whether the whole demo is still alive:
 npm run status
 ```
 
-Last line from the same run:
+Last line, from the end of the same run:
 
 ```
-7 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-22T15:05:14Z
+10 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-23T07:08:33Z
 ```
 
 ## Quick start
@@ -372,7 +375,7 @@ Every refusal the program can return, in the plain sentence `pangu-sdk` shows a 
 
 ## Test output
 
-The most recent verification run, after the SaleRules layout-version change landed (22 September 2026):
+The most recent counts, confirmed on 23 September 2026 and recorded in `docs/measurements/test-counts.md`:
 
 ```
 27 Rust tests
@@ -382,10 +385,10 @@ The most recent verification run, after the SaleRules layout-version change land
 36 steps against a forked mainnet validator running real Meteora Dynamic
   Bonding Curve, DAMM v2 and Solana Attestation Service programs
 117 pangu-sdk unit tests
-36 devnet-script tests
+49 devnet-script tests
 ```
 
-Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work orders added tests: `price-band-pyth.md` (27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
+Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
 
 Prove-it command against the live network, run again for this submission:
 
@@ -393,10 +396,14 @@ Prove-it command against the live network, run again for this submission:
 cd packages/scripts && npm run prove
 ```
 
+From the fifth devnet run, against the banded dollar sale (PBAND):
+
 ```
-proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units sold, against a cap worth 17.12 percent of them
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
+
+Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
 
 ## Costs, in plain English
 

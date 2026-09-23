@@ -7,27 +7,29 @@ import { Reveal } from "@/components/story/reveal";
 // Every figure below is copied from a file in the repository, named in the
 // comment above it. Nothing here is rounded, guessed, or live.
 
-// STATE.md, the WO-19 row: 27 Rust, 125 mocha, 36 fork, 117 sdk, 36 scripts.
+// docs/measurements/test-counts.md: 27 Rust, 125 mocha, 36 fork, 117 sdk,
+// 49 scripts.
 const SUITES = [
   { count: "27", label: "Rust tests" },
   { count: "125", label: "unit tests" },
   { count: "36", label: "forked mainnet steps" },
   { count: "117", label: "package tests" },
-  { count: "36", label: "script tests" },
+  { count: "49", label: "script tests" },
 ];
 
-// docs/measurements/devnet-run.md, the fourth run: 9 attacks on the list sale
-// (8 refused, 1 sell allowed) and 6 on the banded sale, all refused.
+// docs/measurements/devnet-run.md. The link is the fifth run's buy refused at
+// the ceiling on the demo sale. The 16 of 18 below is the fifth run: 9 attacks
+// on the demo sale and 9 on the list sale, each 8 refused and 1 sell allowed.
 const REFUSAL_LINK =
-  "https://explorer.solana.com/tx/5KJGDNGjZRxZcPM9pg1R9ZuhKfwKMdcm4Uijm7bbsKUCHvS9rcVYSz6iQ2rXaMNiaV3fgDa9Ep44EBo5khAA72rj?cluster=devnet";
+  "https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet";
 
 const REPOSITORY: string = "https://github.com/ramakrishnanhulk20/Pangu";
 
 const LEDGER = [
   {
-    figure: "14 of 15",
+    figure: "16 of 18",
     title: "attacks on devnet, refused as expected",
-    body: "The fifteenth was a sell by a wallet whose approval had been taken away, and it went through, because nothing in the rules can close the exit.",
+    body: "The other two were sells back to the pool, one by a holder of the open demo sale and one by a wallet whose approval had been taken away. Both went through, because nothing in the rules can close the exit.",
     link: { href: REFUSAL_LINK, label: "the buy refused above Apple's price" },
   },
   {

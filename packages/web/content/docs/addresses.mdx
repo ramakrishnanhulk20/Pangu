@@ -8,10 +8,10 @@ description: Everything Pangu depends on, where it lives on chain, and how to ch
 | Fact | Value |
 | --- | --- |
 | Program address | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
-| Running since | 22 September 2026, 13:02:53 UTC, slot 502436678 |
+| Running since | 22 September 2026, 14:53:26 UTC, slot 502476730 |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 | Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by the team and stated openly |
-| sha256 of the deployed build | `08746faa7b4ac83ada7bfa0cd2fcf0b04aabc9c335ebfc310fd2a06d486d3a7c` |
+| sha256 of the deployed build | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` |
 
 The program has been deployed and upgraded three times on devnet, always at this same address, each one checked byte for byte against the code that was tested before it went live. The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
 
@@ -26,8 +26,9 @@ The program has been deployed and upgraded three times on devnet, always at this
 
 ## The demo sales run so far
 
-Three sales have run end to end on the current, Pyth-based build of the program.
+The first sale below is the one the app opens on. The three after it ran on the earlier, Pyth-based build and are kept as history: the current build's reader refuses their rules accounts, because another layout wrote them.
 
+- **The demo sale a judge sees first: open, banded, priced in the demo dollar**, mint `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` (https://explorer.solana.com/address/2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y?cluster=devnet), 10 percent cap, ceiling 5 percent over Apple. Nine attacks run against it, eight refused and one allowed as expected, the cap and the ceiling both refused on the same sale. This buy was refused at the ceiling with `PriceOutsideBand`: https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet
 - **A list-mode sale** (an issuer's own approved-buyer list, 10 percent cap): mint `FToBcoyaCZtLpbaGFV8wdomngjwuQp5XShj6fHdzLyGv`, template transaction `526NJoSp...` (https://explorer.solana.com/tx/526NJoSpZHxJWy95YEwet2b3gUyKDXSW5rBRGjs3nDTtBuNgB3h2tFwafLHXvSNDdvjsRQtn3s9uzGzvD2ZScmGq?cluster=devnet). Six real buyers seeded it, nine attacks were run against it (eight refused, one allowed, as expected), and it was filled and migrated to a Meteora DAMM v2 pool at `DLK2xF5i18rgXui9RN6urpAYg3bJxKNtkxiMYS5KECv`.
 - **A banded sale priced in Apple's stock price**, open access, mint `E1PSmsUoxvwJas6e1UY8soQq3nhSTUsaP3oBS9eLws4f`, price account `9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb`. Nine attacks run, eight refused as expected. Later graduated to DAMM v2 pool `4NYMEmSNcUQ4n3r1Q1jT9W3Lupfxcvw5Z3W2f3oVy116`.
 - **A banded sale priced in a dollar token, deliberately opened above Apple's real price** to prove the ceiling actually refuses a buy on chain, not only in a test: mint `4vyCQRLeowhSzaZqbPVpdNy7upxVtqaCZdono2z8JeoT`, opened at 400 dollars a share while Apple traded at 344.64. Every buy was refused with the program's own `PriceOutsideBand` error, including this one: https://explorer.solana.com/tx/2iJnchxoJLgyixCS56VcxB1Aac1pRfoLhXywyK2RYmQvQmx6wYM97cZRW5R2ss7AFjPjZ27oCC9VAJeC13aEKb3B?cluster=devnet
@@ -42,7 +43,7 @@ All Rust and TypeScript tests, no network needed:
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/test.sh
 ```
 
-Prints `rust: test result: ok. 26 passed` and a mocha summary of 118 tests passing, then exits 0.
+Prints `rust: test result: ok. 27 passed` and a mocha summary of 125 tests passing, then exits 0.
 
 The devnet prove command, against the live program:
 
@@ -50,13 +51,14 @@ The devnet prove command, against the live program:
 cd packages/scripts && npm run prove
 ```
 
-Prints a table of attacks, an exit code, and the largest holder's share against the cap, for example:
+Prints a table of attacks, an exit code, and the largest holder's share against the cap. The fifth devnet run, against the banded dollar sale (PBAND), ended:
 
 ```
-proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units
-           sold, against a cap worth 17.12 percent of them
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+cost     : 0.011307 SOL, after 0.029169 SOL came back from the attacking wallets
 ```
+
+Read off the chain right after that run, the largest of the sale's 14 holders had 15.18 percent of everything sold, against a cap worth 15.83 percent of it.
 
 ## The status command
 

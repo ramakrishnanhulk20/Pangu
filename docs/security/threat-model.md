@@ -92,7 +92,7 @@ Each line is an outcome the code must uphold. A work order carries the relevant 
    - After graduation there are no rules. That is by design and enforced by DBC, not by us.
    - We do not verify that a token is backed by real shares.
    - The issuer's power to mint more of the token is not a non-goal any more: it is removed at launch (C14). An issuer who later holds more real shares runs a new sale for the new tranche.
-   - The upgrade key holder can change the program while a sale is live unless the key is given up. The choice made and its consequences are recorded in `DECISIONS.md` and shown in the app.
+   - The upgrade key holder can change the program while a sale is live unless the key is given up. The choice made for this submission, the team keeping the key and saying so openly, is stated in the README, on the addresses page of the docs, and in the app.
    - The issuer can approve their friends. We make the approvals public, we do not judge them.
    - The paying token's own issuer powers. A stock token such as AAPLx carries a permanent delegate that can move it out of any account, including a pool's vault, and a pause switch that would stop every trade. Those belong to the stock token's issuer. Pangu cannot defend against them, so the app shows them for any sale priced in a stock token.
    - The cap limits what a wallet receives, not its share of what is left. When other wallets sell back, one wallet's share of tokens still held can rise above the cap share. The app reports share of tokens sold.
