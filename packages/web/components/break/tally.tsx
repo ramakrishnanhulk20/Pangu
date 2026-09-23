@@ -15,7 +15,13 @@ export function Tally({
   counts,
 }: {
   target: Target | null;
-  counts: { run: number; refusedAsExpected: number; allowedAsExpected: number; off: number };
+  counts: {
+    run: number;
+    refusedAsExpected: number;
+    allowedAsExpected: number;
+    off: number;
+    unseen: number;
+  };
 }) {
   const nothingSold = target === null || target.totalNetBought === 0n;
 

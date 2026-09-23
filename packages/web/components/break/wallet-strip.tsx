@@ -184,9 +184,10 @@ export function WalletStrip({
 
       {granted !== null && (
         <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">
-          {tokenAmount(BigInt(granted.amount), granted.decimals)} demo dollars landed,
-          twice what this sale&apos;s cap is worth at the price on the curve right
-          now.{" "}
+          {tokenAmount(BigInt(granted.amount), granted.decimals)} demo dollars landed:
+          four times what this sale&apos;s cap is worth at the price on the curve
+          right now, plus what the buy above the ceiling pays. That runs 01, 02 or
+          04, 03 and 08 in order.{" "}
           <a
             href={explorerTx(granted.signature)}
             target="_blank"

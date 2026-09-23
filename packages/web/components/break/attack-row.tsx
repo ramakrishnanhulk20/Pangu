@@ -2,8 +2,9 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
-import type { Attack, AttackResult, Target } from "@/lib/break";
-import { expectedOf, plainFailure } from "@/lib/break";
+import type { Attack, AttackResult, Expected, Target } from "@/lib/break";
+import { plainFailure } from "@/lib/break";
+import { tokenAmount } from "@/lib/format";
 
 import { Spinner, Strike } from "./strike";
 
@@ -15,34 +16,41 @@ export interface RowState {
   result: AttackResult | null;
   /** Why the row could not be built, in words a visitor can act on. */
   message: string | null;
+  /**
+   * What the program answers the transaction this row built, asked before it
+   * runs. Null until the row is built.
+   */
+  expected: Expected | null;
+  /** Raw units of the sale token that transaction moves. */
+  shares: bigint | null;
 }
 
-export const IDLE: RowState = { status: "idle", result: null, message: null };
+export const IDLE: RowState = {
+  status: "idle",
+  result: null,
+  message: null,
+  expected: null,
+  shares: null,
+};
 
+/** The verdict the cap line is drawn for. A transaction the chain never saw gets none. */
 function verdictOf(state: RowState): "refused" | "allowed" | "unclear" | null {
-  if (state.status !== "done" || state.result === null) {
+  if (state.status !== "done" || state.result === null || state.result.outcome === "unseen") {
     return null;
   }
   return state.result.outcome;
 }
 
-/**
- * What this row will meet on the sale as it stands.
- *
- * Before devnet has answered, all that can honestly be said is what the rules
- * promise. Once the sale is read, a rule the chain decides earlier can take its
- * place, and the row says which and why.
- */
-function promiseOf(attack: Attack, target: Target | null) {
-  return target === null ? { name: attack.promise, why: null } : expectedOf(attack, target);
+function promiseOf(attack: Attack, state: RowState): Expected {
+  return state.expected ?? { name: attack.promise, why: null };
 }
 
-/** True when what the chain did is what the rules promise for this row now. */
-export function asExpected(attack: Attack, target: Target | null, state: RowState): boolean {
-  if (state.status !== "done" || state.result === null) {
+/** True when what the chain did is what the program was asked it would do for this exact transaction. */
+export function asExpected(attack: Attack, state: RowState): boolean {
+  if (state.status !== "done" || state.result === null || state.result.outcome === "unseen") {
     return false;
   }
-  const expected = promiseOf(attack, target);
+  const expected = promiseOf(attack, state);
   if (state.result.outcome === "allowed") {
     return expected.name === "it goes through";
   }
@@ -69,7 +77,7 @@ export function AttackRow({
   onRun: () => void;
 }) {
   const still = useReducedMotion() === true;
-  const expected = promiseOf(attack, target);
+  const expected = promiseOf(attack, state);
   const verdict = verdictOf(state);
   const running = state.status === "building" || state.status === "waiting";
   const exit = attack.kind === "pass" && attack.id === "sell-back";
@@ -104,14 +112,24 @@ export function AttackRow({
             <span className={exit ? "text-accent" : "text-ink"}>{attack.invariant}</span>
             <span>{attack.gloss}</span>
             <span className="hidden sm:inline">{attack.cost}</span>
+            {state.shares !== null && target !== null && (
+              <span className="text-ink">
+                {tokenAmount(state.shares, target.baseDecimals)} shares
+              </span>
+            )}
           </div>
 
           <p className="mt-4 max-w-[62ch] text-[13px] leading-relaxed text-muted">
             {attack.promise === "it goes through"
               ? "The rules promise this goes through."
               : `The rules promise the chain refuses this with ${attack.promise}.`}
-            {expected.why !== null &&
-              ` On this sale as it stands you meet ${expected.name} first, which the line above the ledger explains.`}
+            {state.expected !== null && expected.why !== null && (
+              <>
+                {" "}
+                For this exact transaction the program answers{" "}
+                <span className="text-ink">{expected.name}</span>. {expected.why}
+              </>
+            )}
           </p>
 
           {payingShort && (
@@ -134,7 +152,7 @@ export function AttackRow({
                     <p className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending">
                       <Spinner />
                       {state.status === "building"
-                        ? "building the transaction"
+                        ? "sizing the buy in shares and asking the program"
                         : "waiting for the chain"}
                     </p>
                   )}
@@ -195,7 +213,8 @@ function Verdict({
   if (result === null) {
     return null;
   }
-  const matched = asExpected(attack, target, state);
+  const matched = asExpected(attack, state);
+  const seen = result.outcome !== "unseen";
   const tone =
     result.outcome === "allowed"
       ? "text-accent"
@@ -208,13 +227,15 @@ function Verdict({
       <p className={`font-display text-[clamp(1.5rem,3vw,2.4rem)] leading-none tracking-[-0.03em] ${tone}`}>
         {result.outcome === "allowed"
           ? "It went through"
-          : (result.errorName ?? "Refused, but not by Pangu")}
+          : result.outcome === "unseen"
+            ? "Not seen"
+            : (result.errorName ?? "Refused, but not by Pangu")}
       </p>
 
       <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">
         {result.outcome === "allowed"
           ? "The pool paid out and the sale's counters moved. This is the one row that has to work."
-          : result.outcome === "refused"
+          : result.outcome === "refused" || result.outcome === "unseen"
             ? result.sentence
             : target === null
               ? result.logLine
@@ -222,10 +243,16 @@ function Verdict({
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] uppercase tracking-[0.18em]">
-        <span className={matched ? "text-muted" : "text-refused"}>
-          {matched ? "as the rules promise" : "not what the rules promise"}
+        <span className={!seen || matched ? "text-muted" : "text-refused"}>
+          {!seen
+            ? "not counted either way"
+            : matched
+              ? "as the program said it would"
+              : "not what the program said it would do"}
         </span>
-        {result.link !== null ? (
+        {!seen ? (
+          <span className="text-muted">the chain has no record of it</span>
+        ) : result.link !== null ? (
           <a
             href={result.link}
             target="_blank"

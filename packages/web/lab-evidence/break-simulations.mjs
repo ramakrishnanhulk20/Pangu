@@ -5,9 +5,13 @@
  *
  * A headless browser cannot run this screen, because every row needs a wallet
  * extension to be there. So the same functions the screen calls are called here
- * from Node with a throwaway wallet: each row is built, simulated against
- * devnet, and the program's own refusal is read out of the real logs. Nothing
- * is signed and nothing lands on chain.
+ * from Node with a throwaway wallet: each row is sized in shares, built, asked
+ * of the program through preflightBuy, simulated against devnet, and the
+ * program's own answer is read out of the real logs.
+ *
+ * One row is sent for real: 01, the honest buy, when the wallet can pay for it.
+ * That is what a visitor does first, and it is what gives 03, 06 and 09 a buy
+ * behind them. Every other row is simulated, so nothing else lands on chain.
  *
  * The throwaway key is made in memory and never leaves this process. Only its
  * public key is printed.
@@ -33,7 +37,9 @@ import {
   ATTACKS,
   breakConnection,
   buildAttack,
-  expectedOf,
+  payingHeld,
+  payingNeeded,
+  readLanded,
   readTarget,
   simulateAttack,
   tallyLine,
@@ -206,14 +212,26 @@ function pad(text, width) {
   return text.length >= width ? text : text + " ".repeat(width - text.length);
 }
 
+/** Raw units of the sale token as shares, with every decimal kept. */
+function sharesOf(raw, decimals) {
+  if (raw === null) {
+    return "-";
+  }
+  const scale = 10n ** BigInt(decimals);
+  const fraction = (raw % scale).toString().padStart(decimals, "0");
+  return `${raw / scale}.${fraction}`;
+}
+
 function table(rows) {
-  const head = ["#", "Attack", "C", "Expected", "What the chain said", "Result"];
+  const head = ["#", "Attack", "C", "Shares", "Promise", "What the chain said", "How", "Result"];
   const body = rows.map((row) => [
     row.index,
     row.title,
     row.invariant,
+    row.shares,
     row.expected,
     row.actual,
+    row.how,
     row.result,
   ]);
   const widths = head.map((title, column) =>
@@ -224,18 +242,39 @@ function table(rows) {
   return [line(head), widths.map((w) => "-".repeat(w)).join("  "), ...body.map(line)].join("\n");
 }
 
-async function runLedger(wallet, target, label) {
+/**
+ * Sends row 01 the way the screen's "send for real" does: preflight skipped, so
+ * whatever the program says lands on chain, then read back by signature.
+ */
+async function sendForReal(wallet, built) {
+  const transaction = built.transaction;
+  transaction.feePayer = wallet.publicKey;
+  transaction.recentBlockhash = (await funder.getLatestBlockhash("confirmed")).blockhash;
+  transaction.sign(wallet, ...built.signers);
+  const signature = await funder.sendRawTransaction(transaction.serialize(), {
+    skipPreflight: true,
+    maxRetries: 3,
+  });
+  return readLanded(connection, signature);
+}
+
+async function runLedger(wallet, firstTarget, label) {
   console.log("");
   console.log(label);
   const rows = [];
+  let target = firstTarget;
   let run = 0;
   let refusedAsExpected = 0;
   let allowedAsExpected = 0;
   let off = 0;
+  let unseen = 0;
+  const sent = [];
 
   for (const attack of ATTACKS) {
-    const expected = expectedOf(attack, target);
+    let expected = attack.promise;
+    let shares = "-";
     let actual;
+    let how = "simulated";
     let result;
     try {
       const built = await buildAttack(attack.id, {
@@ -243,16 +282,36 @@ async function runLedger(wallet, target, label) {
         target,
         wallet: wallet.publicKey,
       });
-      const answer = await simulateAttack(connection, built);
+      expected = built.expected.name;
+      shares = sharesOf(built.shares, target.baseDecimals);
+      const canPay =
+        target.payingInSol ||
+        (await payingHeld(connection, target, wallet.publicKey)) >= payingNeeded(attack, target);
+      const real = attack.id === "honest-buy" && canPay;
+      const answer = real
+        ? await sendForReal(wallet, built)
+        : await simulateAttack(connection, built);
+      if (real) {
+        how = "sent";
+        sent.push(answer.link ?? answer.signature ?? "no signature");
+        // The curve and this wallet's record moved, so the rows after it are
+        // sized and asked against the sale as it now stands, as the screen does.
+        target = (await readTarget(connection, candidates)) ?? target;
+      }
       run += 1;
       if (answer.outcome === "allowed") {
         actual = "it goes through";
       } else if (answer.outcome === "refused") {
         actual = answer.errorName;
+      } else if (answer.outcome === "unseen") {
+        actual = "not seen";
       } else {
         actual = `not Pangu: ${answer.logLine}`;
       }
-      if (actual === expected.name) {
+      if (answer.outcome === "unseen") {
+        result = "not seen";
+        unseen += 1;
+      } else if (actual === expected) {
         result = "ok";
         if (answer.outcome === "allowed") {
           allowedAsExpected += 1;
@@ -263,23 +322,35 @@ async function runLedger(wallet, target, label) {
         result = "DEVIATION";
         off += 1;
       }
+      if (built.expected.why !== null) {
+        expected = `${expected} *`;
+      }
     } catch (error) {
       actual = `not run: ${error instanceof Error ? error.message : String(error)}`;
+      how = "-";
       result = "not run";
     }
     rows.push({
       index: attack.index,
       title: attack.title,
       invariant: attack.invariant,
-      expected: expected.name,
+      shares,
+      expected,
       actual,
+      how,
       result,
     });
   }
 
   console.log(table(rows));
   console.log("");
-  console.log(tallyLine({ run, refusedAsExpected, allowedAsExpected, off }));
+  console.log("* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen");
+  for (const link of sent) {
+    console.log(`sent     : ${link}`);
+  }
+  console.log("");
+  console.log(tallyLine({ run, refusedAsExpected, allowedAsExpected, off, unseen }));
+  console.log(`off the standard: ${off}`);
 }
 
 const candidates = sales.filter((sale) => sale.network === "devnet");

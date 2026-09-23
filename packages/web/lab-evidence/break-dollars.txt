@@ -1,30 +1,32 @@
 route    : http://127.0.0.1:3450/api/break/dollars
 network  : devnet, https://api.devnet.solana.com
-wallet   : 3uCDezNMPTFBR4fYpuB2S87fwQzEnGECyoNr2GYsKiJZ, made in memory for this run
+wallet   : 6YhqqfteH6i5Y4NmfS4zdFz2Np6cptuXViobMJQ8tnoz, made in memory for this run
 
 first call, a wallet holding nothing: HTTP 200
 {
-  "signature": "3A7ZycNtgHjxkzGRENrqVWBnZSb3g1bV9rPZ6MT4uEUNufbeaVxxrY28RBp1SC9xscYeu5fpr6t4oLgcQeh6BWiG",
-  "amount": "48000000001963436",
+  "signature": "Vs83nVSS6UKY19H6C3SYSFu82CvPBaWz3zkHw18htjfgsYA8ws9L5fxggiQfKRWRqJNV2vHW6pnWrbVwi8c3rEB",
+  "amount": "1651544072",
   "decimals": 6,
   "mint": "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"
 }
 
 mint     : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5
-granted  : 48000000001963436 raw units, 6 decimals
-signature: 3A7ZycNtgHjxkzGRENrqVWBnZSb3g1bV9rPZ6MT4uEUNufbeaVxxrY28RBp1SC9xscYeu5fpr6t4oLgcQeh6BWiG
-explorer : https://explorer.solana.com/tx/3A7ZycNtgHjxkzGRENrqVWBnZSb3g1bV9rPZ6MT4uEUNufbeaVxxrY28RBp1SC9xscYeu5fpr6t4oLgcQeh6BWiG?cluster=devnet
-held now : 48000000001.963436 in 2c7hpHRqZfqQtqG3VYQNmaSrZSqJZewBXLy9EnVFWtuq
+granted  : 1651544072 raw units, 6 decimals
+signature: Vs83nVSS6UKY19H6C3SYSFu82CvPBaWz3zkHw18htjfgsYA8ws9L5fxggiQfKRWRqJNV2vHW6pnWrbVwi8c3rEB
+explorer : https://explorer.solana.com/tx/Vs83nVSS6UKY19H6C3SYSFu82CvPBaWz3zkHw18htjfgsYA8ws9L5fxggiQfKRWRqJNV2vHW6pnWrbVwi8c3rEB?cluster=devnet
+held now : 1651.544072 in 7ZTNyU1xDS93WH3SwUTVmryv2hsSiWhoWAHsjBcFwqZs
 
 second call, the same wallet straight after: HTTP 429
 {
   "reason": "This wallet took demo dollars already. It may take more in 60 minutes."
 }
-(node:14080) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/Projects/Meteora/packages/web/lib/break.ts is not specified and it doesn't parse as CommonJS.
+(node:8828) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/Projects/Meteora/packages/web/lib/break.ts is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to \\?\D:\Projects\Meteora\packages\web\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
 bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 500ms delay...
 Server responded with 429 .  Retrying after 500ms delay...
 Server responded with 429 .  Retrying after 1000ms delay...
 Server responded with 429 .  Retrying after 2000ms delay...
@@ -38,37 +40,61 @@ Server responded with 429 .  Retrying after 1000ms delay...
 Server responded with 429 .  Retrying after 2000ms delay...
 Server responded with 429 .  Retrying after 4000ms delay...
 network  : devnet, https://api.devnet.solana.com
-sale     : Pangu Open Share (POPEN), open access
-mint     : CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7
-cap      : 59999999997545703 raw units a wallet, worth 24000000000981718 raw units of the paying token
+sale     : Pangu Priced Share (PBAND), open access
+mint     : 2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y
+cap      : 1099999999 raw units a wallet, worth 389588450 raw units of the paying token
 paying   : 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 (a token a visitor cannot get)
-curve    : 400.0000 dollars a share
-ceiling  : 359.8561 dollars, against a stock at 342.7201
-standing : PriceOutsideBand
-wallet   : 3uCDezNMPTFBR4fYpuB2S87fwQzEnGECyoNr2GYsKiJZ, funded from the demo keypair, 0.05 SOL
-Server responded with 429 .  Retrying after 500ms delay...
-Server responded with 429 .  Retrying after 1000ms delay...
-Server responded with 429 .  Retrying after 2000ms delay...
+curve    : 354.1713 dollars a share
+ceiling  : 357.5985 dollars, against a stock at 340.5700
+standing : a buy can reach the cap rule
+wallet   : 6YhqqfteH6i5Y4NmfS4zdFz2Np6cptuXViobMJQ8tnoz, funded from the demo keypair, 0.05 SOL
 holding  : 50000000 lamports
 
 PASS 1: the wallet the demo dollar button topped up, which is what a judge's wallet looks like after pressing it
 Server responded with 429 .  Retrying after 500ms delay...
-#   Attack                                               C    Expected                        What the chain said                                                                              Result
---  ---------------------------------------------------  ---  ------------------------------  -----------------------------------------------------------------------------------------------  -------
-01  Buy under the cap, the way a buyer would             C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
-02  Take more than the cap in one go                     C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
-03  Buy again, and cross the cap on the second try       C3   PriceOutsideBand                not run: this one needs a first buy behind it. Run the buy under the cap above, then come back.  not run
-04  Buy into a second token account of the same wallet   C3   PriceOutsideBand                PriceOutsideBand                                                                                 ok
-05  Buy into an account whose owner can still change     C13  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange                                                                   ok
-06  Send tokens straight to another wallet               C4   WalletToWalletDuringSale        not run: this one needs tokens to send. Run the buy under the cap above first.                   not run
-07  Call the rules program on its own, with no transfer  C1   NotTransferring                 NotTransferring                                                                                  ok
-08  Buy above the price ceiling the band sets            C9   PriceOutsideBand                PriceOutsideBand                                                                                 ok
-09  Sell back to the pool                                C5   it goes through                 not run: this one needs tokens to sell back. Run the buy under the cap above first.              not run
+#   Attack                                               C    Shares       Promise                         What the chain said             How        Result
+--  ---------------------------------------------------  ---  -----------  ------------------------------  ------------------------------  ---------  ------
+01  Buy under the cap, the way a buyer would             C3   0.127188050  it goes through                 it goes through                 sent       ok
+02  Take more than the cap in one go                     C3   1.100264228  PriceOutsideBand *              PriceOutsideBand                simulated  ok
+03  Buy again, and cross the cap on the second try       C3   0.973048447  PriceOutsideBand *              PriceOutsideBand                simulated  ok
+04  Buy into a second token account of the same wallet   C3   1.100264228  PriceOutsideBand *              PriceOutsideBand                simulated  ok
+05  Buy into an account whose owner can still change     C13  0.219939222  ReceivingAccountOwnerCanChange  ReceivingAccountOwnerCanChange  simulated  ok
+06  Send tokens straight to another wallet               C4   0.063594025  WalletToWalletDuringSale        WalletToWalletDuringSale        simulated  ok
+07  Call the rules program on its own, with no transfer  C1   0.000000001  NotTransferring                 NotTransferring                 simulated  ok
+08  Buy above the price ceiling the band sets            C9   0.133966615  PriceOutsideBand                PriceOutsideBand                simulated  ok
+09  Sell back to the pool                                C5   0.127188050  it goes through                 it goes through                 simulated  ok
 
-6 attacks run, 6 refused as expected, 0 allowed as expected
+* the program's answer for this exact transaction differs from the rule the row is named for; the row says why on screen
+sent     : https://explorer.solana.com/tx/3LGW2KfHqL5N4GRZza37rsL5wZR2p51LE6KSoc2MFqDFU3kFk6yJzgEpr3quPe2b4QF1bVhLtqz7HooEY2LzzuRh?cluster=devnet
+
+9 attacks run, 7 refused as expected, 2 allowed as expected
+off the standard: 0
 
 PASS 2 is not run: this wallet was handed the paying token by the route before the ledger started, which is the whole point of the run.
 
-run at 2026-09-22T16:42:33.148Z
+run at 2026-09-23T08:00:17.250Z
 
-run at 2026-09-22T16:42:33.167Z
+RACE: 12 fresh wallets ask at the same moment, at most 10 may be handed demo dollars
+payer    : 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW, 0.601741269 SOL
+racer 01 : HTTP 200, minted, 3enduaUnbMg3Zug8FT4DtFhJpJH7wL7HaY4YZyLLQo9cm7reREdxGFfXhzEPnFfvwvUFUFk9ZdMpvJy6VLNte5f1
+racer 02 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 03 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 04 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 05 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 06 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 07 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 08 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 09 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 10 : HTTP 502, Devnet did not take the mint. Wait a moment and press this again.
+racer 11 : HTTP 429, This button has handed out its minute's worth of demo dollars. Wait a minute and press it again.
+racer 12 : HTTP 429, This button has handed out its minute's worth of demo dollars. Wait a minute and press it again.
+
+minted   : 1
+refused  : 2 with HTTP 429
+other    : 9
+took     : 86.6 s
+LIMIT BROKEN or a request failed for another reason
+Server responded with 429 .  Retrying after 500ms delay...
+payer    : 0.600247829 SOL after, 0.00149344 SOL spent
+
+run at 2026-09-23T08:01:45.134Z

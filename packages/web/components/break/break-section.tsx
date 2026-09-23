@@ -130,14 +130,15 @@ export function BreakSection({
     if (publicKey === null || target === null) {
       return;
     }
-    setRow(attack, { status: "building", result: null, message: null });
+    setRow(attack, { ...IDLE, status: "building" });
     try {
       const built = await buildAttack(attack.id, { connection, target, wallet: publicKey });
-      setRow(attack, { status: "waiting", result: null, message: null });
+      const promised = { expected: built.expected, shares: built.shares };
+      setRow(attack, { ...IDLE, ...promised, status: "waiting" });
 
       if (mode === "simulate") {
         const result = await simulateAttack(connection, built);
-        setRow(attack, { status: "done", result, message: null });
+        setRow(attack, { ...promised, status: "done", result, message: null });
         return;
       }
 
@@ -149,10 +150,10 @@ export function BreakSection({
         maxRetries: 3,
       });
       const result = await readLanded(connection, signature);
-      setRow(attack, { status: "done", result, message: null });
+      setRow(attack, { ...promised, status: "done", result, message: null });
       setReload((count) => count + 1);
     } catch (error) {
-      setRow(attack, { status: "unavailable", result: null, message: messageOf(error) });
+      setRow(attack, { ...IDLE, status: "unavailable", message: messageOf(error) });
     }
   };
 
@@ -161,6 +162,7 @@ export function BreakSection({
     let refusedAsExpected = 0;
     let allowedAsExpected = 0;
     let off = 0;
+    let unseen = 0;
     if (target !== null) {
       for (const attack of ATTACKS) {
         const state = rows[attack.id] ?? IDLE;
@@ -168,7 +170,11 @@ export function BreakSection({
           continue;
         }
         run += 1;
-        if (!asExpected(attack, target, state)) {
+        if (state.result.outcome === "unseen") {
+          // Sent, but the chain has no record of it, so it proves nothing
+          // either way and is counted apart.
+          unseen += 1;
+        } else if (!asExpected(attack, state)) {
           off += 1;
         } else if (state.result.outcome === "allowed") {
           allowedAsExpected += 1;
@@ -177,7 +183,7 @@ export function BreakSection({
         }
       }
     }
-    return { run, refusedAsExpected, allowedAsExpected, off };
+    return { run, refusedAsExpected, allowedAsExpected, off, unseen };
   }, [rows, target]);
 
   return (
