@@ -389,7 +389,7 @@ function Graduate({
 function Terms({ sale, terms }: { sale: DirectorySale; terms: SaleTermsWire }) {
   const ceiling = ceilingWords(sale);
   const rows: [string, string][] = [
-    ["cap on one wallet", `${tokenAmount(BigInt(terms.cap), sale.baseDecimals)} ${sale.symbol || "shares"}`],
+    ["cap on one wallet", `${tokenAmount(BigInt(terms.cap), sale.baseDecimals)} shares`],
     ["who may buy", whoMayBuy(sale.accessMode).long],
     ["price ceiling", ceiling === null ? "none" : ceiling],
   ];

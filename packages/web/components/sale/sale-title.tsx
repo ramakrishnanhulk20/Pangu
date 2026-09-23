@@ -90,16 +90,18 @@ export function SaleTitle({ sale }: { sale: DirectorySale }) {
         <h1 className="-ml-[0.04em] mt-8 overflow-hidden pb-[0.05em]">
           <motion.span
             {...rise(0.08)}
-            className="block break-all font-display text-[clamp(3rem,10vw,9rem)] font-semibold leading-[0.88] tracking-[-0.05em]"
+            className="block max-w-[16ch] break-words font-display text-[clamp(2.75rem,7vw,7rem)] font-semibold leading-[0.92] tracking-[-0.045em]"
           >
-            {sale.symbol === "" ? shortAddress(sale.mint) : sale.symbol}
+            {sale.name === "" ? shortAddress(sale.mint) : sale.name}
           </motion.span>
         </h1>
         <motion.p
           {...rise(0.18)}
           className="mt-4 max-w-[28ch] font-display text-[clamp(1.4rem,2.6vw,2.2rem)] leading-[1.08] tracking-[-0.02em] text-muted"
         >
-          {sale.name}
+          {sale.symbol !== "" && (
+            <span className="font-mono text-[12px] uppercase tracking-[0.18em]">{sale.symbol}</span>
+          )}
           {sale.retired && (
             <span className="ml-3 align-middle font-mono text-[11px] uppercase tracking-[0.16em] text-refused">
               retired demo sale

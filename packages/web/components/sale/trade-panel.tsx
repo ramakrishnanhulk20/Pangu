@@ -109,7 +109,7 @@ export function TradePanel({
   const [refresh, setRefresh] = useState<Refresh>({ state: "idle" });
   const [reload, setReload] = useState(0);
 
-  const symbol = sale.symbol === "" ? "shares" : sale.symbol;
+  const symbol = "shares";
   const baseDecimals = view?.sale.baseDecimals ?? sale.baseDecimals;
   const quoteDecimals = sale.quoteDecimals ?? view?.sale.quoteDecimals ?? 0;
   const inSol = sale.money === "SOL";

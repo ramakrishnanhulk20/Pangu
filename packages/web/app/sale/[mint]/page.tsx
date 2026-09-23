@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { ReadoutSkeleton } from "@/components/readout/readout-skeleton";
@@ -30,7 +31,12 @@ export default async function SalePage({ params }: Params) {
   const { mint } = await params;
   const lookup = await findSale(mint);
   if (!lookup.found) {
-    return <SaleNotFound mint={mint} unanswered={lookup.unanswered} />;
+    // A quiet chain is a moment, not a missing page, so only a real miss
+    // answers 404.
+    if (!lookup.unanswered) {
+      notFound();
+    }
+    return <SaleNotFound mint={mint} unanswered />;
   }
 
   return (
