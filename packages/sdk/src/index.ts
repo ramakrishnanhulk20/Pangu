@@ -35,9 +35,10 @@ export {
   getSale,
   getBuyerRecord,
   listBuyerRecords,
+  listSales,
   isSaleRunning,
 } from "./accounts.js";
-export type { Sale, BuyerRecord } from "./accounts.js";
+export type { Sale, BuyerRecord, ListSalesOptions } from "./accounts.js";
 
 export {
   curvePriceDollars,
@@ -53,6 +54,9 @@ export { decodePriceUpdate, readPrice } from "./feed.js";
 export type { PriceUpdate, PriceReading } from "./feed.js";
 
 export { saleStanding } from "./standing.js";
+
+export { saleTokenInfo, saleDirectory } from "./directory.js";
+export type { SaleTokenInfo, SaleDirectoryEntry } from "./directory.js";
 export type { SaleStanding } from "./standing.js";
 
 export {

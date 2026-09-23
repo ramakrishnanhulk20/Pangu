@@ -1,6 +1,6 @@
 import { Buffer } from "buffer";
 import type { BN } from "@anchor-lang/core";
-import type { Connection, PublicKey } from "@solana/web3.js";
+import type { AccountInfo, Connection, PublicKey } from "@solana/web3.js";
 import { getTransferHook, unpackMint } from "@solana/spl-token";
 import { buyerRecordAddress, feedIdHex, saleRulesAddress } from "./addresses.js";
 import {
@@ -305,6 +305,63 @@ export async function listBuyerRecords(
   return accounts.map((entry) => decodeBuyerRecord(entry.account.data));
 }
 
+/** What `listSales` can be told, beyond the connection. */
+export interface ListSalesOptions {
+  /**
+   * Called once for every rules account left out of the list, with its address
+   * and the reason in words. Count the calls to know how many were skipped.
+   */
+  onSkipped?: (address: PublicKey, reason: string) => void;
+}
+
+/**
+ * Every sale the Pangu program holds rules for, in no particular order.
+ *
+ * One scan, filtered by the node on the SaleRules discriminator and on the size
+ * this build writes, so buyer records and the larger accounts an earlier build
+ * left behind never come back. An account of the right size that this package
+ * cannot read, a layout version it does not know, or one that does not sit at
+ * the rules address of the mint it names, is skipped and reported through
+ * `onSkipped` rather than thrown, so one stray account cannot hide every other
+ * sale. Each sale comes back exactly as `decodeSale` reads it, so a sale with no
+ * price band still shows zero decimals here; `getSale` or `saleDirectory` fill
+ * them from the mint.
+ *
+ * Throws when the node refuses the scan, because a short list would look like
+ * a complete one.
+ */
+export async function listSales(
+  connection: Connection,
+  options: ListSalesOptions = {}
+): Promise<Sale[]> {
+  const coder = panguCoder().accounts;
+  const accounts = await connection.getProgramAccounts(PANGU_PROGRAM_ID, {
+    filters: [{ dataSize: coder.size(SALE_RULES) }, { memcmp: coder.memcmp(SALE_RULES) }],
+  });
+  const sales: Sale[] = [];
+  for (const entry of accounts) {
+    let sale: Sale;
+    try {
+      sale = decodeSale(entry.account.data);
+    } catch (error) {
+      if (!(error instanceof PanguInputError)) {
+        throw error;
+      }
+      options.onSkipped?.(entry.pubkey, error.message);
+      continue;
+    }
+    if (!saleRulesAddress(sale.mint).equals(entry.pubkey)) {
+      options.onSkipped?.(
+        entry.pubkey,
+        `these rules name ${sale.mint.toBase58()}, whose rules live at another address`
+      );
+      continue;
+    }
+    sales.push(sale);
+  }
+  return sales;
+}
+
 /**
  * Whether the sale is still running, read off the token itself.
  *
@@ -320,10 +377,22 @@ export async function isSaleRunning(
   mint: PublicKey
 ): Promise<boolean> {
   const info = await connection.getAccountInfo(requirePublicKey(mint, "mint"));
+  return mintRunsPangu(mint, info);
+}
+
+/**
+ * The running check of `isSaleRunning` on mint bytes already in hand, so a
+ * caller that fetched many mints in one call judges each the same way. Throws
+ * when a Token-2022 account's bytes are not a mint.
+ */
+export function mintRunsPangu(
+  mint: PublicKey,
+  info: AccountInfo<Uint8Array> | null
+): boolean {
   if (info === null || !info.owner.equals(TOKEN_2022_PROGRAM_ID)) {
     return false;
   }
-  const state = unpackMint(mint, info, TOKEN_2022_PROGRAM_ID);
+  const state = unpackMint(mint, info as AccountInfo<Buffer>, TOKEN_2022_PROGRAM_ID);
   const hook = getTransferHook(state);
   if (hook === null) {
     return false;

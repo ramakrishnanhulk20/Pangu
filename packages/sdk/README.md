@@ -29,6 +29,25 @@ if (sale !== null) {
 }
 ```
 
+## List every sale
+
+```ts
+import { saleDirectory } from "pangu-sdk";
+
+for (const entry of await saleDirectory(connection)) {
+  console.log(entry.symbol, entry.name, entry.running, entry.graduated, entry.offeringOver);
+}
+```
+
+No file of addresses needed: one scan finds every sale's rules, then the mints,
+the pools and the chain's clock are read in calls of 100, so fifty sales cost
+three calls. Names and symbols come from the metadata DBC writes on the mint;
+they are whatever the issuer typed, so the mint is what identifies a sale.
+`graduated` is null when the pool cannot be read as the one selling the mint. A
+rules account from a layout this package does not read is left out rather than
+thrown; pass `onSkipped` to hear about each one. `listSales` and
+`saleTokenInfo` are the two halves on their own.
+
 ## Open a sale
 
 ```ts
