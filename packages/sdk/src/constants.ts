@@ -108,3 +108,34 @@ export const LIMITS = {
   /** u64 raw token units, the widest cap the program can hold. */
   maxCap: (1n << 64n) - 1n,
 } as const;
+
+/**
+ * The paying tokens each build of the program accepts under a price ceiling.
+ * Source: create_sale.rs, DOLLAR_MINTS, which differs between the mainnet build
+ * and the devnet build (feature "devnet"). Circle's devnet USDC and the demo
+ * dollar mean nothing on mainnet, which is why the lists are separate.
+ */
+const DOLLAR_MINT_ADDRESSES = {
+  mainnet: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+  devnet: [
+    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5",
+  ],
+} as const;
+
+/**
+ * The dollar tokens a banded sale can be paid in on `network`, in the order the
+ * program lists them. A fresh array each call, so a caller cannot change the
+ * list another caller reads.
+ *
+ * Covers the exact addresses the program checks. Does not say whether a listed
+ * stablecoin still holds its peg. Throws for any network other than "devnet" or
+ * "mainnet", because guessing a list would let a ceiling through the program
+ * then refuses.
+ */
+export function dollarMints(network: "devnet" | "mainnet"): PublicKey[] {
+  if (!Object.prototype.hasOwnProperty.call(DOLLAR_MINT_ADDRESSES, network)) {
+    throw new Error(`no dollar list for network "${String(network)}": use "devnet" or "mainnet"`);
+  }
+  return DOLLAR_MINT_ADDRESSES[network].map((address) => new PublicKey(address));
+}

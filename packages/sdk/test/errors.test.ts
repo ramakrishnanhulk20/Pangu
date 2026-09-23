@@ -167,7 +167,13 @@ describe("explaining a refusal", () => {
   });
 
   it("tells an issuer what to change for each refusal at creation", () => {
-    expect(explainPanguError("BandNeedsDollarQuote")).toMatch(/dollar/);
+    expect(explainPanguError("BandNeedsDollarQuote")).toBe(
+      "A price ceiling needs buyers to pay in a dollar token the program recognises (USDC, or on devnet the demo dollar). Turn the ceiling off, or pick a dollar paying token."
+    );
+    // The IDL copy carries the sixth deploy's message: the list, not wrapped SOL.
+    expect(
+      PANGU_ERRORS.find((error) => error.name === "BandNeedsDollarQuote")?.message
+    ).toBe("a price band needs buyers to pay in a dollar token on this network's list");
     expect(explainPanguError("IssuerControlsPayingToken")).toMatch(/freeze authority/);
     expect(explainPanguError("CapCoversWholeSale")).toMatch(/below the curve's supply/);
     expect(explainPanguError("EndInThePast")).toMatch(/later than now/);

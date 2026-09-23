@@ -215,7 +215,7 @@ const EXPLANATIONS = {
   WrongLayoutVersion:
     "These sale rules were written by an older build of the program, so this build will not act on them.",
   BandNeedsDollarQuote:
-    "A price band compares the curve with a stock price in dollars, so buyers have to pay in a dollar token. Pick a launch template priced in a dollar stablecoin, or open the sale without a band.",
+    "A price ceiling needs buyers to pay in a dollar token the program recognises (USDC, or on devnet the demo dollar). Turn the ceiling off, or pick a dollar paying token.",
   IssuerControlsPayingToken:
     "You hold the freeze authority of the token buyers pay in, which would let you stop sellers being paid. Pick a paying token whose freeze authority is not yours.",
   CapCoversWholeSale:

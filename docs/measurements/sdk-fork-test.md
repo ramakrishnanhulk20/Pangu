@@ -180,3 +180,45 @@ lamports, 15 buyers, the largest holding 10.00 percent against a cap share of
 
 Migration still asks for no compute limit of its own: 152,120 units against the
 200,000 a single instruction gets by default.
+
+## Run of 23 September 2026: the dollar list
+
+Same command, against the sixth devnet deploy's build, which sets a price
+ceiling only when buyers pay in a dollar on the build's list. Binary SHA256
+`e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f`, IDL SHA256
+`0395b2857f9e1015ceda0ef990afce8deac2a98792f631948a7a6406fe35d5b1`. The build
+check found devnet USDC and the demo dollar in the binary and mainnet USDC not
+in it.
+
+Result: all 16 steps pass, a to p, `SDK-FORK-OK`. Nothing was sent to mainnet.
+
+What changed since the run above:
+
+- The banded sales pay in the demo dollar
+  `2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5`, not a token the test makes.
+  The fork validator already plants it before genesis for the program's own
+  suite, with a throwaway mint authority kept outside the repo, and step l
+  checks the planted mint (six decimals, that authority, no freeze authority)
+  and that the package's `dollarMints("devnet")` lists it before minting to the
+  buyers.
+- Step p is new. A fresh token with six decimals and no freeze authority, which
+  looks exactly like a dollar and is not on the list, gets a launch template,
+  and the banded pool and rules on it are refused with `BandNeedsDollarQuote`.
+  The refused transaction left no pool and no rules behind: the pool and the
+  rules go in one transaction, so both are refused together.
+
+The proof numbers hold: the curve raised 5,000,000,001 of 5,000,000,000
+lamports, 15 buyers, the largest holding 10.00 percent against a cap share of
+10.00 percent. `OverCap`, `PriceOutsideBand` and `PriceStale` were each
+predicted and then refused by the chain.
+
+| Action | Bytes | Compute units |
+|---|---|---|
+| Pool plus the sale's rules, one transaction | 943 | 99,256 |
+| First buy | 910 | 132,341 |
+| A later buy | 910 | 124,850 to 153,354 |
+| Sell back to the pool | 878 | 103,533 |
+| Migrate to DAMM v2 | 1,139 | 144,612 |
+| Close a buyer record | 277 | 7,820 |
+| Banded pool plus rules, paid in the demo dollar | 940 | 108,541 |
+| A buy in a banded sale | 912 to 922 | 113,926 to 131,465 |

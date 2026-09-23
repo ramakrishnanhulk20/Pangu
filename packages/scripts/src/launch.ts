@@ -9,8 +9,9 @@
  * Every launch says when its offering period ends, with `--ends-in <hours>` or
  * `--no-end`. There is no default: see offering.ts.
  *
- * A band needs a paying token that is a dollar, so `--band` with the default
- * wrapped SOL is refused before anything is read or sent.
+ * A band needs a paying token on the devnet program's dollar list (devnet USDC
+ * or the demo dollar), so `--band` with any other paying token, the default
+ * wrapped SOL included, is refused before anything is read or sent.
  *
  * Everything it prints comes back off the chain after the transactions land,
  * and every sale it opens is appended to sales.json so the other commands can
@@ -18,11 +19,14 @@
  */
 
 import { PublicKey, type Connection, type Keypair } from "@solana/web3.js";
+import { pathToFileURL } from "node:url";
 import { NATIVE_MINT, getMint } from "@solana/spl-token";
 import { TokenDecimal } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import {
   ACCESS_MODE,
   PANGU_PROGRAM_ID,
+  dollarMints,
+  explainPanguError,
   extraAccountListAddress,
   getSale,
   saleRulesAddress,
@@ -58,7 +62,6 @@ import {
 } from "./environment.js";
 import {
   bandFor,
-  bandQuoteRefusal,
   feedFor,
   feedPriceAccount,
   DEFAULT_FEED,
@@ -138,6 +141,26 @@ const ACCESS_MODE_OF: Record<(typeof MODES)[number], AccessMode> = {
   credential: ACCESS_MODE.verifierCredential,
 };
 
+/**
+ * Why a ceiling cannot go on a sale paid in this token, or null when it can.
+ *
+ * The devnet program opens a banded sale only when the paying mint is on its
+ * dollar list, and refuses anything else as BandNeedsDollarQuote. This says the
+ * same thing, in the same sentence the app shows, before a launch pays for a
+ * template. Covers the exact addresses on the list. Does not judge whether a
+ * token outside the list is a dollar: a fresh mint that looks like one is
+ * refused, as the program refuses it.
+ */
+export function dollarQuoteRefusal(bandBps: number, quoteMint: PublicKey): string | null {
+  if (bandBps <= 0) {
+    return null;
+  }
+  if (dollarMints("devnet").some((mint) => mint.equals(quoteMint))) {
+    return null;
+  }
+  return explainPanguError("BandNeedsDollarQuote");
+}
+
 /** The paying token's own decimals, read off the mint rather than assumed. */
 async function quoteDecimalsOf(
   connection: Connection,
@@ -191,7 +214,7 @@ async function main(): Promise<void> {
 
   // Refused before anything is read or sent.
   const quoteMint = quoteFlag === "wsol" ? NATIVE_MINT : new PublicKey(quoteFlag);
-  const bandRefused = bandQuoteRefusal(bandBps, quoteMint);
+  const bandRefused = dollarQuoteRefusal(bandBps, quoteMint);
   if (bandRefused !== null) {
     throw new ArgumentError(bandRefused);
   }
@@ -416,7 +439,14 @@ async function main(): Promise<void> {
   console.log("recorded : the cap and the rest of what the chain says, in sales.json");
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+// The test reads this file for its refusal, so main only runs when node was
+// started on this file rather than on vitest.
+const runningAsCommand =
+  process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (runningAsCommand) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

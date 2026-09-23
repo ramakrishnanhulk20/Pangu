@@ -81,13 +81,21 @@ export {
   createCredentialInstruction,
   createSchemaInstruction,
   createAttestationInstruction,
+  closeAttestationInstruction,
+  listAttestations,
+  credentialStatus,
   VERIFIED_SCHEMA,
 } from "./sas.js";
 export type {
   CreateCredentialInput,
   CreateSchemaInput,
   CreateAttestationInput,
+  CloseAttestationInput,
+  CredentialStanding,
+  IssuedCredential,
 } from "./sas.js";
+
+export { dollarMints } from "./constants.js";
 
 export {
   panguErrorFromLogs,

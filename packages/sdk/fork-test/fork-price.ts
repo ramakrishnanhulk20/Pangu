@@ -1,5 +1,5 @@
-// Fork scaffolding: finding the Pyth price accounts a banded sale reads on a
-// local validator.
+// Fork scaffolding: finding the Pyth price accounts a banded sale reads, and
+// the demo dollar it pays in, on a local validator.
 //
 // Pyth's receiver program does not run on a local chain, and a price feed
 // account is a program address only Pyth's price feed program could produce. So
@@ -18,7 +18,8 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { priceFeedAddress } from "../src/index.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { dollarMints, priceFeedAddress } from "../src/index.js";
 
 /** Where fork-validator.sh leaves the accounts it made and its manifest. */
 export const FORK_ACCOUNTS_DIR = join(homedir(), "pangu-fork-accounts");
@@ -30,6 +31,18 @@ export const PRICE_FEED_ID = fillFeed(0x51);
 /** The band and the confidence limit those sales are opened with. */
 export const BAND_BPS = 1_000;
 export const MAX_CONF_BPS = 100;
+
+/**
+ * The demo dollar, on the devnet build's list of tokens a price ceiling may be
+ * set on. The fork runs that build, so every banded sale here is paid in it.
+ * It does not exist on mainnet, so the program's band-accounts.ts writes the
+ * mint before genesis, with a throwaway wallet as its mint authority.
+ */
+export const DEMO_DOLLAR_MINT = new PublicKey(
+  "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"
+);
+/** The file band-accounts.ts keeps that throwaway authority in. */
+const DOLLAR_AUTHORITY_FILE = "band-dollar-authority.json";
 
 export type SaleName = "low" | "high" | "aging";
 
@@ -69,6 +82,22 @@ export function readManifest(): PriceManifest {
     }
   }
   return manifest;
+}
+
+/**
+ * The wallet that can mint the demo dollar on the fork.
+ *
+ * Refuses when the SDK's own devnet list does not carry the demo dollar, so a
+ * list that drifted from the program would fail here before any sale is sent.
+ */
+export function demoDollarAuthority(): Keypair {
+  if (!dollarMints("devnet").some((mint) => mint.equals(DEMO_DOLLAR_MINT))) {
+    throw new Error("the SDK's devnet dollar list does not carry the demo dollar");
+  }
+  const secret = JSON.parse(
+    readFileSync(join(FORK_ACCOUNTS_DIR, DOLLAR_AUTHORITY_FILE), "utf8")
+  ) as number[];
+  return Keypair.fromSecretKey(Uint8Array.from(secret));
 }
 
 function fillFeed(marker: number): number[] {

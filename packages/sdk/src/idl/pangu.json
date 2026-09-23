@@ -856,7 +856,7 @@
     {
       "code": 6029,
       "name": "BandNeedsDollarQuote",
-      "msg": "a price band needs buyers to pay in a dollar token, not wrapped SOL"
+      "msg": "a price band needs buyers to pay in a dollar token on this network's list"
     },
     {
       "code": 6030,

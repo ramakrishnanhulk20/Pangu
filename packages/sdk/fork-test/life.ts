@@ -8,9 +8,11 @@
 // @solana/spl-token for the ordinary token accounts a test wallet needs, plus
 // Meteora's enum names for the curve parameters, which are their own input type.
 //
-// Covers: mode 1 access, the cap, the exit, both fee claims, graduation and a
-// banded sale where the preflight predicts both refusals the band can raise:
-// the price leaving the band, and the price going stale.
+// Covers: mode 1 access, the cap, the exit, both fee claims, graduation, a
+// banded sale paid in the demo dollar where the preflight predicts both
+// refusals the band can raise (the price leaving the band, and the price going
+// stale), and a ceiling refused on a fresh dollar-looking token the devnet
+// build does not list.
 //
 // Does NOT cover: the credential access mode, DAMM v2's behaviour after
 // migration, and the Wormhole guardian signatures behind a Pyth price, which no
@@ -35,6 +37,7 @@ import {
   createInitializeMint2Instruction,
   createMintToInstruction,
   getAssociatedTokenAddressSync,
+  getMint,
 } from "@solana/spl-token";
 import {
   ActivationType,
@@ -74,8 +77,10 @@ import {
 } from "../src/dbc/index.js";
 import {
   BAND_BPS,
+  DEMO_DOLLAR_MINT,
   MAX_CONF_BPS,
   PRICE_FEED_ID,
+  demoDollarAuthority,
   readManifest,
   type SaleName,
 } from "./fork-price.js";
@@ -564,6 +569,7 @@ async function main(): Promise<void> {
   assert.ok((await connection.getBalance(buyer.publicKey)) > before);
 
   await bandedSale(partner, creator, buyer);
+  await unlistedDollarRefused(partner, creator);
 
   console.log("\n== what each action cost");
   console.log("| Action | Bytes | Compute units |");
@@ -587,29 +593,18 @@ async function bandedSale(
   const manifest = readManifest();
   const quoteDecimals = 6;
 
-  step("l. a paying token the test controls, and a banded template");
-  const quoteMintKeypair = Keypair.generate();
-  const quoteMint = quoteMintKeypair.publicKey;
-  await send(
-    "create the paying token",
-    new Transaction().add(
-      SystemProgram.createAccount({
-        fromPubkey: partner.publicKey,
-        newAccountPubkey: quoteMint,
-        lamports: await connection.getMinimumBalanceForRentExemption(MINT_SIZE),
-        space: MINT_SIZE,
-        programId: TOKEN_PROGRAM_ID,
-      }),
-      createInitializeMint2Instruction(
-        quoteMint,
-        quoteDecimals,
-        partner.publicKey,
-        null,
-        TOKEN_PROGRAM_ID
-      )
-    ),
-    [partner, quoteMintKeypair]
+  step("l. the demo dollar the devnet build lists, and a banded template");
+  // The devnet build sets a ceiling only on its listed dollars, so the banded
+  // sales pay in the demo dollar that fork-validator.sh planted at genesis.
+  const quoteMint = DEMO_DOLLAR_MINT;
+  const dollarAuthority = demoDollarAuthority();
+  const planted = await getMint(connection, quoteMint, "confirmed", TOKEN_PROGRAM_ID);
+  assert.equal(planted.decimals, quoteDecimals, "the planted demo dollar has other decimals");
+  assert.ok(
+    planted.mintAuthority?.equals(dollarAuthority.publicKey),
+    "the planted demo dollar names another mint authority"
   );
+  assert.equal(planted.freezeAuthority, null, "the planted demo dollar can be frozen");
 
   const wallets = [buyer];
   for (let extra = 1; extra < BANDED_BUYERS; extra += 1) {
@@ -637,13 +632,13 @@ async function bandedSale(
         createMintToInstruction(
           quoteMint,
           walletQuote,
-          partner.publicKey,
+          dollarAuthority.publicKey,
           10_000_000n * 10n ** BigInt(quoteDecimals),
           [],
           TOKEN_PROGRAM_ID
         )
       ),
-      [partner]
+      [partner, dollarAuthority]
     );
   }
 
@@ -855,6 +850,87 @@ async function bandedSale(
   // The sale next door is untouched: each one names its own account and its own
   // limit, so one going stale says nothing about the other.
   assert.equal((await readPrice(connection, view!)).usable, true);
+}
+
+/**
+ * A ceiling on a paying token that looks exactly like a dollar and is not on
+ * the devnet build's list: six decimals, no freeze authority, a fresh address.
+ * The template lands, because Meteora does not care what it is paid in, and the
+ * pool and the rules are refused together in their one transaction.
+ */
+async function unlistedDollarRefused(partner: Keypair, creator: Keypair): Promise<void> {
+  const manifest = readManifest();
+
+  step("p. a ceiling on a fresh dollar-looking token is refused");
+  const lookalike = Keypair.generate();
+  await send(
+    "create a dollar-looking token",
+    new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: partner.publicKey,
+        newAccountPubkey: lookalike.publicKey,
+        lamports: await connection.getMinimumBalanceForRentExemption(MINT_SIZE),
+        space: MINT_SIZE,
+        programId: TOKEN_PROGRAM_ID,
+      }),
+      createInitializeMint2Instruction(
+        lookalike.publicKey,
+        6,
+        partner.publicKey,
+        null,
+        TOKEN_PROGRAM_ID
+      )
+    ),
+    [partner, lookalike]
+  );
+
+  const template = await launchTemplateTransaction({
+    connection,
+    partner: partner.publicKey,
+    quoteMint: lookalike.publicKey,
+    curve: curveFor(TokenDecimal.SIX, 500_000),
+  });
+  await send("template on the unlisted token", template.transaction, [
+    partner,
+    template.config,
+  ]);
+
+  const opened = await openSaleTransaction({
+    connection,
+    creator: creator.publicKey,
+    config: template.config.publicKey,
+    name: "Pangu Unlisted",
+    symbol: "PUNL",
+    uri: "https://example.invalid/punl.json",
+    sale: {
+      capShareBps: BANDED_CAP_BPS,
+      accessMode: 0,
+      band: {
+        bps: BAND_BPS,
+        priceFeedId: PRICE_FEED_ID,
+        shard: manifest.low.shard,
+        maxPriceAgeSecs: manifest.low.maxPriceAgeSecs,
+        maxConfBps: MAX_CONF_BPS,
+      },
+    },
+  });
+  assert.equal(
+    await refusal("a ceiling on an unlisted paying token", opened.transaction, [
+      creator,
+      opened.baseMint,
+    ]),
+    "BandNeedsDollarQuote"
+  );
+  assert.equal(
+    await connection.getAccountInfo(opened.pool),
+    null,
+    "the refused transaction left a pool behind"
+  );
+  assert.equal(
+    await getSale(connection, opened.baseMint.publicKey),
+    null,
+    "the refused transaction left sale rules behind"
+  );
 }
 
 main()

@@ -1547,3 +1547,21 @@ app                         SKIP    APP_URL is not set in .env, so there is no s
 
 PBAND2 shows 11 buyers against the 10 the sixth run left: one wallet bought on
 it between the two runs, not from these commands.
+
+# The eighth run: a ceiling refused on a paying token outside the dollar list
+
+23 September 2026, against the sixth deploy (binary SHA256 `e40ab680...`). The
+demo wallet `9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW` made a fresh token
+with six decimals and no freeze authority,
+[`AqZqxdCUeu2WgGx57Xc8Cag4SDsUh4E37gFKgM7a2Bg4`](https://explorer.solana.com/address/AqZqxdCUeu2WgGx57Xc8Cag4SDsUh4E37gFKgM7a2Bg4?cluster=devnet),
+opened a launch template paid in it, then sent the banded pool and rules (a 5
+percent ceiling over the AAPLx feed) for real with preflight skipped. The
+program refused it with `BandNeedsDollarQuote` (6029):
+[`M9GmvWbF...`](https://explorer.solana.com/tx/M9GmvWbFTHCPBJnPbX1k2hmHUzqdBgAQnf7LevymftEjcjTbfM6wy3YXrUieCg2NWsfNdoP9qXESgQP4C9wcYCG?cluster=devnet).
+
+What exists afterwards: the token (nothing minted) and the template
+[`AxmLxENZxPdWCaMZzQca1NJphJSHfj7ZHdXmjBkSVHsr`](https://explorer.solana.com/address/AxmLxENZxPdWCaMZzQca1NJphJSHfj7ZHdXmjBkSVHsr?cluster=devnet).
+No pool, no sale rules and no sale token: they go in the one refused
+transaction. Cost, read off each transaction: 0.001077 SOL for the token,
+0.006390 for the template, 0.00001 for the refused transaction, 0.007477 SOL in
+all.
