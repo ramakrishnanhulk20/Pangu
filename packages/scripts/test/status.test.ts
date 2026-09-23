@@ -1,6 +1,7 @@
 // The table `status` prints, the exit code that goes with it, the market clock
 // behind the stale-price rule, what sales.json is held to against the chain,
-// and how the deployment record is read.
+// how the deployment record is read, which network the command reads, and the
+// verified mainnet build it holds that network's program to.
 //
 // Does NOT cover: the reads themselves. Every one of those is a read of devnet,
 // of Hermes or of the live site, and only the command against the real network
@@ -9,14 +10,17 @@
 import { describe, expect, it } from "vitest";
 import { Keypair } from "@solana/web3.js";
 import { PanguInputError, PanguLayoutError } from "pangu-sdk";
+import { ArgumentError } from "../src/arguments.js";
 import {
   earlierBuildReason,
   exitCode,
   hermesAgeResult,
   readDeployedBuild,
+  readVerifiedMainnetBuild,
   recordCheck,
   renderTable,
   staleResult,
+  statusNetwork,
   summaryLine,
   usMarketOpen,
   type CheckRow,
@@ -189,5 +193,61 @@ describe("sales.json against the chain", () => {
     const unread = recordCheck({ ...file, cap: null }, chain);
     expect(unread.result).toBe("WARN");
     expect(unread.detail).toContain("1099999999");
+  });
+});
+
+describe("which network status reads", () => {
+  it("is devnet when nothing is asked", () => {
+    expect(statusNetwork([])).toBe("devnet");
+  });
+
+  it("is mainnet only when asked by name, either way of writing the flag", () => {
+    expect(statusNetwork(["--network", "mainnet"])).toBe("mainnet");
+    expect(statusNetwork(["--network=mainnet"])).toBe("mainnet");
+    expect(statusNetwork(["--network", "devnet"])).toBe("devnet");
+  });
+
+  it("refuses any other network, any other spelling and any other flag", () => {
+    expect(() => statusNetwork(["--network", "testnet"])).toThrow(ArgumentError);
+    expect(() => statusNetwork(["--network", "Mainnet"])).toThrow(ArgumentError);
+    expect(() => statusNetwork(["--network"])).toThrow(ArgumentError);
+    expect(() => statusNetwork(["--send", "yes"])).toThrow(ArgumentError);
+    expect(() => statusNetwork(["mainnet"])).toThrow(ArgumentError);
+  });
+});
+
+describe("the verified mainnet build", () => {
+  const VERIFIED = DEPLOYMENTS.replace(
+    "| Program id | not deployed |",
+    [
+      "| Program id | not deployed |",
+      "| Verified build size | 366,968 bytes |",
+      "| sha256 of the verified build | `F15F65ED8DCF4A64380BABF010B2F132FD71645669B0C3B4FBD9FF2C00461358` |",
+    ].join("\n")
+  );
+
+  it("reads the size and the hash from the mainnet section, and lowercases the hash", () => {
+    expect(readVerifiedMainnetBuild(VERIFIED)).toEqual({
+      buildBytes: 366_968,
+      sha256: "f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358",
+    });
+  });
+
+  it("never lets the devnet section answer for mainnet", () => {
+    const onlyDevnet = VERIFIED.slice(0, VERIFIED.indexOf("## Mainnet"));
+    expect(() => readVerifiedMainnetBuild(onlyDevnet)).toThrow(/## Mainnet/);
+    expect(() => readVerifiedMainnetBuild(DEPLOYMENTS)).toThrow(/Verified build size/);
+  });
+
+  it("only takes a heading that is the whole line", () => {
+    expect(() =>
+      readVerifiedMainnetBuild(VERIFIED.replace("## Mainnet", "## Mainnet, later"))
+    ).toThrow(/## Mainnet/);
+  });
+
+  it("refuses a hash that is not a hash", () => {
+    expect(() => readVerifiedMainnetBuild(VERIFIED.replace(/F15F65ED[0-9A-F]+/, "pending"))).toThrow(
+      /not a sha256/
+    );
   });
 });

@@ -8,6 +8,17 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/b
 #   bash fork-validator.sh          start it and wait for it to answer
 #   bash fork-validator.sh stop     kill it
 #
+# Two settings exist for the mainnet rehearsal (scripts/wsl/mainnet-rehearsal.sh):
+#   LEAVE_PANGU_ADDRESS_EMPTY=1   start without Pangu at its address, so the
+#                                 rehearsal can deploy the mainnet build there
+#   REHEARSAL_ACCOUNT_LIST=<file> also load the accounts that file lists, one
+#                                 "<address> <json file>" per line, written by
+#                                 packages/sdk/fork-test/rehearsal-accounts.ts
+#   MATCH_MAINNET_FEATURES=1      copy mainnet's feature gates instead of turning
+#                                 every one on. A local validator otherwise runs
+#                                 SIMD-0500, which refuses to deploy SBPF v0
+#                                 programs and is not active on mainnet
+#
 # Nothing here ever sends a transaction to mainnet. Mainnet is only read.
 
 set -uo pipefail
@@ -56,7 +67,15 @@ if [ "${1:-start}" = "stop" ]; then
   exit 0
 fi
 
-if [ ! -f "$PANGU_SO" ]; then
+FEATURE_ARGS=()
+if [ "${MATCH_MAINNET_FEATURES:-0}" = "1" ]; then
+  FEATURE_ARGS=(--clone-feature-set)
+fi
+
+PANGU_ARGS=(--bpf-program "$PANGU_ID" "$PANGU_SO")
+if [ "${LEAVE_PANGU_ADDRESS_EMPTY:-0}" = "1" ]; then
+  PANGU_ARGS=()
+elif [ ! -f "$PANGU_SO" ]; then
   echo "missing $PANGU_SO, run build.sh first" >&2
   exit 1
 fi
@@ -106,6 +125,15 @@ else
   exit 1
 fi
 
+REHEARSAL_ARGS=""
+if [ -n "${REHEARSAL_ACCOUNT_LIST:-}" ]; then
+  [ -f "$REHEARSAL_ACCOUNT_LIST" ] || { echo "missing $REHEARSAL_ACCOUNT_LIST" >&2; exit 1; }
+  while read -r address file; do
+    [ -z "$address" ] && continue
+    REHEARSAL_ARGS="$REHEARSAL_ARGS --account $address $file"
+  done < "$REHEARSAL_ACCOUNT_LIST"
+fi
+
 # Why each cloned account is here:
 #   dbcij...  Dynamic Bonding Curve, the program under test.
 #   cpamd...  DAMM v2, where the sale graduates to.
@@ -120,6 +148,12 @@ fi
 #   8VeV...   AAPLx's DBC token badge. Without it DBC refuses a stock-token quote.
 #   22zo...   The Solana Attestation Service, loaded from the dumped mainnet
 #             binary so the credential tests run against the real program.
+#   EPjF...   USDC, the one dollar the mainnet build lets a ceiling be set on.
+#             The rehearsal's wallets are handed USDC accounts at genesis,
+#             because nobody local holds Circle's mint authority.
+#   SQDS...   Squads v4, the multisig the upgrade authority plan moves to.
+#   BSTq...   Squads' program config, read when a multisig is created.
+#   5DH2...   The treasury that config names, paid any multisig creation fee.
 # DAMM v2's event authority is deliberately absent: it does not exist on mainnet
 # either, because an event-authority PDA never needs an account of its own.
 nohup setsid solana-test-validator \
@@ -128,6 +162,7 @@ nohup setsid solana-test-validator \
   --ledger "$LEDGER" \
   --limit-ledger-size 100000 \
   --url "$MAINNET" \
+  "${FEATURE_ARGS[@]}" \
   --clone-upgradeable-program dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN \
   --clone-upgradeable-program cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG \
   --clone FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM \
@@ -137,10 +172,15 @@ nohup setsid solana-test-validator \
   --clone So11111111111111111111111111111111111111112 \
   --clone XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp \
   --clone 8VeVZe3Zxfpax2qQUp7i68FCLspLYErm2FJChc5NDuVn \
-  --bpf-program "$PANGU_ID" "$PANGU_SO" \
+  --clone EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
+  --clone-upgradeable-program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf \
+  --clone BSTq9w3kZwNwpBXJEvTZz2G9ZTNyKBvoSeXMvwb4cNZr \
+  --clone 5DH2e3cJmFpyi6mk65EGFediunm4ui6BiKNUNrhWtD1b \
+  "${PANGU_ARGS[@]}" \
   --bpf-program "$SAS_ID" "$SAS_SO" \
   $STOCK_ARGS \
   $BAND_ARGS \
+  $REHEARSAL_ARGS \
   > "$LOG" 2>&1 &
 
 echo $! > "$PIDFILE"

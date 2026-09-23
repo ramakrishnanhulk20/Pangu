@@ -1,6 +1,7 @@
 /**
  * What every devnet script needs before it can do anything: the network, the
- * paying key, and a link a judge can click.
+ * paying key, and a link a judge can click. Mainnet appears here only as a
+ * node `status --network mainnet` reads; nothing that writes can reach it.
  *
  * The key is read from a file whose path comes from `.env`. Key bytes never
  * live in `.env`, never reach a log line, and never enter the repository (C12
@@ -13,9 +14,15 @@ import { fileURLToPath } from "node:url";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 
 /** Devnet's own genesis hash. The one fact that says which chain answered. */
-const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+export const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+/** Mainnet's genesis hash, for the one command that may read mainnet. */
+export const MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
 const DEFAULT_RPC = "https://api.devnet.solana.com";
+const DEFAULT_MAINNET_RPC = "https://api.mainnet-beta.solana.com";
+
+/** The networks a command can be pointed at. Only status takes mainnet, and only to read. */
+export type Network = "devnet" | "mainnet";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const repositoryRoot = join(packageRoot, "..", "..");
@@ -47,8 +54,65 @@ export function rpcUrl(): string {
  * address itself, so the scripts name it instead of showing it.
  */
 export function shownRpc(): string {
-  const url = rpcUrl();
-  return url === DEFAULT_RPC ? url : "the keyed devnet node from .env";
+  return nodeName(rpcUrl(), DEFAULT_RPC, "the keyed devnet node from .env");
+}
+
+/**
+ * What may be printed for a node: the public address as it is, anything else by
+ * a name, because a keyed URL carries its key in the address itself.
+ */
+export function nodeName(url: string, publicUrl: string, keyedName: string): string {
+  return url === publicUrl ? url : keyedName;
+}
+
+export function mainnetRpcUrl(): string {
+  loadEnvFile();
+  const url = process.env.MAINNET_RPC_URL;
+  return url === undefined || url.length === 0 ? DEFAULT_MAINNET_RPC : url;
+}
+
+export function shownMainnetRpc(): string {
+  return nodeName(mainnetRpcUrl(), DEFAULT_MAINNET_RPC, "the keyed mainnet node from .env");
+}
+
+/**
+ * A connection for reading mainnet. It is only ever handed to `status`, which
+ * signs and sends nothing; every command that writes builds its connection with
+ * `devnet()` and checks it with `requireDevnet`, and neither reads
+ * MAINNET_RPC_URL.
+ */
+export function mainnetReader(): Connection {
+  return new Connection(mainnetRpcUrl(), { commitment: "confirmed" });
+}
+
+/**
+ * The text with every configured node address cut out and named instead: the
+ * whole URL, and its host on its own, since a failed request's message can
+ * quote either. Covers the two URLs in .env; says nothing about a URL typed
+ * anywhere else.
+ */
+export function scrubNodes(message: string): string {
+  let clean = message;
+  const nodes: [string, string][] = [
+    [rpcUrl(), shownRpc()],
+    [mainnetRpcUrl(), shownMainnetRpc()],
+  ];
+  for (const [url, name] of nodes) {
+    if (url === name) {
+      continue;
+    }
+    clean = clean.split(url).join(`[${name}]`);
+    let host = "";
+    try {
+      host = new URL(url).host;
+    } catch {
+      host = "";
+    }
+    if (host.length > 0) {
+      clean = clean.split(host).join(`[${name}]`);
+    }
+  }
+  return clean;
 }
 
 /**
@@ -97,6 +161,20 @@ export async function requireDevnet(connection: Connection): Promise<void> {
   if (genesis !== DEVNET_GENESIS) {
     throw new Error(
       `${connection.rpcEndpoint === DEFAULT_RPC ? DEFAULT_RPC : "The devnet node named in .env"} is not devnet: its genesis hash is ${genesis}. These scripts only run on devnet.`
+    );
+  }
+}
+
+/**
+ * Refuses to go on unless the node that answered really is mainnet, by the same
+ * genesis rule, so `status --network mainnet` never reports a devnet or local
+ * node's program as the mainnet one.
+ */
+export async function requireMainnet(connection: Connection): Promise<void> {
+  const genesis = await connection.getGenesisHash();
+  if (genesis !== MAINNET_GENESIS) {
+    throw new Error(
+      `${connection.rpcEndpoint === DEFAULT_MAINNET_RPC ? DEFAULT_MAINNET_RPC : "The mainnet node named in .env"} is not mainnet: its genesis hash is ${genesis}.`
     );
   }
 }

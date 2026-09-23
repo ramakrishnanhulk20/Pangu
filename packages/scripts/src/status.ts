@@ -2,6 +2,12 @@
  * One read-only check that Pangu's devnet demo is still alive.
  *
  *   npm run status
+ *   npm run status -- --network mainnet
+ *
+ * The second reads mainnet through MAINNET_RPC_URL: the program against the
+ * verified build recorded in docs/deployments.md, every Pangu sale on the chain
+ * through the SDK's directory, and each banded sale's price freshness. It loads
+ * no key. Every command that writes still refuses anything but devnet.
  *
  * Judging runs to 2 October 2026 and a demo that dies quietly inside that
  * window is worth nothing, so every part a judge can reach gets a row here and
@@ -31,14 +37,21 @@ import {
   isSaleRunning,
   priceFeedAddress,
   readPrice,
+  saleDirectory,
   type Sale,
 } from "pangu-sdk";
+import { choice, readFlags } from "./arguments.js";
 import {
   devnet,
+  mainnetReader,
   payerKeypair,
   repositoryRoot,
   requireDevnet,
+  requireMainnet,
+  scrubNodes,
+  shownMainnetRpc,
   shownRpc,
+  type Network,
 } from "./environment.js";
 import { DEFAULT_FEED, FEEDS, MAX_PRICE_AGE_SECS } from "./feeds.js";
 import { liveSales, readSales, type SaleRecord } from "./sales.js";
@@ -243,7 +256,7 @@ function plain(value: string): string {
   return value.replace(/`/g, "").trim();
 }
 
-function onlyRow(section: string, name: string): string {
+function onlyRow(section: string, name: string, where = "devnet"): string {
   const found = section
     .split("\n")
     .filter((line) => line.trimStart().startsWith("|"))
@@ -252,7 +265,7 @@ function onlyRow(section: string, name: string): string {
     .map((cells) => plain(cells[2] ?? ""));
   if (found.length !== 1) {
     throw new Error(
-      `docs/deployments.md has ${found.length} rows called "${name}" in its devnet section, and this needs exactly one`
+      `docs/deployments.md has ${found.length} rows called "${name}" in its ${where} section, and this needs exactly one`
     );
   }
   return found[0] as string;
@@ -280,13 +293,7 @@ function address(value: string, name: string): string {
  * Throws when the section, a row, the size or the hash is missing or malformed.
  */
 export function readDeployedBuild(markdown: string): DeployedBuild {
-  const start = markdown.indexOf("## Devnet (live)");
-  if (start === -1) {
-    throw new Error('docs/deployments.md has no "## Devnet (live)" section');
-  }
-  const rest = markdown.slice(start + 1);
-  const end = rest.indexOf("\n## ");
-  const section = end === -1 ? rest : rest.slice(0, end);
+  const section = sectionOf(markdown, "## Devnet (live)");
 
   const size = Number(
     onlyRow(section, "Build size").replace(/,/g, "").replace(/\s*bytes$/, "")
@@ -315,9 +322,68 @@ export function readDeployedBuild(markdown: string): DeployedBuild {
   };
 }
 
+/**
+ * One "## " section of docs/deployments.md, from its heading line to the next
+ * heading. The heading has to be the whole line, so "## Mainnet" never matches
+ * a longer heading that starts the same way.
+ */
+function sectionOf(markdown: string, heading: string): string {
+  const lines = markdown.split("\n");
+  const start = lines.findIndex((line) => line.trimEnd() === heading);
+  if (start === -1) {
+    throw new Error(`docs/deployments.md has no "${heading}" section`);
+  }
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("## "));
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+}
+
+/** The build verify-build.sh made for mainnet, as docs/deployments.md records it. */
+export interface VerifiedBuild {
+  buildBytes: number;
+  /** Lowercase hex, 64 characters. */
+  sha256: string;
+}
+
+/**
+ * Reads the verified mainnet build out of the "## Mainnet" section of
+ * docs/deployments.md: its size and its sha256. Only that section is read, so
+ * the devnet build can never answer for mainnet, and the hash is lowercased by
+ * the same rule as the hash of the bytes on chain.
+ *
+ * Throws when the section or a row is missing or malformed.
+ */
+export function readVerifiedMainnetBuild(markdown: string): VerifiedBuild {
+  const section = sectionOf(markdown, "## Mainnet");
+  const size = Number(
+    onlyRow(section, "Verified build size", "mainnet").replace(/,/g, "").replace(/\s*bytes$/, "")
+  );
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new Error(
+      "docs/deployments.md does not record the verified mainnet build size as a number of bytes"
+    );
+  }
+  const sha256 = onlyRow(section, "sha256 of the verified build", "mainnet").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(sha256)) {
+    throw new Error(
+      `docs/deployments.md gives "${sha256}" as the verified build's sha256, which is not a sha256`
+    );
+  }
+  return { buildBytes: size, sha256 };
+}
+
+/**
+ * Which network status reads: devnet unless `--network mainnet` is given.
+ * Throws ArgumentError for any other flag or network.
+ */
+export function statusNetwork(argv: readonly string[]): Network {
+  return choice(readFlags(argv, ["network"]), "network", ["devnet", "mainnet"], "devnet");
+}
+
 async function checkProgram(
   connection: Connection,
-  build: DeployedBuild
+  build: DeployedBuild,
+  network: Network = "devnet"
 ): Promise<CheckRow> {
   const check = `program ${short(build.programId)}`;
   if (PANGU_PROGRAM_ID.toBase58() !== build.programId) {
@@ -330,7 +396,13 @@ async function checkProgram(
 
   const program = await connection.getAccountInfo(new PublicKey(build.programId));
   if (program === null) {
-    return row(check, "FAIL", "there is no account at that address on devnet");
+    return row(
+      check,
+      "FAIL",
+      network === "mainnet"
+        ? `not deployed on mainnet yet. The verified build waiting to go there is sha256 ${build.sha256.slice(0, 12)}, see docs/deploy/mainnet.md`
+        : "there is no account at that address on devnet"
+    );
   }
   if (!program.executable) {
     return row(check, "FAIL", "the account is not executable, so nothing can call it");
@@ -527,7 +599,7 @@ function feedName(feedId: string): string {
  */
 async function checkBand(
   connection: Connection,
-  record: SaleRecord,
+  record: Pick<SaleRecord, "symbol" | "mint">,
   sale: Sale,
   running: boolean,
   at: Date
@@ -735,9 +807,99 @@ function daysUntil(day: string, at: Date): number {
   return Math.ceil((Date.parse(`${day}T00:00:00Z`) - at.getTime()) / 86_400_000);
 }
 
+/**
+ * Who can change the program's code, read from its program data account: a
+ * one byte flag at offset 12 and the key behind it.
+ */
+async function checkUpgradeAuthority(
+  connection: Connection,
+  programData: PublicKey
+): Promise<CheckRow> {
+  const data = await connection.getAccountInfo(programData);
+  if (data === null || data.data.length < PROGRAM_DATA_HEADER) {
+    return row("upgrade authority", "SKIP", "no program data account to read");
+  }
+  if (data.data[12] !== 1) {
+    return row("upgrade authority", "PASS", "none: the program is frozen and can never be changed");
+  }
+  const authority = new PublicKey(data.data.subarray(13, PROGRAM_DATA_HEADER)).toBase58();
+  return row(
+    "upgrade authority",
+    "PASS",
+    `${authority} can replace the code; docs/deploy/mainnet.md is the plan for moving it to a multisig`
+  );
+}
+
+/** A sale's state in one word, as the directory reads it. */
+function saleState(entry: { running: boolean; graduated: boolean | null; offeringOver: boolean }): string {
+  if (entry.running) {
+    return "running";
+  }
+  if (entry.graduated === true) {
+    return "graduated";
+  }
+  return entry.offeringOver ? "offering over" : "not running";
+}
+
+/**
+ * The mainnet view: the program against the verified build, every Pangu sale
+ * the chain holds, read through the SDK's directory rather than sales.json,
+ * and the freshness of each running sale's price. Reads only; no key is loaded.
+ */
+async function mainnetMain(): Promise<void> {
+  const endpoint = shownMainnetRpc();
+  const connection = mainnetReader();
+  await requireMainnet(connection);
+  const at = new Date();
+  const verified = readVerifiedMainnetBuild(readFileSync(DEPLOYMENTS_FILE, "utf8"));
+  const [programData] = PublicKey.findProgramAddressSync(
+    [PANGU_PROGRAM_ID.toBuffer()],
+    UPGRADEABLE_LOADER
+  );
+  const build: DeployedBuild = {
+    programId: PANGU_PROGRAM_ID.toBase58(),
+    programData: programData.toBase58(),
+    buildBytes: verified.buildBytes,
+    sha256: verified.sha256,
+    upgradeAuthority: "",
+  };
+
+  const rows: CheckRow[] = [await checkProgram(connection, build, "mainnet")];
+  if (rows[0]?.result !== "FAIL") {
+    rows.push(await checkUpgradeAuthority(connection, programData));
+    const sales = await saleDirectory(connection);
+    if (sales.length === 0) {
+      rows.push(row("sales", "SKIP", "no Pangu sales on mainnet yet"));
+    }
+    for (const entry of sales) {
+      const label = { symbol: entry.symbol ?? "?", mint: entry.mint.toBase58() };
+      const band = entry.hasBand ? `, band ${entry.sale.bandBps} bps` : "";
+      const paidIn = entry.quoteMint?.toBase58() ?? "a token the rules do not name";
+      rows.push(
+        row(
+          `sale ${label.symbol} ${short(label.mint)}`,
+          "PASS",
+          `${label.mint}, ${modeWord(entry.accessMode)}${band}, ${entry.buyers} buyers, ${saleState(entry)}, paid in ${paidIn}`
+        )
+      );
+      if (entry.hasBand) {
+        rows.push(await checkBand(connection, label, entry.sale, entry.running, at));
+      }
+    }
+  }
+
+  console.log(`network : mainnet, ${endpoint}, read only`);
+  console.log("");
+  console.log(renderTable(rows));
+  console.log("");
+  console.log(summaryLine(rows, at));
+  process.exit(exitCode(rows));
+}
+
 async function main(): Promise<void> {
-  if (process.argv.length > 2) {
-    throw new Error(`status takes no flags, got ${process.argv.slice(2).join(" ")}`);
+  if (statusNetwork(process.argv.slice(2)) === "mainnet") {
+    await mainnetMain();
+    return;
   }
 
   // Asking for the RPC url is also what loads .env, which is where the Pyth key
@@ -813,7 +975,9 @@ const runningAsCommand =
 
 if (runningAsCommand) {
   main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    // A failed request can quote the node it was sent to, and a keyed node's
+    // address carries its key.
+    console.error(scrubNodes(error instanceof Error ? error.message : String(error)));
     process.exit(1);
   });
 }

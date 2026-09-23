@@ -172,8 +172,11 @@ closing report says how many buffers are still holding SOL.
 
 ## Mainnet
 
-Not deployed. Mainnet is the team's decision and gets its own run, its own
-funded wallet and its own upgrade authority plan. `deploy.sh` refuses it today.
+Not deployed; ready: see `docs/deploy/mainnet.md`. The build that goes there is
+already made and reproducible, and every step of putting it there was rehearsed
+on a forked copy of mainnet on 23 September 2026
+(`docs/measurements/mainnet-rehearsal.md`). The deploy is one command Ram runs
+with his own key; `deploy.sh` still refuses mainnet.
 
 | Fact | Value |
 | --- | --- |
@@ -188,3 +191,24 @@ funded wallet and its own upgrade authority plan. `deploy.sh` refuses it today.
 | Rent locked | not deployed |
 | sha256 of the deployed build | not deployed |
 | Explorer | not deployed |
+| Verified build | `pangu-mainnet.so`, the mainnet build (no `devnet` feature), SBPF v0, from commit `4d71addb0fab5db381d207e3eadfeea580420850` |
+| Verified build size | 366,968 bytes |
+| sha256 of the verified build | `f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358` |
+| Executable hash (solana-verify) | `474fa2628a7498fe71c3c21ebc459034ffcbe59eac86fae7b110ccd9fe8e86e0` |
+| Built with | `solana-verify build` 0.5.2 in `solanafoundation/solana-verifiable-build:4.2.2` (`sha256:16053d845922e798ab1852d3fe222faf5a23eeb1db3a13d30b70d6b6e82184ae`) |
+
+To reproduce the hash from a clean clone, on Linux with Docker:
+
+```
+git checkout 4d71addb0fab5db381d207e3eadfeea580420850
+cd packages/program
+solana-verify build --library-name pangu --base-image solanafoundation/solana-verifiable-build:4.2.2
+sha256sum target/deploy/pangu.so
+```
+
+`scripts/wsl/verify-build.sh` runs exactly that twice from two fresh copies of
+the commit and refuses unless both hash the same, then builds the devnet binary
+from the same source with `--features devnet`
+(`3280a33969c174e18679a551b265d45b25da2e0411906302bcd1ec9b6346f2ad`, 367,144
+bytes): same commit, same image, one feature apart. `npm run status -- --network
+mainnet` holds the program on mainnet to the size and hash in this table.
