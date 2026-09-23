@@ -1,0 +1,36 @@
+ok    tokenAmount zero: 0
+ok    tokenAmount a sliver is never zero: under 0.0001
+ok    tokenAmount 0.0001: 0.0001
+ok    tokenAmount half a share: 0.5
+ok    tokenAmount four places below one: 0.1234
+ok    tokenAmount two places from one: 1.5
+ok    tokenAmount two places up to 1000: 999.99
+ok    tokenAmount exactly 1000: 1,000
+ok    tokenAmount rounds down above 1000: 1,000
+ok    tokenAmount rounds up above 1000: 1,235
+ok    tokenAmount no decimals: 5
+ok    tokenAmount a negative sliver: just below 0
+ok    shares zero: 0
+ok    shares a sliver is never zero: under 0.0001
+ok    shares half a share: 0.5
+ok    shares four places below one: 0.1234
+ok    shares never rounds up to one: 0.9999
+ok    shares two places from one: 12.34
+ok    shares exactly 1000 keeps its form: 1,000
+ok    shares whole above 1000: 1,000
+ok    shares rounds above 1000: 1,235
+ok    shares compact from 100k: 250K
+ok    dollars under a cent: under $0.01
+ok    dollars zero: $0.00
+ok    dollars one cent: $0.01
+ok    dollars a price: $212.50
+ok    SOL keeps significant digits: 0.0000012 SOL
+ok    SOL zero: 0 SOL
+ok    percent half: 50.0%
+ok    percent past 100: 125.0%
+ok    percent exactly 100: 100.0%
+ok    clock same day: 14:05 UTC
+ok    clock same day as the reading: 14:05 UTC
+ok    clock another day names it: 23 Sep 14:05 UTC
+
+34 passed, 0 failed

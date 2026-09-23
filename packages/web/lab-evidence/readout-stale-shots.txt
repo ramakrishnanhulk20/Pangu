@@ -1,0 +1,15 @@
+relay up on 3932
+live reading taken through the relay (21 calls relayed)
+devnet answers through the relay, by status: {"200":21,"retried429":11}
+before the outage, dark 1440: stale line none
+before the outage, light 1440: stale line none
+before the outage, dark 390: stale line none
+relay shut, the server's RPC address now refuses connections
+lab-evidence/readout-stale-dark-1440x900.png: Devnet did not answer at 08:56 UTC, showing the reading from 08:55 UTC.
+lab-evidence/readout-stale-light-1440x900.png: Devnet did not answer at 08:56 UTC, showing the reading from 08:55 UTC.
+lab-evidence/readout-stale-dark-390x844.png: Devnet did not answer at 08:56 UTC, showing the reading from 08:55 UTC.
+numbers kept after the failed poll: true
+curve kept after the failed poll: true
+live text had the same stat labels: true
+lab-evidence/readout-stale-reload-dark-1440x900.png: Devnet did not answer at 08:56 UTC, showing the reading from 08:55 UTC.
+picker after reload: PANGU LISTED SHARE UNKNOWN RIGHT NOW | PANGU PRICED SHARE UNKNOWN RIGHT NOW | PANGU OPEN SHARE UNKNOWN RIGHT NOW | PANGU LISTED SHARE UNKNOWN RIGHT NOW

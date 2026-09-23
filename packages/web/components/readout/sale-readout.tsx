@@ -5,7 +5,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { SaleChoice, SaleReadout as Readout } from "@/lib/readout";
 
-import { explorerAddress, money, percent, shares, shortAddress, whole } from "./format";
+import {
+  clock,
+  explorerAddress,
+  money,
+  percent,
+  shares,
+  shortAddress,
+  whole,
+} from "./format";
 import { Bar, Counting, Holders, Stat } from "./numbers";
 import { PriceCurve } from "./price-curve";
 
@@ -26,13 +34,36 @@ function Dot({ tone, beating }: { tone: "accent" | "pending"; beating: boolean }
   );
 }
 
+/**
+ * What a new answer does to the reading on screen.
+ *
+ * A failed read never wipes a good one: the numbers stay and are marked as
+ * held, with the time devnet went quiet. A held reading from the server that
+ * is older than the one already on screen does not replace it either, which
+ * can happen when two server instances each kept their own last reading.
+ */
+function settle(current: Readout, next: Readout): Readout {
+  const sameSale = current.mint === next.mint && current.failure === null;
+  if (sameSale && next.failure !== null) {
+    return { ...current, stale: true, missedAt: next.readAt };
+  }
+  if (sameSale && next.stale && next.readAt < current.readAt) {
+    return { ...current, stale: true, missedAt: next.missedAt };
+  }
+  return next;
+}
+
 function Picker({
   choices,
   chosen,
+  asking,
   onChoose,
 }: {
   choices: SaleChoice[];
+  /** The sale on screen. It moves only once the new sale's reading is in. */
   chosen: string;
+  /** The sale asked for and still being read, if any. */
+  asking: string | null;
   onChoose: (mint: string) => void;
 }) {
   if (choices.length < 2) {
@@ -43,21 +74,29 @@ function Picker({
     <div className="flex flex-wrap gap-2">
       {choices.map((choice) => {
         const active = choice.mint === chosen;
+        const pending = choice.mint === asking && !active;
         return (
           <button
             key={choice.mint}
             type="button"
             onClick={() => onChoose(choice.mint)}
             aria-pressed={active}
+            aria-busy={pending}
             className={`rounded-lg border px-3.5 py-2 text-left font-mono text-[10px] uppercase leading-tight tracking-[0.16em] transition-colors ${
               active
                 ? "border-accent text-ink"
-                : "border-line text-muted hover:border-ink hover:text-ink"
+                : pending
+                  ? "animate-pulse border-pending text-ink"
+                  : "border-line text-muted hover:border-ink hover:text-ink"
             }`}
           >
             {choice.name}
             <span className="mt-1 block text-[9px] opacity-70">
-              {choice.running ? "still taking buys" : "graduated"}
+              {choice.running === null
+                ? "unknown right now"
+                : choice.running
+                  ? "still taking buys"
+                  : "graduated"}
             </span>
           </button>
         );
@@ -118,14 +157,21 @@ export function SaleReadout({
   const frame = useRef<HTMLElement>(null);
   const revealed = useInView(frame, { once: true, margin: "-80px" });
 
-  const [chosen, setChosen] = useState(initial.mint);
   const [readout, setReadout] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Which sale the visitor is looking at right now. An answer for any other
-  // sale is thrown away, so a slow reading of the one they just left cannot
-  // land on top of the one they asked for.
+  // The reading on screen, kept beside the state so an answer can be weighed
+  // against it without waiting for a render.
+  const shown = useRef(initial);
+  // The sale the visitor last asked for. Polls follow it, and a failed switch
+  // hands it back to the sale still on screen.
   const wanted = useRef(initial.mint);
+  // Every request takes the next number. Only the newest one may change the
+  // screen or clear the refreshing dot, so a slow older answer cannot land on
+  // top of a newer one or stop the dot while the newer one is still out.
+  const ticket = useRef(0);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -135,26 +181,68 @@ export function SaleReadout({
     };
   }, []);
 
-  const read = useCallback(async (mint: string) => {
+  const read = useCallback(async (mint: string, name: string) => {
+    ticket.current += 1;
+    const mine = ticket.current;
+    const newest = () => mounted.current && ticket.current === mine;
+
+    const show = (next: Readout) => {
+      shown.current = next;
+      setReadout(next);
+    };
+
+    // A switch that did not land leaves the sale on screen where it was, and
+    // says so in one line, rather than trading real numbers for an apology.
+    const keep = () => {
+      const current = shown.current;
+      wanted.current = current.mint;
+      setNotice(
+        `Devnet did not answer at ${clock(Date.now())} for ${name}, so ${current.name} stays on screen.`
+      );
+    };
+
     setRefreshing(true);
     try {
       const answer = await fetch(`/api/readout/${mint}`, { cache: "no-store" });
       if (!answer.ok) {
-        return;
+        throw new Error(`readout answered ${answer.status}`);
       }
       const next = (await answer.json()) as Readout;
-      if (mounted.current && wanted.current === mint) {
-        setReadout(next);
+      if (!newest()) {
+        return;
       }
+      const current = shown.current;
+      if (next.mint !== current.mint && next.unanswered && current.failure === null) {
+        keep();
+        return;
+      }
+      setNotice(null);
+      show(settle(current, next));
     } catch {
-      // A missed poll leaves the last real reading on screen rather than
-      // replacing it with a guess.
+      if (!newest()) {
+        return;
+      }
+      const current = shown.current;
+      if (mint !== current.mint && current.failure === null) {
+        keep();
+      } else if (current.failure === null) {
+        // A missed poll leaves the last real reading on screen, marked as
+        // held, rather than replacing it with a guess.
+        show({ ...current, stale: true, missedAt: Date.now() });
+      }
     } finally {
-      if (mounted.current) {
+      if (newest()) {
         setRefreshing(false);
+        setAsking(null);
       }
     }
   }, []);
+
+  const nameOf = useCallback(
+    (mint: string) =>
+      choices.find((choice) => choice.mint === mint)?.name ?? "that sale",
+    [choices]
+  );
 
   const choose = useCallback(
     (mint: string) => {
@@ -162,23 +250,41 @@ export function SaleReadout({
         return;
       }
       wanted.current = mint;
-      setChosen(mint);
-      void read(mint);
+      setAsking(mint === shown.current.mint ? null : mint);
+      void read(mint, nameOf(mint));
     },
-    [read]
+    [read, nameOf]
   );
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!document.hidden) {
-        void read(chosen);
+        void read(wanted.current, nameOf(wanted.current));
       }
     }, POLL_MS);
 
     return () => window.clearInterval(timer);
-  }, [chosen, read]);
+  }, [read, nameOf]);
 
   const banded = readout.stockDollars !== null;
+  const stockNote =
+    readout.stockStale && readout.stockPublishedAt !== null
+      ? `stale since ${clock(readout.stockPublishedAt, readout.readAt)}, so buying is paused`
+      : readout.priceWarning ?? "the price the chain measures every buy against";
+  // With no fresh price the program has no ceiling to hold a buy under, so the
+  // last one is named as history, never shown as the live number.
+  const ceilingNote =
+    readout.ceilingDollars === null
+      ? "the ceiling waits on a fresh Apple price"
+      : `until a fresh Apple price lands. It was ${money(readout.ceilingDollars, "dollars")} on the last one`;
+  const quietLine =
+    notice ??
+    (readout.stale && readout.missedAt !== null
+      ? `Devnet did not answer at ${clock(
+          readout.missedAt,
+          readout.readAt
+        )}, showing the reading from ${clock(readout.readAt)}.`
+      : null);
   const priceNote = readout.graduated
     ? "the price the curve finished at"
     : "what one share costs right now";
@@ -205,10 +311,14 @@ export function SaleReadout({
         >
           <div className="flex items-center gap-2 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
             <Dot
-              tone={refreshing ? "pending" : "accent"}
-              beating={!still}
+              tone={refreshing || readout.stale ? "pending" : "accent"}
+              beating={!still && !readout.stale}
             />
-            {refreshing ? "reading devnet" : "live on Solana devnet"}
+            {refreshing
+              ? "reading devnet"
+              : readout.stale
+                ? "holding the last reading"
+                : "live on Solana devnet"}
           </div>
           <h2 className="mt-5 font-display text-[clamp(2.25rem,4.6vw,3.9rem)] font-semibold leading-[0.92] tracking-[-0.035em]">
             Watch the price find itself.
@@ -227,7 +337,12 @@ export function SaleReadout({
             Every share on this drawing came off Meteora&rsquo;s curve. The cap on one
             wallet lies under it at the width it really has.
           </p>
-          <Picker choices={choices} chosen={chosen} onChoose={choose} />
+          <Picker
+            choices={choices}
+            chosen={readout.mint}
+            asking={asking}
+            onChoose={choose}
+          />
         </motion.div>
       </div>
 
@@ -263,6 +378,20 @@ export function SaleReadout({
                 )}
               </div>
 
+              {quietLine !== null && (
+                <motion.p
+                  key={quietLine}
+                  initial={still ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={still ? { duration: 0 } : { duration: 0.5, ease: EASE }}
+                  data-testid="readout-stale"
+                  className="mt-3 flex items-center gap-2.5 text-[13px] leading-snug text-muted lg:pl-[6vw]"
+                >
+                  <Dot tone="pending" beating={false} />
+                  {quietLine}
+                </motion.p>
+              )}
+
               <div className="mt-6">
                 <PriceCurve readout={readout} revealed={revealed} still={still} />
               </div>
@@ -276,6 +405,7 @@ export function SaleReadout({
                   <Counting
                     value={readout.priceNow}
                     format={(value) => money(value, readout.money)}
+                    unit={readout.money}
                     still={still}
                     revealed={revealed}
                   />
@@ -283,36 +413,39 @@ export function SaleReadout({
               </Stat>
 
               {banded && (
-                <Stat
-                  label="Apple, from Pyth"
-                  quiet
-                  note={
-                    readout.priceWarning ??
-                    "the price the chain measures every buy against"
-                  }
-                >
-                  <Counting
-                    value={readout.stockDollars ?? 0}
-                    format={(value) => money(value, "dollars")}
-                    still={still}
-                    revealed={revealed}
-                  />
+                <Stat label="Apple, from Pyth" quiet note={stockNote}>
+                  {readout.stockDollars === null || readout.stockDollars <= 0 ? (
+                    <span className="text-muted">not published yet</span>
+                  ) : (
+                    <Counting
+                      value={readout.stockDollars}
+                      format={(value) => money(value, "dollars")}
+                      still={still}
+                      revealed={revealed}
+                    />
+                  )}
                 </Stat>
               )}
 
-              {readout.ceilingDollars !== null && (
-                <Stat
-                  label="buys stop above"
-                  quiet
-                  note="the ceiling the curve price is held under"
-                >
-                  <Counting
-                    value={readout.ceilingDollars}
-                    format={(value) => money(value, "dollars")}
-                    still={still}
-                    revealed={revealed}
-                  />
+              {banded && readout.priceWarning !== null ? (
+                <Stat label="buys stop above" quiet note={ceilingNote}>
+                  <span className="text-muted">unknown right now</span>
                 </Stat>
+              ) : (
+                readout.ceilingDollars !== null && (
+                  <Stat
+                    label="buys stop above"
+                    quiet
+                    note="the ceiling the curve price is held under"
+                  >
+                    <Counting
+                      value={readout.ceilingDollars}
+                      format={(value) => money(value, "dollars")}
+                      still={still}
+                      revealed={revealed}
+                    />
+                  </Stat>
+                )
               )}
 
               <Stat
@@ -328,6 +461,7 @@ export function SaleReadout({
                 <Counting
                   value={readout.raised}
                   format={(value) => money(value, readout.money)}
+                  unit={readout.money}
                   still={still}
                   revealed={revealed}
                 />

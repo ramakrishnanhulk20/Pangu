@@ -56,9 +56,10 @@ export async function GET(
   if (held === undefined || now - held.at >= FRESH_MS) {
     const entry = { at: now, answer: readAnswer(key) };
     answers.set(known, entry);
-    // A failed reading is not kept, so the next request tries the chain again.
-    entry.answer.catch(() => {
-      if (answers.get(known) === entry) {
+    // A failed reading is shared with the requests already waiting on it, then
+    // dropped, so the next request tries the chain again.
+    void entry.answer.then(({ status }) => {
+      if (status >= 500 && answers.get(known) === entry) {
         answers.delete(known);
       }
     });
@@ -68,7 +69,21 @@ export async function GET(
   return NextResponse.json(body, { status });
 }
 
+/** Every way devnet can fail this read ends as JSON a caller can act on, never a bare 500. */
 async function readAnswer(key: PublicKey): Promise<Answer> {
+  try {
+    return await readFromChain(key);
+  } catch {
+    // The error itself stays on the server: a failed request can carry the
+    // RPC address in its message, and a keyed address must never leave here.
+    return {
+      status: 502,
+      body: { error: "devnet did not answer the price read, try again in a few seconds" },
+    };
+  }
+}
+
+async function readFromChain(key: PublicKey): Promise<Answer> {
   const connection = devnetConnection();
   const sale = await getSale(connection, key);
 
@@ -85,15 +100,20 @@ async function readAnswer(key: PublicKey): Promise<Answer> {
 
   const reading = await readPrice(connection, sale);
 
+  // The same rule the hero and the readout follow: the ceiling is worked out
+  // from the last published price even once it has aged out, and the answer
+  // says it is stale rather than dropping the number.
   return {
     status: 200,
     body: {
       mint: sale.mint.toBase58(),
       priceAccount: reading.address.toBase58(),
       priceDollars: reading.priceDollars,
-      ceilingDollars: reading.usable
-        ? dollars(priceCeiling({ bandBps: sale.bandBps }, reading.price))
-        : null,
+      ceilingDollars:
+        reading.price > 0n
+          ? dollars(priceCeiling({ bandBps: sale.bandBps }, reading.price))
+          : null,
+      stale: reading.error === "PriceStale",
       bandBps: sale.bandBps,
       publishTime: reading.publishTime,
       ageSecs: reading.ageSecs,

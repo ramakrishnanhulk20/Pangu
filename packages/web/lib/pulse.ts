@@ -6,6 +6,7 @@ import {
   getSale,
   listBuyerRecords,
   PANGU_PROGRAM_ID,
+  PanguLayoutError,
   TOKEN_2022_PROGRAM_ID,
   priceCeiling,
   readPrice,
@@ -14,6 +15,7 @@ import {
 } from "pangu-sdk";
 import { loadPool } from "pangu-sdk/dbc";
 
+import { oldestFirst } from "./readout";
 import { openedSales, type OpenedSale } from "./sales";
 import { firstReadableSharing, type Standing } from "./sharing";
 import { devnetConnection } from "./solana";
@@ -25,6 +27,26 @@ const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 // only part they care about: the numbers are on their way back.
 const REFRESHING =
   "The sale list is being refreshed. Live numbers return in a moment.";
+
+// When the node itself is not answering, the line says that instead. Calling
+// an outage a refresh would promise numbers that are not on their way.
+const DEVNET_SILENT = "Devnet did not answer, so there is nothing true to show yet.";
+
+/** Why the sales that would not read did not, counted over one reading. */
+interface Misses {
+  /** Written by another build of the program, so they will never decode here. */
+  layout: number;
+  /** Devnet did not answer, or answered with an error. */
+  silent: number;
+}
+
+function countMiss(misses: Misses, error: unknown): void {
+  if (error instanceof PanguLayoutError) {
+    misses.layout += 1;
+  } else {
+    misses.silent += 1;
+  }
+}
 
 /** The three live numbers the hero paints before any wallet is connected. */
 export interface HeroPulse {
@@ -125,7 +147,7 @@ async function runningFirst(candidates: OpenedSale[]): Promise<OpenedSale[]> {
 
 /** The name of the sale the hero is about, for the poster's metadata row. */
 export function heroSaleName(): string {
-  const sales = openedSales();
+  const sales = oldestFirst(openedSales());
   const priced = pricedSale(sales);
   const listed = listedSales(sales, "");
   return priced?.name ?? listed[listed.length - 1]?.name ?? "";
@@ -164,7 +186,10 @@ interface PricedNumbers {
  * sale from an older build of the program sitting in the list cannot take the
  * price and the ceiling off the page with it.
  */
-async function readPricedSale(opened: OpenedSale): Promise<PricedNumbers | null> {
+async function readPricedSale(
+  opened: OpenedSale,
+  misses: Misses
+): Promise<PricedNumbers | null> {
   const connection = devnetConnection();
 
   try {
@@ -207,7 +232,8 @@ async function readPricedSale(opened: OpenedSale): Promise<PricedNumbers | null>
     // leaves the price standing.
     numbers.standing = await standingOf(sale).catch(() => null);
     return numbers;
-  } catch {
+  } catch (error) {
+    countMiss(misses, error);
     return null;
   }
 }
@@ -224,7 +250,7 @@ async function readPricedSale(opened: OpenedSale): Promise<PricedNumbers | null>
  * own numbers and no others.
  */
 async function readFromChain(): Promise<HeroPulse> {
-  const sales = openedSales();
+  const sales = oldestFirst(openedSales());
   const priced = pricedSale(sales);
   const candidates = listedSales(sales, priced?.mint ?? "");
 
@@ -232,8 +258,9 @@ async function readFromChain(): Promise<HeroPulse> {
     return { ...EMPTY, failure: "No devnet sale has been opened yet." };
   }
 
+  const misses: Misses = { layout: 0, silent: 0 };
   const [pricedNumbers, order] = await Promise.all([
-    priced === null ? Promise.resolve(null) : readPricedSale(priced),
+    priced === null ? Promise.resolve(null) : readPricedSale(priced, misses),
     runningFirst(candidates),
   ]);
 
@@ -259,7 +286,12 @@ async function readFromChain(): Promise<HeroPulse> {
   // The priced sale has refused every buy so far, so the sharing numbers come
   // from the newest listed sale that reads. The label on screen says which.
   if (pulse.buyers === null && order.length > 0) {
-    const shared = await firstReadableSharing(order, standingOfMint);
+    const shared = await firstReadableSharing(order, (mint) =>
+      standingOfMint(mint).catch((error: unknown) => {
+        countMiss(misses, error);
+        throw error;
+      })
+    );
     pulse.skipped += shared.skipped;
     if (shared.sharing !== null) {
       pulse.sharedSaleName = shared.sharing.name;
@@ -270,7 +302,8 @@ async function readFromChain(): Promise<HeroPulse> {
   }
 
   if (pricedNumbers === null && pulse.buyers === null) {
-    return { ...pulse, failure: REFRESHING };
+    const onlyOldBuilds = misses.silent === 0;
+    return { ...pulse, failure: onlyOldBuilds ? REFRESHING : DEVNET_SILENT };
   }
 
   return pulse;
@@ -293,13 +326,17 @@ function startReading(): Promise<HeroPulse> {
   if (reading !== null) {
     return reading;
   }
-  reading = readFromChain().then((pulse) => {
-    if (pulse.failure === null) {
-      lastGood = { at: Date.now(), pulse };
-    }
-    reading = null;
-    return pulse;
-  });
+  // A reading that throws is turned into the outage line and cleared like any
+  // other, or the next visit would wait on a promise that already gave up.
+  reading = readFromChain()
+    .catch((): HeroPulse => ({ ...EMPTY, failure: DEVNET_SILENT }))
+    .then((pulse) => {
+      if (pulse.failure === null) {
+        lastGood = { at: Date.now(), pulse };
+      }
+      reading = null;
+      return pulse;
+    });
   return reading;
 }
 
@@ -315,9 +352,11 @@ export async function readPulse(): Promise<HeroPulse> {
     return fresh;
   }
 
+  // A failure that comes back fast still loses to the held reading: it is
+  // young enough to show, and a blank hero says less than a true one.
   const held = lastGood.pulse;
   return Promise.race([
-    fresh,
+    fresh.then((pulse) => (pulse.failure === null ? pulse : held)),
     new Promise<HeroPulse>((resolve) => {
       setTimeout(() => resolve(held), WAIT_MS);
     }),

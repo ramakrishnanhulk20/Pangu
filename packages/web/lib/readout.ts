@@ -38,7 +38,8 @@ export interface HolderRow {
 export interface SaleChoice {
   mint: string;
   name: string;
-  running: boolean;
+  /** Null when devnet did not say. A sale nobody could read is never called finished. */
+  running: boolean | null;
 }
 
 /** Everything the readout paints, all of it read off devnet. */
@@ -61,9 +62,16 @@ export interface SaleReadout {
   ceilingDollars: number | null;
   /** Set when the published stock price is too old or too uncertain to buy against. */
   priceWarning: string | null;
+  /** Unix milliseconds Pyth published the stock price, on a sale with a price band. */
+  stockPublishedAt: number | null;
+  /** True when that price has aged past what the program accepts, rather than doubted for another reason. */
+  stockStale: boolean;
   raised: number;
   threshold: number;
-  /** Raised against the threshold, 0 to 1. */
+  /**
+   * Raised against the threshold, where 1 is the threshold. Left as measured:
+   * the swap that graduates a sale can carry it past 1, and the number says so.
+   */
   raisedShare: number;
   buyers: number;
   /** Shares the curve has sold so far, and the number it sells in all. */
@@ -81,8 +89,21 @@ export interface SaleReadout {
   rule: string;
   /** Unix milliseconds this reading was taken. */
   readAt: number;
+  /**
+   * True when devnet did not answer the latest read and this is the last
+   * reading that did answer, handed back as it was, never adjusted.
+   */
+  stale: boolean;
+  /** Unix milliseconds of the read devnet did not answer, when stale. */
+  missedAt: number | null;
   /** Set when this sale would not read. Nothing is invented in its place. */
   failure: string | null;
+  /**
+   * True when that failure is devnet not answering, which the next read may
+   * fix, rather than a sale this app can never read. The picker keeps the sale
+   * on screen when a switch lands on one of these.
+   */
+  unanswered: boolean;
 }
 
 const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
@@ -201,6 +222,9 @@ function percentWords(share: number): string {
 }
 
 function dollarWords(value: number): string {
+  if (value > 0 && value < 0.01) {
+    return "under $0.01";
+  }
   return `$${value.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -256,7 +280,8 @@ function bindingRule(
 
 function refused(
   about: { mint: string; pool: string; name: string; money: "dollars" | "SOL" },
-  reason: string
+  reason: string,
+  unanswered = false
 ): SaleReadout {
   return {
     ...about,
@@ -268,6 +293,8 @@ function refused(
     stockDollars: null,
     ceilingDollars: null,
     priceWarning: null,
+    stockPublishedAt: null,
+    stockStale: false,
     raised: 0,
     threshold: 0,
     raisedShare: 0,
@@ -282,8 +309,26 @@ function refused(
     curve: [],
     rule: "",
     readAt: Date.now(),
+    stale: false,
+    missedAt: null,
     failure: reason,
+    unanswered,
   };
+}
+
+/**
+ * The opened sales, oldest first, by the time the scripts say each was opened.
+ *
+ * Never by where an entry sits in sales.json: an entry appended out of order
+ * must not change which sale the page opens on. A time that will not parse
+ * sorts as the oldest, and equal times keep their file order.
+ */
+export function oldestFirst(sales: OpenedSale[]): OpenedSale[] {
+  const time = (sale: OpenedSale) => {
+    const at = Date.parse(sale.openedAt);
+    return Number.isNaN(at) ? 0 : at;
+  };
+  return [...sales].sort((left, right) => time(left) - time(right));
 }
 
 function moneyOf(opened: OpenedSale): "dollars" | "SOL" {
@@ -347,9 +392,13 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
   let stockDollars: number | null = null;
   let ceilingDollars: number | null = null;
   let priceWarning: string | null = null;
+  let stockPublishedAt: number | null = null;
+  let stockStale = false;
   if (sale.hasBand) {
     const reading = await readPrice(connection, sale);
     stockDollars = reading.priceDollars;
+    stockPublishedAt = reading.publishTime > 0 ? reading.publishTime * 1000 : null;
+    stockStale = reading.error === "PriceStale";
 
     // The ceiling is worth showing even when the published price has aged out:
     // it is the number the chain last measured a buy against.
@@ -385,12 +434,14 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
     stockDollars,
     ceilingDollars,
     priceWarning,
+    stockPublishedAt,
+    stockStale,
     raised: whole(raised, quoteDecimals),
     threshold: whole(threshold, quoteDecimals),
     raisedShare:
       threshold === 0n
         ? 0
-        : Math.min(1, Number((raised * 1_000_000n) / threshold) / 1_000_000),
+        : Number((raised * 1_000_000n) / threshold) / 1_000_000,
     buyers: standing.buyers,
     sold: whole(soldRaw, baseDecimals),
     saleSize,
@@ -408,7 +459,10 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
       priceWarning,
     }),
     readAt: Date.now(),
+    stale: false,
+    missedAt: null,
     failure: null,
+    unanswered: false,
   };
 }
 
@@ -418,7 +472,12 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
 // the hero and the readout must not show two different readings of one second.
 const FRESH_MS = 10_000;
 
+// The last reading devnet answered, per sale, kept for as long as this server
+// runs. When a read fails it goes back marked stale instead of a blank page,
+// and a miss is remembered for the same ten seconds so an outage does not turn
+// every visit into another read of a node that is not answering.
 const held = new Map<string, { at: number; readout: SaleReadout }>();
+const missed = new Map<string, { at: number; readout: SaleReadout }>();
 const reading = new Map<string, Promise<SaleReadout>>();
 
 /** One sale's numbers, live off devnet, shared between the loads that land together. */
@@ -434,6 +493,11 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
   const fresh = held.get(mint);
   if (fresh !== undefined && Date.now() - fresh.at < FRESH_MS) {
     return fresh.readout;
+  }
+
+  const miss = missed.get(mint);
+  if (miss !== undefined && Date.now() - miss.at < FRESH_MS) {
+    return miss.readout;
   }
 
   const inFlight = reading.get(mint);
@@ -458,14 +522,22 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
           "This sale was opened by an earlier build of the program, so its numbers cannot be read here."
         );
       }
+      const last = held.get(mint);
+      if (last !== undefined) {
+        return { ...last.readout, stale: true, missedAt: Date.now() };
+      }
       return refused(
         about,
-        "Devnet did not answer, so there is nothing true to show yet."
+        "Devnet did not answer, so there is nothing true to show yet.",
+        true
       );
     })
     .then((readout) => {
-      if (readout.failure === null) {
+      if (readout.failure === null && !readout.stale) {
         held.set(mint, { at: Date.now(), readout });
+        missed.delete(mint);
+      } else {
+        missed.set(mint, { at: Date.now(), readout });
       }
       reading.delete(mint);
       return readout;
@@ -482,19 +554,19 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
  * its transfer hook for exactly as long as the sale is open.
  */
 export async function readSaleChoices(): Promise<SaleChoice[]> {
-  const opened = [...openedSales()].reverse();
+  const opened = oldestFirst(openedSales()).reverse();
   const mints = opened.map((sale) => new PublicKey(sale.mint));
 
   let accounts;
   try {
     accounts = await devnetConnection().getMultipleAccountsInfo(mints);
   } catch {
-    return opened.map((sale) => ({ mint: sale.mint, name: sale.name, running: false }));
+    return opened.map((sale) => ({ mint: sale.mint, name: sale.name, running: null }));
   }
 
   return opened.map((sale, index) => {
     const account = accounts[index];
-    let running = false;
+    let running: boolean | null = null;
     if (account !== null && account.owner.equals(TOKEN_2022_PROGRAM_ID)) {
       try {
         const hook = getTransferHook(
@@ -502,7 +574,7 @@ export async function readSaleChoices(): Promise<SaleChoice[]> {
         );
         running = hook !== null && hook.programId.equals(PANGU_PROGRAM_ID);
       } catch {
-        running = false;
+        running = null;
       }
     }
     return { mint: sale.mint, name: sale.name, running };
@@ -511,5 +583,5 @@ export async function readSaleChoices(): Promise<SaleChoice[]> {
 
 /** The sale the readout opens on: the newest one still taking buys. */
 export function defaultChoice(choices: SaleChoice[]): SaleChoice | null {
-  return choices.find((choice) => choice.running) ?? choices[0] ?? null;
+  return choices.find((choice) => choice.running === true) ?? choices[0] ?? null;
 }

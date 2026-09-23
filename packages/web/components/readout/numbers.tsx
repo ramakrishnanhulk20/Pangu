@@ -21,20 +21,33 @@ export function Counting({
   format,
   still,
   revealed,
+  unit = "",
 }: {
   value: number;
   format: (value: number) => string;
   still: boolean;
   /** The count starts when the section comes into view, and only then. */
   revealed: boolean;
+  /**
+   * What the number is counted in. When it changes, the count starts again
+   * from zero, so a switch from a dollar sale to a SOL sale never passes
+   * through dollar amounts written as SOL on its way down.
+   */
+  unit?: string;
 }) {
   const node = useRef<HTMLSpanElement>(null);
   const from = useRef(0);
+  const countedIn = useRef(unit);
 
   useEffect(() => {
     const element = node.current;
     if (still || !revealed || element === null) {
       return;
+    }
+
+    if (countedIn.current !== unit) {
+      countedIn.current = unit;
+      from.current = 0;
     }
 
     const begin = from.current;
@@ -54,7 +67,7 @@ export function Counting({
 
     handle = window.requestAnimationFrame(step);
     return () => window.cancelAnimationFrame(handle);
-  }, [value, still, revealed, format]);
+  }, [value, still, revealed, format, unit]);
 
   return <span ref={node}>{format(value)}</span>;
 }
