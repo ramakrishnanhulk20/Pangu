@@ -225,35 +225,40 @@ flowchart TD
 
 ## The two-minute judge path
 
-What exists in the app today, and where the terminal takes over.
+Everything below is in the browser, on Solana devnet, reading the live program. The terminal is optional and comes last.
 
-1. Open the live app (link above once deployed). The home page reads Solana devnet live and lists every sale Pangu has open or has already run, with its cap, its buyers, and the largest holder's share.
-2. Open `/lab` to see the poster hero: the curve motif, a live pulse read straight from the devnet program, and a "Watch the sale" button that scrolls to the same live board.
-3. Connect a devnet wallet with the wallet button in the top navigation. It is wired on every page through Solana's wallet adapter.
-4. Run the attacks. An in-browser "try to break it" attack screen has not shipped for this submission, so the attacks run from a terminal against the live program, and every refusal below is a real transaction anyone can open on the explorer.
+1. Open the live app (link above once deployed). The poster hero reads the running sale straight from devnet. "Watch the sale" scrolls to the readout: the sale's real bonding curve drawn from Meteora's config, the price now against Apple's live price and the ceiling, the raise against its graduation threshold, every buyer with its share against the cap. A switch shows the graduated sale and its DAMM v2 pool.
+2. Scroll through "How it works": the five rules, one drawing each, pinned while you read. Then "Try to break it".
+3. Connect any devnet wallet with the wallet button. If it holds no devnet SOL, the faucet link on that screen gives you some.
+4. Press "Get demo dollars". The sale is priced in a demo dollar token, and that button mints your wallet enough of it for every row, from a devnet key that holds nothing of value. One grant per wallet per hour.
+5. Run the nine rows in order. The first is an honest buy under the cap, which goes through. Rows two to eight are the attacks: over the cap in one go, over it on a second buy, through a second token account, into an account whose owner can change, straight to another wallet, a direct call with no transfer, and a buy above the price ceiling. Each one comes back refused by the program, named, with a link to the transaction. The last row sells back to the pool and goes through, because nothing in the rules can close the exit. "Simulate" is the default, so your wallet never signs something meant to fail; "Send for real" makes every refusal a real failed transaction on the explorer.
+6. The tally under the ledger reads like the terminal's: attacks run, refused as expected, allowed as expected, and the largest wallet's share of everything sold against the cap, read from the chain.
+7. `/docs` has the rubric page: every bounty line and every invariant mapped to the file, the test and the transaction that proves it.
 
-   ```bash
-   cd packages/scripts && npm run prove
-   ```
+The same attacks from a terminal, against the same live program:
 
-   Last lines, from the current live run against the list-mode sale:
+```bash
+cd packages/scripts && npm run prove
+```
 
-   ```
-   proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units sold, against a cap worth 17.12 percent of them
-   9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
-   ```
+Last lines, from the current live run against the list-mode sale:
 
-5. Check the whole demo is still alive:
+```
+proof    : the largest wallet holds 16.76 percent of the 467347859706336 raw units sold, against a cap worth 17.12 percent of them
+9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+```
 
-   ```bash
-   npm run status
-   ```
+And whether the whole demo is still alive:
 
-   Last line from the same run:
+```bash
+npm run status
+```
 
-   ```
-   7 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-22T15:05:14Z
-   ```
+Last line from the same run:
+
+```
+7 passed, 0 warned, 0 failed, 1 not checked, at 2026-09-22T15:05:14Z
+```
 
 ## Quick start
 

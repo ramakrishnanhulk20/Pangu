@@ -3,6 +3,10 @@ title: Getting started
 description: Opening a sale as an issuer, what preflight tells a buyer, and installing the SDK as a developer.
 ---
 
+## For a judge: the browser first
+
+The front page of the app runs the whole thing without a terminal. Connect a devnet wallet, press "Get demo dollars" on the "Try to break it" screen (the sale is priced in a demo dollar token, and that button mints your wallet enough of it), then run the nine rows: one honest buy, seven attacks the program refuses by name with a link to each transaction, and one sell back that goes through. Everything below is the same work from a terminal.
+
 ## For an issuer: open a sale
 
 Everything below runs from `packages/scripts` in the Pangu repository, against Solana devnet. Fill in `.env` first (see the addresses page for the two values it needs), then:
