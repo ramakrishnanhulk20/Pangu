@@ -7,7 +7,7 @@
  * in docs/security/threat-model.md).
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
@@ -97,7 +97,8 @@ export async function requireDevnet(connection: Connection): Promise<void> {
  * `DEVNET_PAYER_KEYPAIR`.
  *
  * Throws when the file is missing or is not a 64 byte secret key, naming the
- * path and the command that makes one. The bytes are never printed.
+ * path and the command that makes one. The bytes are never printed, not even
+ * the fragment a JSON parser quotes back.
  */
 export function payerKeypair(): Keypair {
   loadEnvFile();
@@ -107,19 +108,45 @@ export function payerKeypair(): Keypair {
       "DEVNET_PAYER_KEYPAIR is not set. Put the path of a devnet keypair file in .env, see .env.example."
     );
   }
-  const file = resolve(path);
+  return readKeypairFile(resolve(path));
+}
+
+/**
+ * A keypair out of a file in the shape `solana-keygen` writes: a JSON array of
+ * 64 whole numbers from 0 to 255.
+ *
+ * Every refusal is one fixed sentence naming the path and the shape. Nothing
+ * the parser or the key library said is passed on, because JSON.parse quotes
+ * the input around the point it gave up, so a base58 secret or a trailing comma
+ * would put key bytes in a log line.
+ */
+export function readKeypairFile(file: string): Keypair {
+  const refused = new Error(
+    `${file} is not a keypair file these scripts can read. It must be a JSON array of 64 whole numbers from 0 to 255, the shape solana-keygen writes. Make one with: solana-keygen new --outfile "${file}"`
+  );
+  if (!existsSync(file)) {
+    throw new Error(
+      `there is no keypair file at ${file}. Make one with: solana-keygen new --outfile "${file}"`
+    );
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new Error(
-      `cannot read the keypair at ${file}: ${error instanceof Error ? error.message : String(error)}. Make one with: solana-keygen new --outfile "${file}"`
-    );
+  } catch {
+    throw refused;
   }
-  if (!Array.isArray(parsed) || parsed.length !== 64) {
-    throw new Error(`${file} is not a 64 byte Solana keypair file`);
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length !== 64 ||
+    !parsed.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+  ) {
+    throw refused;
   }
-  return Keypair.fromSecretKey(Uint8Array.from(parsed as number[]));
+  try {
+    return Keypair.fromSecretKey(Uint8Array.from(parsed as number[]));
+  } catch {
+    throw refused;
+  }
 }
 
 export function addressLink(address: PublicKey | string): string {

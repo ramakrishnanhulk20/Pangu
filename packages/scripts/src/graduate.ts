@@ -11,7 +11,7 @@
  */
 
 import { PublicKey, Transaction, type Keypair } from "@solana/web3.js";
-import { getTransferHook, unpackMint } from "@solana/spl-token";
+import { NATIVE_MINT, getTransferHook, unpackMint } from "@solana/spl-token";
 import {
   ACCESS_MODE,
   TOKEN_2022_PROGRAM_ID,
@@ -19,13 +19,18 @@ import {
   getSale,
   isSaleRunning,
 } from "pangu-sdk";
-import { buyTransaction, graduateTransaction, saleProgress } from "pangu-sdk/dbc";
+import { buyTransaction, graduateTransaction, loadPool, saleProgress } from "pangu-sdk/dbc";
 import { readFlags } from "./arguments.js";
-import { buyWithin, nextBuy } from "./buying.js";
-import { send } from "./chain.js";
+import { buyWithin, nextBuy, type SizedBuy } from "./buying.js";
+import { payingDecimals, send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
-import { freshWallet, fundWallets, returnLeftovers } from "./wallets.js";
+import {
+  buyerFunding,
+  fundQuoteTokens,
+  fundWallets,
+  withThrowawayWallets,
+} from "./wallets.js";
 
 /** Enough buyers to fill a curve with a ten percent cap, with room to spare. */
 const MOST_BUYERS = 40;
@@ -57,64 +62,77 @@ async function main(): Promise<void> {
     `curve    : ${opening.quoteRaised} of ${opening.threshold} raw units raised, ${Math.round(opening.percent * 100)} percent`
   );
 
-  const used: Keypair[] = [];
-  for (let round = 0; round < MOST_BUYERS; round += 1) {
-    const progress = await saleProgress(connection, mint);
-    if (progress.graduated) {
-      break;
-    }
+  const view = await loadPool(connection, mint);
+  const payingInSol = view.quoteMint.equals(NATIVE_MINT);
+  const quoteDecimals = await payingDecimals(connection, view.quoteMint);
 
-    const buyer = freshWallet();
-    used.push(buyer);
-    // Both sides of this are raw units of the paying token. Nothing here may be
-    // compared against the cap, which counts sale tokens.
-    const { wanted, finishing } = nextBuy(progress.threshold, progress.quoteRaised);
+  const { returned } = await withThrowawayWallets(connection, issuer, async (fresh) => {
+    for (let round = 0; round < MOST_BUYERS; round += 1) {
+      const progress = await saleProgress(connection, mint);
+      if (progress.graduated) {
+        break;
+      }
 
-    await fundWallets(
-      connection,
-      issuer,
-      [buyer.publicKey],
-      Number(wanted) + OVERHEAD_LAMPORTS
-    );
-    if (sale.accessMode === ACCESS_MODE.issuerList) {
-      await send(
-        connection,
-        `approving buyer ${round + 1}`,
-        new Transaction().add(
-          approveBuyerInstruction({
-            issuer: issuer.publicKey,
-            mint,
-            wallet: buyer.publicKey,
-          })
-        ),
-        [issuer]
+      const buyer = fresh();
+      // Both sides of this are raw units of the paying token. Nothing here may
+      // be compared against the cap, which counts sale tokens.
+      const { wanted, finishing } = nextBuy(progress.threshold, progress.quoteRaised);
+
+      if (sale.accessMode === ACCESS_MODE.issuerList) {
+        await send(
+          connection,
+          `approving buyer ${round + 1}`,
+          new Transaction().add(
+            approveBuyerInstruction({
+              issuer: issuer.publicKey,
+              mint,
+              wallet: buyer.publicKey,
+            })
+          ),
+          [issuer]
+        );
+      }
+
+      // Sized before it is funded, so the wallet is handed what this buy spends
+      // and no more.
+      const buy: SizedBuy = finishing
+        ? {
+            ...(await buyTransaction({
+              connection,
+              buyer: buyer.publicKey,
+              mint,
+              amountIn: wanted,
+              fill: "partial",
+            })),
+            amountIn: wanted,
+          }
+        : await buyWithin(connection, buyer.publicKey, mint, wanted, sale.cap);
+
+      const funding = buyerFunding(payingInSol, buy.amountIn, OVERHEAD_LAMPORTS);
+      await fundWallets(connection, issuer, [buyer.publicKey], funding.lamports);
+      if (funding.quoteTokens > 0n) {
+        await fundQuoteTokens(connection, issuer, view.quoteMint, view.quoteProgram, quoteDecimals, [
+          { wallet: buyer.publicKey, amount: funding.quoteTokens },
+        ]);
+      }
+
+      const landed = await send(connection, `buy ${round + 1}`, buy.transaction, [buyer]);
+      console.log(
+        `buy ${String(round + 1).padStart(2)}   : ${buy.expectedAmountOut} raw units, ${landed.link}`
       );
     }
 
-    const buy = finishing
-      ? await buyTransaction({
-          connection,
-          buyer: buyer.publicKey,
-          mint,
-          amountIn: wanted,
-          fill: "partial",
-        })
-      : await buyWithin(connection, buyer.publicKey, mint, wanted, sale.cap);
-    const landed = await send(connection, `buy ${round + 1}`, buy.transaction, [buyer]);
+    const filled = await saleProgress(connection, mint);
+    if (!filled.graduated) {
+      throw new Error(
+        `the curve is still short after ${MOST_BUYERS} buyers: ${filled.quoteRaised} of ${filled.threshold}`
+      );
+    }
     console.log(
-      `buy ${String(round + 1).padStart(2)}   : ${buy.expectedAmountOut} raw units, ${landed.link}`
+      `filled   : ${filled.quoteRaised} of ${filled.threshold} raw units, the curve is full`
     );
-  }
-
-  const filled = await saleProgress(connection, mint);
-  if (!filled.graduated) {
-    throw new Error(
-      `the curve is still short after ${MOST_BUYERS} buyers: ${filled.quoteRaised} of ${filled.threshold}`
-    );
-  }
-  console.log(
-    `filled   : ${filled.quoteRaised} of ${filled.threshold} raw units, the curve is full`
-  );
+  });
+  console.log(`returned : ${sol(returned)} SOL swept back from the throwaway buyers`);
 
   const migration = await graduateTransaction({
     connection,
@@ -148,10 +166,6 @@ async function main(): Promise<void> {
     `rules    : ${stillRunning ? "STILL ON THE MINT" : "gone, the token now moves freely"}`
   );
 
-  let returned = 0;
-  for (const wallet of used) {
-    returned += await returnLeftovers(connection, issuer, wallet);
-  }
   console.log(
     `cost     : ${sol(started - (await connection.getBalance(issuer.publicKey, "confirmed")))} SOL, after ${sol(returned)} SOL came back`
   );

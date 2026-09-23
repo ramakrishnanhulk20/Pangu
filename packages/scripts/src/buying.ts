@@ -255,13 +255,205 @@ export async function quoteForTokens(
   tokens: bigint
 ): Promise<bigint> {
   const view = await loadPool(connection, mint);
-  const price = curvePriceDollars(
-    BigInt(view.poolAccount.poolState.sqrtPrice.toString()),
-    decimals.baseDecimals,
-    decimals.quoteDecimals
-  );
+  return tokensWorth(tokens, BigInt(view.poolAccount.poolState.sqrtPrice.toString()), decimals);
+}
+
+/**
+ * What `tokens` raw units of the sale token cost at a square root price, in raw
+ * units of the paying token.
+ *
+ * `decimals.quoteDecimals` has to be the paying mint's own, from
+ * `payingDecimals`. The sale's rules read zero for it on any sale without a
+ * band, and a zero here is the million-fold undersizing a dollar sale suffered.
+ */
+export function tokensWorth(tokens: bigint, sqrtPrice: bigint, decimals: TokenDecimals): bigint {
+  const price = curvePriceDollars(sqrtPrice, decimals.baseDecimals, decimals.quoteDecimals);
   return (
     (tokens * price * 10n ** BigInt(decimals.quoteDecimals)) /
     (DOLLAR_SCALE * 10n ** BigInt(decimals.baseDecimals))
   );
+}
+
+/**
+ * What one wallet's whole cap is worth when a curve has raised its threshold,
+ * in raw units of the paying token.
+ *
+ * `threshold` is in whole units of the paying token, as sales.json records it,
+ * and `quoteDecimals` is the paying mint's own. Whole numbers all the way
+ * through, because a dollar threshold is bigger than a float carries to the
+ * last unit.
+ */
+export function capWorthAtThreshold(
+  threshold: number,
+  quoteDecimals: number,
+  capShareBps: number
+): bigint {
+  return (
+    (BigInt(Math.round(threshold * 100)) * 10n ** BigInt(quoteDecimals) * BigInt(capShareBps)) /
+    1_000_000n
+  );
+}
+
+/** What each of the six even seeded buys aims at: two fifths of the cap's worth. */
+export function evenBuySize(threshold: number, quoteDecimals: number, capShareBps: number): bigint {
+  return (capWorthAtThreshold(threshold, quoteDecimals, capShareBps) * 2n) / 5n;
+}
+
+/**
+ * Whether a failed quote or build means the curve itself cannot do this.
+ *
+ * These are the three refusals Meteora's quote functions give for a curve that
+ * is too short or already full, in dynamic-bonding-curve-sdk 1.5.12: not
+ * enough liquidity, insufficient liquidity, and a completed pool. Anything
+ * else, a rate limited node above all, is not the curve talking and must not
+ * be read as "that size does not fit".
+ */
+export function isCurveLimit(error: unknown): boolean {
+  const said = error instanceof Error ? error.message : String(error);
+  return /not enough liquidity|insufficient liquidity|virtual pool is completed/i.test(said);
+}
+
+/** The curve cannot fill what was asked for. A limit of the sale, never of the node. */
+export class CurveLimit extends Error {
+  constructor(said: string) {
+    super(`the curve cannot fill this buy: ${said}`);
+    this.name = "CurveLimit";
+  }
+}
+
+/** How long to wait before the one retry a failed request gets. */
+const RETRY_WAIT_MS = 2_000;
+
+function saidBy(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Runs a quote or a build, and once more if it failed for any reason other than
+ * the curve.
+ *
+ * A curve limit is thrown straight away as a `CurveLimit`, because asking again
+ * will not change it. Any other failure gets one retry after a short wait, and a
+ * second failure stops the run with the node's own words: a size worked out
+ * from a request that never answered is a guess.
+ */
+export async function quoteOnceMore<T>(
+  run: () => Promise<T>,
+  waitMs: number = RETRY_WAIT_MS
+): Promise<T> {
+  try {
+    return await run();
+  } catch (first) {
+    if (isCurveLimit(first)) {
+      throw new CurveLimit(saidBy(first));
+    }
+    await new Promise((wake) => setTimeout(wake, waitMs));
+    try {
+      return await run();
+    } catch (second) {
+      if (isCurveLimit(second)) {
+        throw new CurveLimit(saidBy(second));
+      }
+      throw new Error(
+        `the node failed twice while this buy was being built, so the run stops rather than guess at a size: ${saidBy(second)}`
+      );
+    }
+  }
+}
+
+/** How many builds a buy aimed at a number of tokens may take. */
+const AIM_TRIES = 6;
+
+/** How far past the tokens asked for an aimed buy may land: half a percent. */
+const AIM_SLACK_PART = 200n;
+
+/**
+ * A buy that returns at least `tokens` raw units of the sale token, and not
+ * much more.
+ *
+ * The SDK builds a buy from what it spends, so the spend is worked back from
+ * the tokens: `start` first, then scaled by how far each build missed. The
+ * price climbs through a buy, so a build aimed with the price before it comes
+ * back a little short, and the scale plus a small nudge closes the gap from
+ * below in two or three builds.
+ *
+ * Throws when no build reached the tokens asked for.
+ */
+export async function aimAtTokens<T extends { expectedAmountOut: bigint }>(
+  build: (amountIn: bigint) => Promise<T>,
+  start: bigint,
+  tokens: bigint
+): Promise<T & { amountIn: bigint }> {
+  const slack = tokens / AIM_SLACK_PART + 1n;
+  let amountIn = start > 0n ? start : 1n;
+  let best: (T & { amountIn: bigint }) | null = null;
+  let closest = 0n;
+  for (let tries = 0; tries < AIM_TRIES; tries += 1) {
+    const built = await build(amountIn);
+    const out = built.expectedAmountOut;
+    closest = out;
+    if (out >= tokens) {
+      if (best === null || out < best.expectedAmountOut) {
+        best = { ...built, amountIn };
+      }
+      if (out - tokens <= slack) {
+        return best;
+      }
+    }
+    if (out === 0n) {
+      amountIn *= 2n;
+      continue;
+    }
+    const scaled = (amountIn * tokens) / out;
+    amountIn = scaled + scaled / 4_000n + 1n;
+  }
+  if (best !== null) {
+    return best;
+  }
+  throw new Error(
+    `could not aim a buy at ${tokens} raw units in ${AIM_TRIES} builds: the closest returned ${closest}`
+  );
+}
+
+/**
+ * A buy of at least `tokens` raw units of the sale token, built for `buyer`.
+ *
+ * Throws `CurveLimit` when the curve cannot fill that many, and a plain error
+ * when the node failed twice.
+ */
+export async function buyAtLeast(
+  connection: Connection,
+  buyer: PublicKey,
+  mint: PublicKey,
+  decimals: TokenDecimals,
+  tokens: bigint
+): Promise<SizedBuy> {
+  const start = await quoteOnceMore(() => quoteForTokens(connection, mint, decimals, tokens));
+  return aimAtTokens(
+    (amountIn) => quoteOnceMore(() => buyTransaction({ connection, buyer, mint, amountIn })),
+    start,
+    tokens
+  );
+}
+
+/**
+ * How many tokens the smallest buy that breaks a cap asks for: the room this
+ * wallet has left plus one raw unit. Or why no such buy exists here.
+ *
+ * Sized in sale tokens, never as a multiple of what the cap is worth. On a
+ * banded sale a buy worth several caps walks the curve past the ceiling, and
+ * the hook judges the band before the cap, so the answer was PriceOutsideBand
+ * and said nothing about the cap.
+ */
+export function overCapSize(
+  room: bigint,
+  tokensLeft: bigint
+): { tokens: bigint } | { skip: string } {
+  const tokens = room + 1n;
+  if (tokens > tokensLeft) {
+    return {
+      skip: `the curve has ${tokensLeft} raw units left, fewer than this wallet's ${room} of room plus one, so no single buy can cross the cap`,
+    };
+  }
+  return { tokens };
 }

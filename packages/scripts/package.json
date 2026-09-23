@@ -14,7 +14,8 @@
     "status": "tsx src/status.ts",
     "sdk:refresh": "node scripts/refresh-sdk.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "retire": "tsx src/retire.ts"
   },
   "dependencies": {
     "@meteora-ag/dynamic-bonding-curve-sdk": "1.5.12",

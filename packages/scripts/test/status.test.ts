@@ -1,17 +1,22 @@
 // The table `status` prints, the exit code that goes with it, the market clock
-// behind the stale-price note, and how the deployment record is read.
+// behind the stale-price rule, what sales.json is held to against the chain,
+// and how the deployment record is read.
 //
-// Does NOT cover: any of the checks themselves. Every one of those is a read of
-// devnet, of Hermes or of the live site, and only the command against the real
-// network says whether the demo is up.
+// Does NOT cover: the reads themselves. Every one of those is a read of devnet,
+// of Hermes or of the live site, and only the command against the real network
+// says whether the demo is up.
 
 import { describe, expect, it } from "vitest";
+import { Keypair } from "@solana/web3.js";
 import { PanguInputError, PanguLayoutError } from "pangu-sdk";
 import {
   earlierBuildReason,
   exitCode,
+  hermesAgeResult,
   readDeployedBuild,
+  recordCheck,
   renderTable,
+  staleResult,
   summaryLine,
   usMarketOpen,
   type CheckRow,
@@ -133,5 +138,56 @@ describe("a sale from an earlier build", () => {
     expect(earlierBuildReason(new PanguInputError("mint must be a PublicKey"))).toBeNull();
     expect(earlierBuildReason(new Error("the RPC timed out"))).toBeNull();
     expect(earlierBuildReason("not even an error")).toBeNull();
+  });
+});
+
+describe("a price that has aged past a sale's limit", () => {
+  // 14:00 UTC on Tuesday 22 September 2026 is 10:00 in New York, mid-session.
+  const open = new Date("2026-09-22T14:00:00Z");
+  // 03:00 UTC the same day is 23:00 on Monday night in New York.
+  const shut = new Date("2026-09-22T03:00:00Z");
+
+  it("fails while the US market is open, because the refresher has stopped", () => {
+    expect(staleResult("Equity.US.AAPL/USD", open)).toBe("FAIL");
+  });
+
+  it("only warns while the US market is shut, because there is nothing newer", () => {
+    expect(staleResult("Equity.US.AAPL/USD", shut)).toBe("WARN");
+    expect(staleResult("Equity.US.AAPL/USD", new Date("2026-09-26T16:00:00Z"))).toBe("WARN");
+  });
+
+  it("fails at any hour on a feed that publishes all week", () => {
+    expect(staleResult("Crypto.AAPLX/USD", shut)).toBe("FAIL");
+  });
+
+  it("fails the Pyth key when Hermes itself is older than the sale allows in market hours", () => {
+    expect(hermesAgeResult(4_000, 3_600, true)).toBe("FAIL");
+    expect(hermesAgeResult(4_000, 3_600, false)).toBe("WARN");
+    expect(hermesAgeResult(12, 3_600, true)).toBe("PASS");
+  });
+});
+
+describe("sales.json against the chain", () => {
+  const pool = Keypair.generate().publicKey;
+  const chain = { pool, cap: 1_099_999_999n, accessMode: 0 };
+  const file = { pool: pool.toBase58(), cap: "1099999999", mode: "open" as const, accessMode: 0 };
+
+  it("passes when the pool, the cap and the mode all match", () => {
+    expect(recordCheck(file, chain).result).toBe("PASS");
+  });
+
+  it("fails on a different pool, cap or mode, and names each", () => {
+    const other = Keypair.generate().publicKey.toBase58();
+    const drifted = recordCheck({ ...file, pool: other, cap: "5", mode: "list", accessMode: 1 }, chain);
+    expect(drifted.result).toBe("FAIL");
+    expect(drifted.detail).toContain(other);
+    expect(drifted.detail).toContain("cap 5");
+    expect(drifted.detail).toContain("mode list");
+  });
+
+  it("only warns about a cap the launch never got to record", () => {
+    const unread = recordCheck({ ...file, cap: null }, chain);
+    expect(unread.result).toBe("WARN");
+    expect(unread.detail).toContain("1099999999");
   });
 });

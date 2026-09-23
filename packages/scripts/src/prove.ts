@@ -27,7 +27,6 @@ import {
 } from "@solana/spl-token";
 import {
   ACCESS_MODE,
-  DOLLAR_SCALE,
   TOKEN_2022_PROGRAM_ID,
   approveBuyerInstruction,
   curvePriceDollars,
@@ -59,11 +58,22 @@ import {
   summaryLine,
   type AttackReport,
 } from "./attack-table.js";
-import { buyWithin, sizedBuy } from "./buying.js";
-import { attempt, lastLogLine, refusal, send } from "./chain.js";
+import {
+  CurveLimit,
+  buyAtLeast,
+  buyWithin,
+  capWorthAtThreshold,
+  overCapSize,
+  sizedBuy,
+  type SizedBuy,
+  type TokenDecimals,
+} from "./buying.js";
+import { priceAfterOnPool, smallestCrossing } from "./ceiling.js";
+import { attempt, lastLogLine, payingDecimals, refusal, send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
 import {
+  buyerFunding,
   freshWallet,
   fundQuoteTokens,
   fundWallets,
@@ -73,12 +83,6 @@ import {
 
 /** Spare devnet SOL each attacking wallet gets on top of what it tries to spend. */
 const OVERHEAD_LAMPORTS = 12_000_000;
-
-/** How many times the over-cap buy may grow before it gives up. */
-const OVER_CAP_TRIES = 8;
-
-/** How much bigger each try is than the last: five percent. */
-const OVER_CAP_STEP = 21n;
 
 const connection: Connection = devnet();
 
@@ -148,41 +152,6 @@ async function mustPass(
   };
 }
 
-/**
- * The smallest buy this run could build that still breaks the cap.
- *
- * Sized in sale tokens, not in multiples of what the cap is worth. On a banded
- * sale those are two different attacks: a buy three times the cap's worth walks
- * the curve far past the price ceiling, and the hook reads the band before the
- * cap, so what came back was `PriceOutsideBand` and said nothing about the cap
- * at all. Starting at the cap's own worth and growing five percent at a time
- * keeps the attack about the cap.
- *
- * `start` is what the cap is worth at the curve's price right now, in the
- * paying token.
- */
-async function oversizedBuy(
-  buyer: PublicKey,
-  mint: PublicKey,
-  start: bigint,
-  cap: bigint
-): Promise<Transaction> {
-  let amountIn = start;
-  for (let tries = 0; tries < OVER_CAP_TRIES; tries += 1) {
-    try {
-      const built = await buyTransaction({ connection, buyer, mint, amountIn });
-      if (built.expectedAmountOut > cap) {
-        return built.transaction;
-      }
-    } catch {
-      // The curve cannot fill a buy this size. Nothing larger will fit either.
-      break;
-    }
-    amountIn = (amountIn * OVER_CAP_STEP) / 20n;
-  }
-  throw new Error("could not build a buy that passes the cap on this curve");
-}
-
 async function tokenBalance(account: PublicKey): Promise<bigint> {
   const info = await connection.getAccountInfo(account, "confirmed");
   return info === null ? 0n : info.data.readBigUInt64LE(64);
@@ -240,9 +209,8 @@ async function main(): Promise<void> {
   // The pool itself, for the token buyers pay in and for where the curve stands.
   const view = await loadPool(connection, mint);
   const quoteMint = view.quoteMint;
-  const quoteDecimals = (
-    await getMint(connection, quoteMint, "confirmed", view.quoteProgram)
-  ).decimals;
+  const quoteDecimals = await payingDecimals(connection, quoteMint);
+  const decimals: TokenDecimals = { baseDecimals: sale.baseDecimals, quoteDecimals };
   const payingInSol = quoteMint.equals(NATIVE_MINT);
 
   const ceiling =
@@ -298,31 +266,15 @@ async function main(): Promise<void> {
     );
   }
 
-  // Raw units of the paying token, whatever that token is: the threshold in
-  // whole units of it, its own decimals, and the cap's share of the curve. Whole
-  // numbers all the way through, because a dollar threshold is bigger than a
-  // float carries to the last unit.
-  const capWorth =
-    (BigInt(Math.round(record.thresholdSol * 100)) *
-      10n ** BigInt(quoteDecimals) *
-      BigInt(record.capShareBps)) /
-    1_000_000n;
+  const capWorth = capWorthAtThreshold(record.thresholdSol, quoteDecimals, record.capShareBps);
   const smallBuy = capWorth / 5n > 0n ? capWorth / 5n : 1_000_000n;
 
-  // What a whole cap of tokens costs at the curve's price right now, which is
-  // where the over-cap attack starts from. Read off the pool rather than worked
-  // out from the threshold, because the two are only the same number at the
-  // very start of a curve.
-  const capWorthNow =
-    (sale.cap * curvePrice * 10n ** BigInt(quoteDecimals)) /
-    (DOLLAR_SCALE * 10n ** BigInt(sale.baseDecimals));
-  const overCapStart = capWorthNow > 0n ? capWorthNow : capWorth;
-
-  // The careless wallet makes one small buy that lands and then tries a buy
-  // worth the whole cap against the ceiling, so it has to hold both. Handed
-  // only the cap's worth, it came up short on 23 September 2026 and the token
-  // program refused the ceiling attack before Pangu ever saw it.
-  const carelessFunds = capWorth + smallBuy;
+  // The careless wallet makes one small buy that lands, then tries the
+  // changeable-owner attack at the same size, so it holds two of them: a
+  // wallet short of the paying token is refused by the token program before
+  // Pangu ever sees the buy. The ceiling attack is funded on its own once it
+  // has been sized, because only then is its cost known.
+  const carelessFunds = smallBuy * 2n;
 
   const newcomer = freshWallet();
   const filler = freshWallet();
@@ -350,6 +302,117 @@ async function main(): Promise<void> {
   };
   process.on("uncaughtException", rescue);
   process.on("unhandledRejection", rescue);
+
+  // What the curve sells in total, worked back from the cap, which is that
+  // number times the cap's share in basis points.
+  const curveTokens = (sale.cap * 10_000n) / BigInt(record.capShareBps);
+
+  /**
+   * The buy that pushes the curve past the ceiling, sized in tokens: the
+   * smallest buy whose landing price is over it, found with the same quote the
+   * preflight uses, asked of the preflight, and then sent at that same size.
+   */
+  const ceilingAttack = async (buyer: Keypair, ceilingNow: bigint): Promise<AttackReport> => {
+    const attack = "buy that would push the price past the ceiling";
+    // Read again: the buys earlier in this run have moved the curve.
+    const now = await loadPool(connection, mint);
+    const crossing = smallestCrossing(priceAfterOnPool(now, decimals), ceilingNow, curveTokens);
+    if (crossing.tokens === null) {
+      if (crossing.highest === null) {
+        return skipped(
+          attack,
+          "C9",
+          "PriceOutsideBand",
+          "this curve cannot fill any buy right now, so there is no buy to push it past the ceiling"
+        );
+      }
+      const why = payingInSol
+        ? "this sale is priced in SOL and the ceiling is in dollars"
+        : "the curve ends below the ceiling";
+      return skipped(
+        attack,
+        "C9",
+        "PriceOutsideBand",
+        `the curve cannot reach it: the largest buy it can fill lands at ${dollars(crossing.highest).toFixed(8)} dollars against a ceiling of ${dollars(ceilingNow).toFixed(4)}, because ${why}`
+      );
+    }
+
+    // A buy of a handful of raw units can round to nothing after the fee, so
+    // the size never drops under a thousandth of the cap. Anything past the
+    // crossing crosses too.
+    const floor = sale.cap / 1_000n;
+    const size = crossing.tokens > floor ? crossing.tokens : floor;
+    console.log(
+      `ceiling  : the smallest buy over it is ${crossing.tokens} raw units, landing the curve at ${dollars(crossing.price).toFixed(4)} against ${dollars(ceilingNow).toFixed(4)}; sending ${size}`
+    );
+    const probe = await preflightBuy({ connection, buyer: buyer.publicKey, mint, amountOut: size });
+    // preflightBuy's openingRecord option replaces this: today it stops at
+    // BuyerRecordMissing for a wallet that has never bought, before the band.
+    console.log(
+      `preflight: ${probe.error === "BuyerRecordMissing" ? "this wallet has no record yet, so the preflight stops before the band" : (probe.error ?? "it says this buy would pass")}`
+    );
+
+    let overCeiling: SizedBuy;
+    try {
+      overCeiling = await buyAtLeast(connection, buyer.publicKey, mint, decimals, size);
+    } catch (error) {
+      if (error instanceof CurveLimit) {
+        return skipped(attack, "C9", "PriceOutsideBand", error.message);
+      }
+      throw error;
+    }
+    const funding = buyerFunding(payingInSol, overCeiling.amountIn, OVERHEAD_LAMPORTS);
+    await fundWallets(connection, issuer, [buyer.publicKey], funding.lamports);
+    if (funding.quoteTokens > 0n) {
+      await fundQuoteTokens(connection, issuer, quoteMint, view.quoteProgram, quoteDecimals, [
+        { wallet: buyer.publicKey, amount: funding.quoteTokens },
+      ]);
+    }
+    return mustRefuse(attack, "C9", "PriceOutsideBand", overCeiling.transaction, [buyer]);
+  };
+
+  /**
+   * The smallest buy that breaks this wallet's cap: its room plus one raw
+   * unit, sized in tokens. Or the plain reason no such buy exists here: the
+   * curve has fewer tokens left than that, or Meteora's quote says it cannot
+   * fill it. A node that fails twice ends the run instead.
+   */
+  const crossTheCap = async (
+    buyer: Keypair,
+    room: bigint
+  ): Promise<{ buy: SizedBuy } | { skip: string }> => {
+    const now = await getSale(connection, mint);
+    const sold = (now ?? sale).totalNetBought;
+    const size = overCapSize(room, curveTokens > sold ? curveTokens - sold : 0n);
+    if ("skip" in size) {
+      return size;
+    }
+    try {
+      return { buy: await buyAtLeast(connection, buyer.publicKey, mint, decimals, size.tokens) };
+    } catch (error) {
+      if (error instanceof CurveLimit) {
+        return { skip: error.message };
+      }
+      throw error;
+    }
+  };
+
+  const capAttack = async (
+    attack: string,
+    expected: PanguErrorName,
+    buyer: Keypair,
+    room: bigint,
+    change: (transaction: Transaction) => { transaction: Transaction; signers: Signer[] } = (
+      transaction
+    ) => ({ transaction, signers: [] })
+  ): Promise<AttackReport> => {
+    const crossing = await crossTheCap(buyer, room);
+    if ("skip" in crossing) {
+      return skipped(attack, "C3", expected, crossing.skip);
+    }
+    const changed = change(crossing.buy.transaction);
+    return mustRefuse(attack, "C3", expected, changed.transaction, [buyer, ...changed.signers]);
+  };
 
   try {
     if (payingInSol) {
@@ -456,13 +519,7 @@ async function main(): Promise<void> {
     }
 
     reports.push(
-      await mustRefuse(
-        "buy past the cap in one go",
-        "C3",
-        bandRefusal ?? "OverCap",
-        await oversizedBuy(filler.publicKey, mint, overCapStart, sale.cap),
-        [filler]
-      )
+      await capAttack("buy past the cap in one go", bandRefusal ?? "OverCap", filler, sale.cap)
     );
 
     const fillerAta = getAssociatedTokenAddressSync(
@@ -499,7 +556,7 @@ async function main(): Promise<void> {
         connection,
         filler.publicKey,
         mint,
-        sale,
+        decimals,
         sale.cap - sale.cap / 50n
       );
       await send(connection, "filling one wallet to its cap", toTheCap.transaction, [filler]);
@@ -508,42 +565,23 @@ async function main(): Promise<void> {
         `filled   : one wallet holds ${held?.netBought ?? 0n} of its ${sale.cap} raw unit cap`
       );
 
-      const second = await buyTransaction({
-        connection,
-        buyer: filler.publicKey,
-        mint,
-        amountIn: smallBuy,
-      });
-      reports.push(
-        await mustRefuse(
-          "a second buy that crosses the cap",
-          "C3",
-          "OverCap",
-          second.transaction,
-          [filler]
-        )
-      );
+      // One raw unit past what the wallet has left, so the only thing wrong
+      // with either buy is the cap.
+      const room = sale.cap - (held?.netBought ?? 0n);
+      reports.push(await capAttack("a second buy that crosses the cap", "OverCap", filler, room));
 
       const fixedOwner = await newTokenAccount(connection, filler.publicKey, mint, true);
-      const intoSecondAccount = await buyTransaction({
-        connection,
-        buyer: filler.publicKey,
-        mint,
-        amountIn: smallBuy,
-      });
-      const redirected = redirectBuy(
-        intoSecondAccount.transaction,
-        fillerAta,
-        fixedOwner.account.publicKey
-      );
-      redirected.instructions.unshift(...fixedOwner.instructions);
       reports.push(
-        await mustRefuse(
+        await capAttack(
           "buy into a second token account of the same wallet",
-          "C3",
           "OverCap",
-          redirected,
-          [filler, fixedOwner.account]
+          filler,
+          room,
+          (transaction) => {
+            const redirected = redirectBuy(transaction, fillerAta, fixedOwner.account.publicKey);
+            redirected.instructions.unshift(...fixedOwner.instructions);
+            return { transaction: redirected, signers: [fixedOwner.account] };
+          }
         )
       );
 
@@ -749,39 +787,8 @@ async function main(): Promise<void> {
       );
     }
 
-    if (price !== null && price.usable) {
-      const room = await preflightBuy({
-        connection,
-        buyer: careless.publicKey,
-        mint,
-        amountOut: sale.cap,
-      });
-      if (room.error === "PriceOutsideBand" || aboveCeiling) {
-        const overCeiling = await buyTransaction({
-          connection,
-          buyer: careless.publicKey,
-          mint,
-          amountIn: capWorth,
-        });
-        reports.push(
-          await mustRefuse(
-            "buy that would push the price past the ceiling",
-            "C9",
-            "PriceOutsideBand",
-            overCeiling.transaction,
-            [careless]
-          )
-        );
-      } else {
-        reports.push(
-          skipped(
-            "buy that would push the price past the ceiling",
-            "C9",
-            "PriceOutsideBand",
-            `the curve cannot reach it: the largest buy this sale allows lands at ${dollars(room.curvePrice ?? 0n).toFixed(8)} against a ceiling of ${dollars(room.ceiling ?? 0n).toFixed(4)}, because this sale is priced in SOL and the ceiling is in dollars`
-          )
-        );
-      }
+    if (price !== null && price.usable && ceiling !== null) {
+      reports.push(await ceilingAttack(careless, ceiling));
     } else if (price === null) {
       reports.push(
         skipped(

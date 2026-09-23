@@ -10,7 +10,9 @@ devnet.
 Fill in `.env` at the repository root from `.env.example`:
 
 - `DEVNET_PAYER_KEYPAIR`, the path to the keypair file that pays. The bytes
-  never enter `.env` or the repository.
+  never enter `.env` or the repository. The file must be the JSON array of 64
+  numbers `solana-keygen` writes; anything else is refused with one fixed
+  sentence that names the path and the shape and never quotes the file.
 - `PYTH_API_KEY`, the Hermes key. Every read of a Pyth price update has needed
   one since 26 August 2026. It is read from the environment by the refresh,
   server side only, and is never printed.
@@ -29,11 +31,12 @@ npm run mint-dollars                               # a dollar token to price a s
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
 npm run launch -- --mode list --cap-share-bps 1000 # open a sale
-npm run launch -- --mode open --band 500           # open one with a price band
+npm run launch -- --mode open --band 500 --quote <dollar mint>  # one with a price band
 npm run seed                                       # a few real buyers
 npm run prove                                      # attack it, print every refusal
 npm run graduate                                   # fill the curve and migrate
 npm run status                                     # is the whole devnet demo still up
+npm run retire -- --mint <mint>                    # take a sale out of the demo
 ```
 
 ## Checking the demo is still alive
@@ -41,17 +44,51 @@ npm run status                                     # is the whole devnet demo st
 `npm run status` is the one command to run daily through judging. It reads and
 signs nothing: it checks that the deployed program still hashes to what
 `docs/deployments.md` records, that every sale in `sales.json` still has its
-rules account on chain, that each running banded sale has a Pyth price account
-and how old the price in it is, that the Pyth key still answers, and that both
-wallets can still pay. It prints one row per check and exits non-zero if any of
-them says FAIL. A WARN is for something a person should see that does not stop
-the demo, such as an equity price that has aged out because the US market is
-shut, which the row says when that is the reason. Set `APP_URL` in `.env` to the
-live site and it checks that too: a 200 inside five seconds with the word Pangu
-on the page.
+rules account on chain, that the pool, the cap and the access mode `sales.json`
+records for each sale are the ones on chain, that each running banded sale has
+a Pyth price account and how old the price in it is, that the Pyth key still
+answers with a price young enough for the sales, and that both wallets can
+still pay. It prints one row per check and exits non-zero if any of them says
+FAIL. Set `APP_URL` in `.env` to the live site and it checks that too: a 200
+inside five seconds with the word Pangu on the page.
 
-`prove` and `graduate` work on the last sale in `sales.json` unless you pass
-`--mint`.
+A price older than a sale allows is a FAIL while its market is open, because
+Pyth is publishing and a working refresher would have kept it fresh, so a stale
+price then means the refresher has stopped. With the US market shut it is a
+WARN that says so: there is nothing newer to write. The `Crypto.*X` feeds
+publish all week, so on those a stale price is always a FAIL. The Pyth key row
+follows the same rule for the age of the price Hermes hands back, judged
+against the strictest running banded sale. A WARN is only ever for something a
+person should see that does not stop the demo.
+
+Retired sales are not checked; the table counts them in one row.
+
+`seed`, `prove` and `graduate` work on the newest sale in `sales.json` unless
+you pass `--mint`. Newest means the latest `openedAt` time, not the last entry
+in the file, and a retired sale is never picked.
+
+## Retiring a sale
+
+```bash
+npm run retire -- --mint <mint>
+```
+
+Marks the entry in `sales.json` with a `retiredAt` time. After that no command
+picks it by default, `--mint` refuses it with the time it was retired, and
+`status` stops checking it. The entry stays, as the record that the sale was
+opened. Use it for a sale an earlier build of the program opened, which
+`status` points out, or one the demo no longer needs. It reads and sends
+nothing.
+
+## How sales.json is written
+
+`launch` writes a sale's entry the moment the sale's transaction lands, from
+what the run already knows, and only then reads the rules back to fill in the
+cap. A read that fails after that point cannot lose a sale that is live on
+chain: the entry is there without a cap, and `status` warns about it. A second
+entry for a mint already in the file is refused. Each write goes to a file
+beside it first and is swapped in, so a run killed mid-write leaves the old
+list.
 
 Run `mint-dollars` once before the first banded sale priced in dollars. Devnet
 has no dollar token anybody can get in quantity, and a ceiling that is a dollar
@@ -79,6 +116,11 @@ npm run launch -- --mode open --band 500 --quote <dollar mint> \
   --supply 20 --threshold 3710 --base-decimals 9 --migration-percent 45
 ```
 
+`--band` needs `--quote` with a dollar token. A band compares the curve's price
+in the paying token with a stock price in dollars, so a band on a sale paid in
+SOL would compare a SOL price with a dollar ceiling. `launch` refuses it before
+it reads or sends anything, and the program's next build refuses it as well.
+
 The opening price is not something a launch sets directly. Meteora works it out
 from the raise, the supply and the share kept back: threshold times migration
 share, over supply times the square of what is left to sell. Those four flags
@@ -100,6 +142,32 @@ the next honest buy is the one that breaks it.
 ```bash
 npm run seed -- --seed-to-share 58
 ```
+
+Every amount of the paying token is scaled with the decimals read off the
+paying token's own mint, never off the sale's rules, which only record them on
+a banded sale and hold zero otherwise.
+
+## What prove and graduate spend
+
+`prove` sizes each cap attack in sale tokens: the wallet's room under the cap
+plus one raw unit, the smallest buy that breaks it. When the curve has fewer
+tokens left than that, or Meteora's quote says it cannot fill it, the row is
+skipped and says why. A request the node fails is tried once more and then
+stops the run, so a rate limit is never read as the curve being full. The
+ceiling attack is sized the same way: the smallest buy whose landing price is
+over the ceiling, found with the quote the SDK's preflight uses, checked with
+that preflight, and sent at that size. When the curve cannot reach the ceiling
+the row is skipped with the reason: the curve ends below it, or the sale is paid
+in SOL.
+
+`prove` has no credential rows yet. The scripts have no way to issue a devnet
+attestation, so on a credential sale its access rows are wrong and the run
+exits non-zero. Run it on open and list sales.
+
+`graduate` hands each throwaway buyer what its buy spends in the sale's own
+paying token, plus the devnet SOL the accounts and fees need. Whatever the run
+does, including stopping partway, every throwaway wallet's SOL is swept back to
+the paying key before the command exits.
 
 ## Rebuilding the SDK
 

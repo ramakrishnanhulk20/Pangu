@@ -1,17 +1,29 @@
-// Sizing the next buy when a curve is being filled, and the spread of sizes a
-// seeded demo sale is given.
+// Sizing the next buy when a curve is being filled, the spread of sizes a
+// seeded demo sale is given, and the paying token's decimals every size is
+// scaled with.
 //
-// Not covered: buyWithin, which needs a live curve to quote against. The fork
-// run and the devnet graduate and seed runs cover that.
+// Not covered: buyWithin and buyAtLeast against a live curve. The aiming and
+// the retry are tested here against stand-ins; the fork run and the devnet
+// graduate, seed and prove runs cover the real quotes.
 
 import { describe, expect, it } from "vitest";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { MINT_SIZE, MintLayout, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import {
+  CurveLimit,
   SEED_WEIGHTS,
+  aimAtTokens,
+  evenBuySize,
+  isCurveLimit,
   nextBuy,
+  overCapSize,
+  quoteOnceMore,
   seedBuySize,
   sellBackSize,
   targetSold,
+  tokensWorth,
 } from "../src/buying.js";
+import { payingDecimals } from "../src/chain.js";
 
 /** A tenth of a SOL, the threshold the devnet demo curve graduates at. */
 const THRESHOLD = 100_000_000n;
@@ -119,5 +131,142 @@ describe("selling a curve back down to its target", () => {
 
   it("names the same place on the curve the buys are aimed at", () => {
     expect(targetSold(11_000_000_000n, 0.52)).toBe(5_720_000_000n);
+  });
+});
+
+/** A node that knows one mint account and nothing else. */
+function nodeWithMint(mint: PublicKey, decimals: number) {
+  const data = Buffer.alloc(MINT_SIZE);
+  MintLayout.encode(
+    {
+      mintAuthorityOption: 0,
+      mintAuthority: PublicKey.default,
+      supply: 1_000_000_000_000n,
+      decimals,
+      isInitialized: true,
+      freezeAuthorityOption: 0,
+      freezeAuthority: PublicKey.default,
+    },
+    data
+  );
+  return {
+    getAccountInfo: async (address: PublicKey) =>
+      address.equals(mint)
+        ? { owner: TOKEN_PROGRAM_ID, data, lamports: 1_461_600, executable: false, rentEpoch: 0 }
+        : null,
+  };
+}
+
+describe("sizing off the paying mint's own decimals", () => {
+  // A sale with no band: its rules hold zero for the quote decimals.
+  const sale = { baseDecimals: 6, quoteDecimals: 0 };
+  const dollarMint = Keypair.generate().publicKey;
+
+  it("reads six from a six decimal mint where the rules say zero", async () => {
+    expect(await payingDecimals(nodeWithMint(dollarMint, 6), dollarMint)).toBe(6);
+  });
+
+  it("prices ten shares at four dollars each as forty dollars", async () => {
+    const quoteDecimals = await payingDecimals(nodeWithMint(dollarMint, 6), dollarMint);
+    // A square root price of 2^65 is four raw units of the paying token per raw
+    // unit of the share, which with six decimals on both sides is four dollars.
+    const sqrtPrice = 1n << 65n;
+    const tenShares = 10_000_000n;
+    expect(tokensWorth(tenShares, sqrtPrice, { ...sale, quoteDecimals })).toBe(40_000_000n);
+  });
+
+  it("gives the even seeded buy a real size on SOL and on dollars", async () => {
+    const sol = await payingDecimals(nodeWithMint(dollarMint, 9), dollarMint);
+    // 0.1 SOL threshold, ten percent cap: two fifths of 0.01 SOL.
+    expect(evenBuySize(0.1, sol, 1_000)).toBe(4_000_000n);
+    expect(evenBuySize(0.1, sale.quoteDecimals, 1_000)).toBe(0n);
+    expect(evenBuySize(3_710, 6, 1_000)).toBe(148_400_000n);
+  });
+
+  it("refuses an address that is not a mint of either token program", async () => {
+    const stranger = Keypair.generate().publicKey;
+    await expect(payingDecimals(nodeWithMint(dollarMint, 6), stranger)).rejects.toThrow(
+      /no mint account/
+    );
+    const owned = {
+      getAccountInfo: async () => ({
+        owner: Keypair.generate().publicKey,
+        data: Buffer.alloc(MINT_SIZE),
+        lamports: 1,
+        executable: false,
+        rentEpoch: 0,
+      }),
+    };
+    await expect(payingDecimals(owned, dollarMint)).rejects.toThrow(/not a token program/);
+  });
+});
+
+describe("sizing the buy that breaks a cap", () => {
+  const CAP = 1_100_000_000n;
+
+  it("asks for one raw unit past the room the wallet has left", () => {
+    expect(overCapSize(CAP, 10n * CAP)).toEqual({ tokens: CAP + 1n });
+    expect(overCapSize(22_000_000n, 10n * CAP)).toEqual({ tokens: 22_000_001n });
+  });
+
+  it("skips with the numbers when the curve has fewer tokens left than that", () => {
+    const plan = overCapSize(CAP, CAP);
+    expect(plan).toHaveProperty("skip");
+    expect("skip" in plan ? plan.skip : "").toContain(`${CAP} raw units left`);
+  });
+
+  it("lands at or just past the tokens asked for on a curve that steepens", async () => {
+    // Out falls behind in proportion as the spend grows, the way a curve does.
+    const curve = async (amountIn: bigint) => ({
+      expectedAmountOut: (amountIn * 10n ** 12n) / (amountIn + 10n ** 12n),
+    });
+    const tokens = CAP + 1n;
+    const aimed = await aimAtTokens(curve, tokens, tokens);
+    expect(aimed.expectedAmountOut >= tokens).toBe(true);
+    expect(aimed.expectedAmountOut - tokens <= tokens / 200n + 1n).toBe(true);
+  });
+});
+
+describe("a failed quote", () => {
+  const busy = new Error("429 Too Many Requests: Connection rate limits exceeded");
+
+  it("reads Meteora's three curve refusals as the curve, and a rate limit as not", () => {
+    expect(isCurveLimit(new Error("Not enough liquidity"))).toBe(true);
+    expect(isCurveLimit(new Error("Insufficient Liquidity"))).toBe(true);
+    expect(isCurveLimit(new Error("Virtual pool is completed"))).toBe(true);
+    expect(isCurveLimit(busy)).toBe(false);
+  });
+
+  it("tries a node error once more and goes on when the second answers", async () => {
+    let calls = 0;
+    const answer = await quoteOnceMore(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw busy;
+      }
+      return 7n;
+    }, 0);
+    expect(answer).toBe(7n);
+    expect(calls).toBe(2);
+  });
+
+  it("stops the run loudly when the node fails twice", async () => {
+    let calls = 0;
+    const run = quoteOnceMore(async () => {
+      calls += 1;
+      throw busy;
+    }, 0);
+    await expect(run).rejects.toThrow(/failed twice.*429/);
+    expect(calls).toBe(2);
+  });
+
+  it("never retries a curve limit, and names it so the row can be skipped", async () => {
+    let calls = 0;
+    const run = quoteOnceMore(async () => {
+      calls += 1;
+      throw new Error("Not enough liquidity");
+    }, 0);
+    await expect(run).rejects.toBeInstanceOf(CurveLimit);
+    expect(calls).toBe(1);
   });
 });

@@ -9,10 +9,12 @@
  * spends nothing: each answer is a read of the chain, of Pyth's Hermes service,
  * or of the site.
  *
- * FAIL means the demo a judge would open is broken. WARN means something worth
- * a person's eye that does not stop the demo: a price that has aged out because
- * the US market is shut, a thin wallet, a sale left behind by an earlier build.
- * Only a FAIL changes the exit code.
+ * FAIL means the demo a judge would open is broken, and that includes a price
+ * that has gone stale while its market is open, because that is a refresher
+ * that has stopped. WARN means something worth a person's eye that does not
+ * stop the demo: a price that has aged out because the US market is shut, a
+ * thin wallet, a sale left behind by an earlier build. Only a FAIL changes the
+ * exit code.
  */
 
 import { createHash } from "node:crypto";
@@ -38,8 +40,8 @@ import {
   requireDevnet,
   rpcUrl,
 } from "./environment.js";
-import { FEEDS } from "./feeds.js";
-import { readSales, type SaleRecord } from "./sales.js";
+import { DEFAULT_FEED, FEEDS, MAX_PRICE_AGE_SECS } from "./feeds.js";
+import { liveSales, readSales, type SaleRecord } from "./sales.js";
 
 /** What one row of the table says. Only FAIL makes the command exit non-zero. */
 export type Result = "PASS" | "WARN" | "FAIL" | "SKIP";
@@ -164,6 +166,77 @@ export function usMarketOpen(at: Date): boolean {
     return false;
   }
   return hour >= 4 && hour < 20;
+}
+
+/**
+ * Whether a feed's market is publishing at this moment. The `Equity.US.*`
+ * feeds follow the US sessions; every other feed on offer publishes around
+ * the clock.
+ */
+export function feedMarketOpen(symbol: string, at: Date): boolean {
+  return symbol.startsWith("Equity.US.") ? usMarketOpen(at) : true;
+}
+
+/**
+ * What a price that has aged past a sale's limit means for the demo.
+ *
+ * With the market open, Pyth is publishing and a working refresher keeps the
+ * account inside its limit, so an old price there is a refresher that has
+ * stopped and every buy is being refused: a FAIL. With the market shut, there
+ * is nothing newer to write, so it is a WARN that says so.
+ */
+export function staleResult(symbol: string, at: Date): Result {
+  return feedMarketOpen(symbol, at) ? "FAIL" : "WARN";
+}
+
+/**
+ * What the age of Hermes' own latest price means for the Pyth key row.
+ *
+ * A key that answers with a price older than a sale allows is a key whose
+ * refresh cannot unfreeze that sale. While the market is open that is a
+ * FAIL. While it is shut, Hermes has nothing newer either, so it is a WARN.
+ */
+export function hermesAgeResult(ageSecs: number, allowedSecs: number, marketOpen: boolean): Result {
+  if (ageSecs <= allowedSecs) {
+    return "PASS";
+  }
+  return marketOpen ? "FAIL" : "WARN";
+}
+
+/**
+ * Where sales.json and the chain disagree about one sale: the pool, the cap
+ * and the access mode. The other commands take these from the file, so a file
+ * that has drifted from the chain aims them at the wrong thing.
+ *
+ * FAIL on any disagreement. A cap the file never recorded, because the launch
+ * stopped before it read the rules back, is a WARN: the file still names the
+ * right sale, and the chain's cap is printed so it can be put right.
+ */
+export function recordCheck(
+  record: Pick<SaleRecord, "pool" | "cap" | "mode" | "accessMode">,
+  sale: Pick<Sale, "pool" | "cap" | "accessMode">
+): { result: Result; detail: string } {
+  const wrong: string[] = [];
+  if (record.pool !== sale.pool.toBase58()) {
+    wrong.push(`pool ${record.pool} in the file, ${sale.pool.toBase58()} on chain`);
+  }
+  if (record.cap !== null && record.cap !== sale.cap.toString()) {
+    wrong.push(`cap ${record.cap} in the file, ${sale.cap} on chain`);
+  }
+  const chainMode = modeWord(sale.accessMode);
+  if (record.accessMode !== sale.accessMode || record.mode !== chainMode) {
+    wrong.push(`mode ${record.mode} (${record.accessMode}) in the file, ${chainMode} (${sale.accessMode}) on chain`);
+  }
+  if (wrong.length > 0) {
+    return { result: "FAIL", detail: `sales.json disagrees with the chain: ${wrong.join("; ")}` };
+  }
+  if (record.cap === null) {
+    return {
+      result: "WARN",
+      detail: `the pool and mode match, but the file has no cap: the launch stopped before it read the rules back. The chain says ${sale.cap}`,
+    };
+  }
+  return { result: "PASS", detail: `pool, cap ${sale.cap} and ${chainMode} access match the chain` };
 }
 
 function plain(value: string): string {
@@ -395,7 +468,7 @@ async function checkSale(
         row: row(
           check,
           "WARN",
-          `${record.mint}, opened by an earlier build: ${earlier}. Retire it from sales.json.`
+          `${record.mint}, opened by an earlier build: ${earlier}. Retire it: npm run retire -- --mint ${record.mint}`
         ),
         sale: null,
         running: false,
@@ -421,7 +494,7 @@ async function checkSale(
       row: row(
         check,
         "WARN",
-        `${record.mint}, opened by an earlier build: it decodes to ${older}. Retire it from sales.json.`
+        `${record.mint}, opened by an earlier build: it decodes to ${older}. Retire it: npm run retire -- --mint ${record.mint}`
       ),
       sale: null,
       running,
@@ -491,11 +564,12 @@ async function checkBand(
     return row(check, "PASS", `${age}, at ${price.priceDollars.toFixed(2)} dollars`);
   }
   if (price.error === "PriceStale" && price.ageSecs > sale.maxPriceAgeSecs) {
-    const shut =
-      symbol.startsWith("Equity.US.") && !usMarketOpen(at)
-        ? ", and the US market is shut right now, so this is expected"
-        : "";
-    return row(check, "WARN", `${age}. Buys are refused until it is refreshed${shut}`);
+    const result = staleResult(symbol, at);
+    const why =
+      result === "FAIL"
+        ? ", and its market is open, so the refresher has stopped"
+        : ", and the US market is shut right now, so this is expected";
+    return row(check, result, `${age}. Buys are refused until it is refreshed${why}`);
   }
   if (price.error === "PriceTooUncertain") {
     return row(
@@ -513,15 +587,19 @@ async function checkBand(
  * The key is never printed, and it is cut out of anything Hermes says before
  * that text reaches the table, because a failure line ends up in a log.
  */
-async function checkPythKey(): Promise<CheckRow> {
+async function checkPythKey(
+  symbol: string,
+  allowedSecs: number,
+  at: Date
+): Promise<CheckRow> {
   const check = "pyth key";
   const key = process.env.PYTH_API_KEY;
   if (key === undefined || key.length === 0) {
     return row(check, "FAIL", "PYTH_API_KEY is not set in .env, so no price can be refreshed");
   }
-  const feed = FEEDS.find((each) => each.symbol === "Equity.US.AAPL/USD");
+  const feed = FEEDS.find((each) => each.symbol === symbol);
   if (feed === undefined) {
-    return row(check, "FAIL", "src/feeds.ts no longer carries Equity.US.AAPL/USD");
+    return row(check, "FAIL", `src/feeds.ts no longer carries ${symbol}`);
   }
 
   let response: Response;
@@ -558,19 +636,27 @@ async function checkPythKey(): Promise<CheckRow> {
       `HTTP ${response.status}, but Hermes returned no publish time to read`
     );
   }
-  const ageSecs = Math.floor(Date.now() / 1000) - publishTime;
+  const ageSecs = Math.floor(at.getTime() / 1000) - publishTime;
   if (ageSecs < -CLOCK_DRIFT_SECS) {
     return row(
       check,
       "WARN",
-      `HTTP ${response.status}, but Apple's price is dated ${-ageSecs} seconds ahead of this machine, so one of the two clocks is wrong`
+      `HTTP ${response.status}, but ${feed.name}'s price is dated ${-ageSecs} seconds ahead of this machine, so one of the two clocks is wrong`
     );
   }
-  return row(
-    check,
-    "PASS",
-    `HTTP ${response.status}, Apple published ${Math.max(0, ageSecs)} seconds ago`
-  );
+  const age = `HTTP ${response.status}, ${feed.name} published ${Math.max(0, ageSecs)} seconds ago of an allowed ${allowedSecs}`;
+  const result = hermesAgeResult(ageSecs, allowedSecs, feedMarketOpen(feed.symbol, at));
+  if (result === "FAIL") {
+    return row(
+      check,
+      result,
+      `${age}, with its market open: a refresh with this key cannot bring a sale back`
+    );
+  }
+  if (result === "WARN") {
+    return row(check, result, `${age}, and the US market is shut, so Hermes has nothing newer`);
+  }
+  return row(check, result, age);
 }
 
 async function checkBalance(
@@ -663,14 +749,42 @@ async function main(): Promise<void> {
   const build = readDeployedBuild(readFileSync(DEPLOYMENTS_FILE, "utf8"));
 
   const rows: CheckRow[] = [await checkProgram(connection, build)];
-  for (const record of readSales()) {
+  const everySale = readSales();
+  const live = liveSales(everySale);
+  // The Pyth key is judged against the strictest running banded sale, since
+  // that is the one a stale answer freezes first.
+  let keyFeed = DEFAULT_FEED;
+  let keyAllowedSecs = MAX_PRICE_AGE_SECS;
+  let strictest: number | null = null;
+  for (const record of live) {
     const checked = await checkSale(connection, record);
     rows.push(checked.row);
-    if (checked.sale !== null && checked.sale.hasBand) {
+    if (checked.sale === null) {
+      continue;
+    }
+    const matched = recordCheck(record, checked.sale);
+    rows.push(row(`record ${record.symbol} ${short(record.mint)}`, matched.result, matched.detail));
+    if (checked.sale.hasBand) {
       rows.push(await checkBand(connection, record, checked.sale, checked.running, at));
+      const symbol = feedName(checked.sale.priceFeedId);
+      if (
+        checked.running &&
+        FEEDS.some((feed) => feed.symbol === symbol) &&
+        (strictest === null || checked.sale.maxPriceAgeSecs < strictest)
+      ) {
+        strictest = checked.sale.maxPriceAgeSecs;
+        keyFeed = symbol;
+        keyAllowedSecs = checked.sale.maxPriceAgeSecs;
+      }
     }
   }
-  rows.push(await checkPythKey());
+  const retired = everySale.length - live.length;
+  if (retired > 0) {
+    rows.push(
+      row("retired sales", "SKIP", `${retired} entries in sales.json are marked retired and not checked`)
+    );
+  }
+  rows.push(await checkPythKey(keyFeed, keyAllowedSecs, at));
   rows.push(await checkDemoWallet(connection));
   rows.push(
     await checkBalance(

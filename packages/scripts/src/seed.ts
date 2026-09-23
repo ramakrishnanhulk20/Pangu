@@ -37,13 +37,15 @@ import { amount, readFlags } from "./arguments.js";
 import {
   SEED_WEIGHTS,
   buyWithin,
+  evenBuySize,
   seedBuySize,
   sellBackSize,
   sizedBuy,
   targetSold,
   type SizedBuy,
+  type TokenDecimals,
 } from "./buying.js";
-import { send } from "./chain.js";
+import { payingDecimals, send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
 import { fundQuoteTokens, fundWallets, repeatableWallet } from "./wallets.js";
@@ -65,9 +67,6 @@ const SELLERS = 2;
  * them do exactly that, which needs a fee.
  */
 const FUNDING_LAMPORTS = 12_000_000;
-
-/** What each demo buy aims at when there is no target, as a share of one wallet's cap. */
-const SHARE_OF_CAP = 0.4;
 
 /** What a selling wallet sells back, as a share of what it holds. */
 const SELL_SHARE = 4n;
@@ -121,6 +120,10 @@ async function main(): Promise<void> {
 
   const view = await loadPool(connection, mint);
   const payingInSol = view.quoteMint.equals(NATIVE_MINT);
+  const decimals: TokenDecimals = {
+    baseDecimals: sale.baseDecimals,
+    quoteDecimals: await payingDecimals(connection, view.quoteMint),
+  };
   // What the curve sells in total, worked back from the cap, which is that
   // number times the cap's share in basis points.
   const curveTokens = (sale.cap * 10_000n) / BigInt(record.capShareBps);
@@ -170,17 +173,7 @@ async function main(): Promise<void> {
     console.log("approve : open access, a buyer only needs their own record");
   }
 
-  // Raw units of the paying token, whatever that token is. The old spelling of
-  // this line used lamports, which is right for a SOL sale and a thousand times
-  // wrong for a six decimal dollar token.
-  const evenBuy = BigInt(
-    Math.round(
-      record.thresholdSol *
-        10 ** sale.quoteDecimals *
-        (record.capShareBps / 10_000) *
-        SHARE_OF_CAP
-    )
-  );
+  const evenBuy = evenBuySize(record.thresholdSol, decimals.quoteDecimals, record.capShareBps);
 
   let sold = saleStanding(sale, await listBuyerRecords(connection, mint)).totalNetBought;
 
@@ -243,7 +236,7 @@ async function main(): Promise<void> {
         );
         continue;
       }
-      buy = await sizedBuy(connection, wallet.publicKey, mint, sale, room);
+      buy = await sizedBuy(connection, wallet.publicKey, mint, decimals, room);
     } else {
       buy = await buyWithin(connection, wallet.publicKey, mint, evenBuy, sale.cap);
     }
@@ -260,7 +253,7 @@ async function main(): Promise<void> {
         issuer,
         view.quoteMint,
         view.quoteProgram,
-        sale.quoteDecimals,
+        decimals.quoteDecimals,
         [{ wallet: wallet.publicKey, amount: buy.amountIn }]
       );
     }
@@ -313,8 +306,8 @@ async function main(): Promise<void> {
     const price = await readPrice(connection, sale);
     const curve = curvePriceDollars(
       BigInt((await loadPool(connection, mint)).poolAccount.poolState.sqrtPrice.toString()),
-      sale.baseDecimals,
-      sale.quoteDecimals
+      decimals.baseDecimals,
+      decimals.quoteDecimals
     );
     const ceiling = priceCeiling(sale, price.price);
     console.log(

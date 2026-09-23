@@ -99,6 +99,75 @@ export async function fundWallets(
   return spent;
 }
 
+/** What one throwaway buyer is handed before its buy. */
+export interface BuyerFunding {
+  /** Devnet SOL the wallet is topped up to. */
+  lamports: number;
+  /** Raw units of the paying token, when that token is not SOL. */
+  quoteTokens: bigint;
+}
+
+/**
+ * What a throwaway buyer needs to make a buy of `amountIn` raw units of the
+ * paying token: `overhead` lamports for the accounts and the fees, plus the buy
+ * itself in whichever token it is priced in.
+ *
+ * The mistake this replaces funded a dollar sale's buyer with its dollar amount
+ * as lamports: the buy failed for want of the paying token and the SOL went
+ * with the discarded key.
+ */
+export function buyerFunding(
+  payingInSol: boolean,
+  amountIn: bigint,
+  overhead: number
+): BuyerFunding {
+  return payingInSol
+    ? { lamports: Number(amountIn) + overhead, quoteTokens: 0n }
+    : { lamports: overhead, quoteTokens: amountIn };
+}
+
+/**
+ * Runs `work` with as many fresh wallets as it asks for, then sweeps every one
+ * of them back to the payer, whether `work` finished or threw.
+ *
+ * A wallet made here is never written down, so whatever it still holds once
+ * the process ends is lost. The sweep is in a finally block for that reason:
+ * a rate limited node or a refused buy halfway through a run is exactly when
+ * the most SOL is sitting in wallets nobody else can sign for.
+ *
+ * Returns what `work` returned and the lamports that came back. When `work`
+ * throws, its error is the one passed on, after the sweep.
+ */
+export async function withThrowawayWallets<T>(
+  connection: Connection,
+  payer: Keypair,
+  work: (fresh: () => Keypair) => Promise<T>
+): Promise<{ result: T; returned: number }> {
+  const made: Keypair[] = [];
+  const fresh = (): Keypair => {
+    const wallet = freshWallet();
+    made.push(wallet);
+    return wallet;
+  };
+  let returned = 0;
+  let result: T;
+  try {
+    result = await work(fresh);
+  } finally {
+    for (const wallet of made) {
+      try {
+        returned += await returnLeftovers(connection, payer, wallet);
+      } catch (error) {
+        // A sweep that throws here would hide the error that ended the run.
+        console.error(
+          `could not sweep ${wallet.publicKey.toBase58()}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  }
+  return { result, returned };
+}
+
 /** One wallet and how much of the paying token it is being handed. */
 export interface QuoteFunding {
   wallet: PublicKey;

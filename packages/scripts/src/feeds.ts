@@ -9,6 +9,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
+import { NATIVE_MINT } from "@solana/spl-token";
 import { PANGU_SHARD_ID, priceFeedAddress } from "pangu-sdk";
 
 export interface PythFeed {
@@ -111,4 +112,21 @@ export function bandFor(feed: PythFeed, bps: number) {
     maxPriceAgeSecs: MAX_PRICE_AGE_SECS,
     maxConfBps: MAX_CONF_BPS,
   };
+}
+
+/**
+ * Why a band cannot go on a sale paid in this token, or null when it can.
+ *
+ * A band compares the curve's price in the paying token with a stock price in
+ * dollars. Paid in SOL, the curve's price is in SOL, so the ceiling would be a
+ * dollar number set against a SOL number and would bite at the wrong place or
+ * never. The program is gaining the same refusal as BandNeedsDollarQuote; this
+ * says it before a launch spends anything. It knows wrapped SOL by its mint
+ * and does not judge whether any other token is really a dollar.
+ */
+export function bandQuoteRefusal(bandBps: number, quoteMint: PublicKey): string | null {
+  if (bandBps <= 0 || !quoteMint.equals(NATIVE_MINT)) {
+    return null;
+  }
+  return "a price band needs a sale paid in a dollar token, and this one is paid in SOL: the ceiling is a dollar price and the curve's price would be in SOL. Pass --quote with the mint from mint-dollars, or leave --band out.";
 }

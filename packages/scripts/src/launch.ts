@@ -3,8 +3,11 @@
  * sale's rules in one transaction.
  *
  *   npm run launch -- --mode list --cap-share-bps 1000
- *   npm run launch -- --mode open --band 500 --feed Crypto.AAPLX/USD
+ *   npm run launch -- --mode open --band 500 --quote <dollar mint> --feed Crypto.AAPLX/USD
  *   npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40
+ *
+ * A band needs a paying token that is a dollar, so `--band` with the default
+ * wrapped SOL is refused before anything is read or sent.
  *
  * Everything it prints comes back off the chain after the transactions land,
  * and every sale it opens is appended to sales.json so the other commands can
@@ -52,6 +55,7 @@ import {
 } from "./environment.js";
 import {
   bandFor,
+  bandQuoteRefusal,
   feedFor,
   feedPriceAccount,
   DEFAULT_FEED,
@@ -59,7 +63,7 @@ import {
   MAX_PRICE_AGE_SECS,
 } from "./feeds.js";
 import { refreshFeedPrice } from "./price-refresh.js";
-import { appendSale } from "./sales.js";
+import { enrichSale, recordSale } from "./sales.js";
 
 const FLAGS = [
   "mode",
@@ -169,11 +173,17 @@ async function main(): Promise<void> {
     `https://pangu.example/devnet/${symbol.toLowerCase()}.json`
   );
 
+  // Refused before anything is read or sent.
+  const quoteMint = quoteFlag === "wsol" ? NATIVE_MINT : new PublicKey(quoteFlag);
+  const bandRefused = bandQuoteRefusal(bandBps, quoteMint);
+  if (bandRefused !== null) {
+    throw new ArgumentError(bandRefused);
+  }
+
   const connection = devnet();
   await requireDevnet(connection);
   const issuer: Keypair = payerKeypair();
 
-  const quoteMint = quoteFlag === "wsol" ? NATIVE_MINT : new PublicKey(quoteFlag);
   const quoteDecimals = await quoteDecimalsOf(connection, quoteMint);
   const shape: CurveShape = {
     quoteDecimals,
@@ -210,7 +220,7 @@ async function main(): Promise<void> {
         `           ${feed.symbol} at ${refresh.price.toFixed(4)} dollars, published ${refresh.secondsOld} seconds ago, confidence ${refresh.confBps} basis points`
       );
       const ceiling = refresh.price * (1 + bandBps / 10_000);
-      const bites = shareSoldAtPrice(shape, ceiling);
+      const bites = shareSoldAtPrice(shape, ceiling, quoteMint);
       if (bites <= 0) {
         console.log(
           `           ceiling ${ceiling.toFixed(4)} dollars, under this curve's opening price, so every buy is refused until the stock rises`
@@ -298,13 +308,52 @@ async function main(): Promise<void> {
   );
 
   const mint = opened.baseMint.publicKey;
-  const sale = await getSale(connection, mint);
-  if (sale === null) {
-    throw new Error("the sale's rules are not on chain after the transaction landed");
-  }
-
   const rules = saleRulesAddress(mint);
   const list = extraAccountListAddress(mint);
+
+  // Written before anything else is read, from what this run already knows, so
+  // a read that fails from here on cannot lose a sale that is live on chain.
+  // The cap comes from the rules and is filled in once they are read back.
+  recordSale({
+    network: "devnet",
+    program: PANGU_PROGRAM_ID.toBase58(),
+    openedAt: new Date().toISOString(),
+    name,
+    symbol,
+    mode,
+    accessMode: ACCESS_MODE_OF[mode],
+    capShareBps,
+    cap: null,
+    thresholdSol: threshold,
+    bandBps: bandBps > 0 ? bandBps : null,
+    feed: bandBps > 0 ? feed.symbol : null,
+    config: template.config.publicKey.toBase58(),
+    mint: mint.toBase58(),
+    pool: opened.pool.toBase58(),
+    rules: rules.toBase58(),
+    extraAccountList: list.toBase58(),
+    quoteMint: quoteMint.toBase58(),
+    issuer: issuer.publicKey.toBase58(),
+    priceAccount: bandBps > 0 ? feedPriceAccount(feed).toBase58() : null,
+    templateSignature: templateLanded.signature,
+    saleSignature: saleLanded.signature,
+  });
+  console.log("recorded : packages/scripts/sales.json, filled in below once the rules are read back");
+
+  const sale = await getSale(connection, mint);
+  if (sale === null) {
+    throw new Error(
+      "the sale's rules are not on chain after the transaction landed. It is in sales.json without a cap; npm run status will say so."
+    );
+  }
+  // What the chain holds wins over what was asked for.
+  enrichSale(mint.toBase58(), {
+    accessMode: sale.accessMode,
+    cap: sale.cap.toString(),
+    bandBps: sale.hasBand ? sale.bandBps : null,
+    pool: sale.pool.toBase58(),
+    priceAccount: sale.hasBand ? sale.priceAccount.toBase58() : null,
+  });
   const spent = started - (await connection.getBalance(issuer.publicKey, "confirmed"));
 
   const line = (label: string, address: PublicKey): void => {
@@ -330,31 +379,7 @@ async function main(): Promise<void> {
   );
   console.log(`spent    : ${sol(spent)} SOL`);
 
-  appendSale({
-    network: "devnet",
-    program: PANGU_PROGRAM_ID.toBase58(),
-    openedAt: new Date().toISOString(),
-    name,
-    symbol,
-    mode,
-    accessMode: sale.accessMode,
-    capShareBps,
-    cap: sale.cap.toString(),
-    thresholdSol: threshold,
-    bandBps: sale.hasBand ? sale.bandBps : null,
-    feed: sale.hasBand ? feed.symbol : null,
-    config: template.config.publicKey.toBase58(),
-    mint: mint.toBase58(),
-    pool: sale.pool.toBase58(),
-    rules: rules.toBase58(),
-    extraAccountList: list.toBase58(),
-    quoteMint: quoteMint.toBase58(),
-    issuer: issuer.publicKey.toBase58(),
-    priceAccount: sale.hasBand ? sale.priceAccount.toBase58() : null,
-    templateSignature: templateLanded.signature,
-    saleSignature: saleLanded.signature,
-  });
-  console.log("recorded : packages/scripts/sales.json");
+  console.log("recorded : the cap and the rest of what the chain says, in sales.json");
 }
 
 main().catch((error: unknown) => {

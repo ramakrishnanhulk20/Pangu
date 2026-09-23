@@ -18,6 +18,8 @@ import {
   TokenDecimal,
   type BuildCurveParams,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import type { PublicKey } from "@solana/web3.js";
+import { bandQuoteRefusal } from "./feeds.js";
 
 /** How many shares a demo sale mints when a launch does not say. */
 export const DEFAULT_SUPPLY = 1_000_000_000;
@@ -78,9 +80,18 @@ export function graduationPrice(shape: CurveShape): number {
  * ends below that price.
  *
  * This is what a banded launch is aimed with: it says where in the sale the
- * ceiling bites, so a demo can be seeded to just under it.
+ * ceiling bites, so a demo can be seeded to just under it. `price` is in the
+ * paying token, so a dollar ceiling only means something on a curve paid in
+ * dollars.
+ *
+ * Throws when `quoteMint` is wrapped SOL, because a dollar ceiling set against
+ * a SOL price gives a number that looks like an answer and is not one.
  */
-export function shareSoldAtPrice(shape: CurveShape, price: number): number {
+export function shareSoldAtPrice(shape: CurveShape, price: number, quoteMint: PublicKey): number {
+  const refusal = bandQuoteRefusal(1, quoteMint);
+  if (refusal !== null) {
+    throw new Error(refusal);
+  }
   const opening = openingPrice(shape);
   const ratio = shape.migrationPercent / (100 - shape.migrationPercent);
   return (1 - Math.sqrt(opening / price)) / (1 - ratio);

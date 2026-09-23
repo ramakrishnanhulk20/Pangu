@@ -12,8 +12,10 @@ import {
   Connection,
   Transaction,
   VersionedTransaction,
+  type PublicKey,
   type Signer,
 } from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, unpackMint } from "@solana/spl-token";
 import { panguErrorFromLogs, type PanguError } from "pangu-sdk";
 import { transactionLink } from "./environment.js";
 
@@ -165,4 +167,31 @@ export function refusal(landed: Landed): PanguError | null {
 export function lastLogLine(landed: Landed): string {
   const lines = landed.logs.filter((line) => line.trim().length > 0);
   return lines[lines.length - 1] ?? "no logs";
+}
+
+/**
+ * The paying token's decimals, read off its own mint account.
+ *
+ * Never off the sale's rules: the program stores the quote decimals only on a
+ * sale with a price band and holds zero for every other sale. Read from there,
+ * the even seeded buy on a SOL sale came to nothing and a dollar buy sized in
+ * tokens came out a million times too small.
+ *
+ * Throws when there is no account at that address, or when the account is not
+ * a mint of either token program.
+ */
+export async function payingDecimals(
+  connection: Pick<Connection, "getAccountInfo">,
+  quoteMint: PublicKey
+): Promise<number> {
+  const info = await connection.getAccountInfo(quoteMint, "confirmed");
+  if (info === null) {
+    throw new Error(`the paying token ${quoteMint.toBase58()} has no mint account on devnet`);
+  }
+  if (!info.owner.equals(TOKEN_PROGRAM_ID) && !info.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    throw new Error(
+      `the paying token ${quoteMint.toBase58()} is owned by ${info.owner.toBase58()}, which is not a token program`
+    );
+  }
+  return unpackMint(quoteMint, info, info.owner).decimals;
 }
