@@ -1,0 +1,58 @@
+Run of 2026-09-23T15:26:11Z against a verification build served on localhost:3472 (never 3000).
+
+server http://localhost:3472, devnet
+demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+throwaway BBmC1czszE1b9tj6tJcUaMhBsar6dBkP2FAHHjE96EJM, its key kept in the session scratch folder until the sweep
+funded the throwaway with 0.05 SOL: 2UGvC7swY7g3wxqyKiJqmuiYQAiV1fzxERqqgcsR6M79Bs7pqxJ8bFULxJ74LVfV1dKfbzRzcxpi7S8CjXfzQmsM
+ok    demo dollars granted through the app's route: 1747.556095 demo dollars, kXanUwfqCrgGCEu6ftfhjfoYSghBmViujYfY4GG5TeHts9E3LRq3iFx7QWeQFXaQCCLa3WdYaycp12R1gjEcY7A
+
+PAAPLX 8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK
+  before: You hold 0 shares, you may still buy 1.09 shares under the cap. You have $1,748 to spend.
+  rules before signing: pass, "The rules would take this buy right now. A pass is the chain as it stands, not a promise: the buy is checked again when it lands."
+  landed: The buy landed on devnet. open the transaction
+  signature 4afJaopp7LyQ3y18h1uEfmUbNY8A5eFNN4ipZEd78CQqQg7jYHcd1jkQ71FJRqZGT3HEnH8ksU2cuxCtShoRZp8R
+  after: You hold 0.05 shares, you may still buy 1.04 shares under the cap. You have $1,730 to spend.
+ok    PAAPLX buy landed
+
+PBAND2 5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo
+  before: You hold 0 shares, you may still buy 1.09 shares under the cap. You have $1,730 to spend.
+  rules before signing: pass, "The rules would take this buy right now. A pass is the chain as it stands, not a promise: the buy is checked again when it lands."
+  landed: The buy landed on devnet. open the transaction
+  signature 3Xv3auRcXGZReajEK2BFePqg2rSfAFznQqX4zk8VSKf8epZsGRjaPH2DjkuF1KmBa9VeWVANphgUhUUwAnCPs2AA
+  after: You hold 0.05 shares, you may still buy 1.04 shares under the cap. You have $1,713 to spend.
+ok    PBAND2 buy landed
+
+/portfolio as the throwaway
+  totals: SALES YOU ARE IN 02 IN DEMO DOLLARS $34.67 across 2 sales SALES YOU ISSUED 00
+  row: 02 Pangu Priced Share, round the clock PAAPLX YOU HOLD 0.05shares $17.35 at the curve's price now ROOM UNDER YOUR CAP 1.04 left of 1.09 MAY YOU BUY Open to anyone STATE Running offering ends 7 Oct 2026 what you can do Buy more → Sell back →
+ok    PAAPLX held on /portfolio equals the chain: page 50000001 raw, chain 50000001 raw
+ok    PAAPLX net bought on /portfolio equals the buyer record: page 50000001 raw, record 50000001 raw
+  row: 01 Pangu Priced Share, second offering PBAND2 YOU HOLD 0.05shares $17.32 at the curve's price now ROOM UNDER YOUR CAP 1.04 left of 1.09 MAY YOU BUY Open to anyone STATE Running offering ends 7 Oct 2026 what you can do Buy more → Sell back →
+ok    PBAND2 held on /portfolio equals the chain: page 50000001 raw, chain 50000001 raw
+ok    PBAND2 net bought on /portfolio equals the buyer record: page 50000001 raw, record 50000001 raw
+ok    the throwaway issued nothing, and the page says so
+
+sell 0.02 PAAPLX back from its sale page, reached through the row's Sell back
+  before: You hold 0.05 shares, you may still buy 1.04 shares under the cap. You have $1,713 to spend.
+  landed: The sell landed on devnet. open the transaction
+  signature 5e8vtvhzqtx5Voh1yDqrerkZt9RT8ohopjeJDZsip6ZKnis1zMwQng62J953mnbXvG3AiUrodZYj6BKgviF9zA4u
+ok    the sell landed
+ok    after the sell, /portfolio's PAAPLX row equals the chain: page 30000001 raw held, 30000001 raw net; chain 30000001, 30000001; 19 s after opening the page
+  row: 02 Pangu Priced Share, round the clock PAAPLX YOU HOLD 0.03shares $10.40 at the curve's price now ROOM UNDER YOUR CAP 1.06 left of 1.09 MAY YOU BUY Open to anyone STATE Running offering ends 7 Oct 2026 what you can do Buy more → Sell back →
+ok    no uncaught errors on the throwaway's pages: 
+
+/portfolio as the demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW, read only: the wallet holds no key and refuses to sign
+  issued: 01 Pangu Priced Share, second offering PBAND2 STATE Running offering ends 7 Oct 2026 WHO MAY BUY Anyone BUYERS 13 RAISED OF THE TARGET $2,011.37 of $3,710.00 issuer controls Issuer controls →
+  issued: 02 Pangu Priced Share, round the clock PAAPLX STATE Running offering ends 7 Oct 2026 WHO MAY BUY Anyone BUYERS 17 RAISED OF THE TARGET $2,019.44 of $3,710.00 issuer controls Issuer controls →
+  issued: 03 Pangu Verified Share PVRFD STATE Running no end date WHO MAY BUY Verified wallets BUYERS 3 RAISED OF THE TARGET 0.0062 SOL of 0.1 SOL issuer controls Issuer controls →
+  issued: 04 Pangu Priced Share PBAND STATE Running no end date WHO MAY BUY Anyone BUYERS 16 RAISED OF THE TARGET $2,283.39 of $3,700.00 issuer controls Issuer controls →
+  issued: 05 Pangu Listed Share PLIST STATE Graduated trades on DAMM v2 WHO MAY BUY Issuer's list BUYERS 15 RAISED OF THE TARGET 0.1 SOL of 0.1 SOL issuer controls Issuer controls →
+  issued: 06 Pangu Listed Share PLISTRETIRED STATE Running no end date WHO MAY BUY Issuer's list BUYERS 4 RAISED OF THE TARGET 0.0057 SOL of 0.1 SOL issuer controls Issuer controls →
+  issued: 07 Pangu Open Share POPENRETIRED STATE Running no end date WHO MAY BUY Anyone BUYERS 0 RAISED OF THE TARGET $0.00 of $360B issuer controls Issuer controls →
+ok    the issued ledger lists exactly the sales the directory names the demo wallet issuer of: 7 rows, 7 in the directory
+ok    the demo wallet was never asked to sign: 0
+
+returned 0.044768 SOL to the demo wallet: 4nRhEd1EsKZcnY8Rpri7uKUdCWzoBLZU7gE1Dsd5VbDD5GU2zMqFsyayeGuvp6isxyNPUqdpX3tSJTq7RfkEB5fY
+the throwaway's key file is deleted
+
+every check passed
