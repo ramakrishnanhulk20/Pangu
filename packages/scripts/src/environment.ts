@@ -43,6 +43,15 @@ export function rpcUrl(): string {
 }
 
 /**
+ * The node's name as it may be printed. A keyed URL carries its API key in the
+ * address itself, so the scripts name it instead of showing it.
+ */
+export function shownRpc(): string {
+  const url = rpcUrl();
+  return url === DEFAULT_RPC ? url : "the keyed devnet node from .env";
+}
+
+/**
  * The gap between two requests to the node, in milliseconds.
  *
  * The public devnet endpoint allows roughly ten calls a second per address and
@@ -87,7 +96,7 @@ export async function requireDevnet(connection: Connection): Promise<void> {
   const genesis = await connection.getGenesisHash();
   if (genesis !== DEVNET_GENESIS) {
     throw new Error(
-      `${connection.rpcEndpoint} is not devnet: its genesis hash is ${genesis}. These scripts only run on devnet.`
+      `${connection.rpcEndpoint === DEFAULT_RPC ? DEFAULT_RPC : "The devnet node named in .env"} is not devnet: its genesis hash is ${genesis}. These scripts only run on devnet.`
     );
   }
 }

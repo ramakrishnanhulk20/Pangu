@@ -11,7 +11,7 @@
  */
 
 import { readFlags, text } from "./arguments.js";
-import { devnet, payerKeypair, requireDevnet, rpcUrl, sol } from "./environment.js";
+import { devnet, payerKeypair, requireDevnet, shownRpc, sol } from "./environment.js";
 import { DEFAULT_FEED, MAX_PRICE_AGE_SECS } from "./feeds.js";
 import { refreshFeedPrice } from "./price-refresh.js";
 
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   await requireDevnet(connection);
   const payer = payerKeypair();
 
-  console.log(`network   : devnet, ${rpcUrl()}`);
+  console.log(`network   : devnet, ${shownRpc()}`);
   console.log(`payer     : ${payer.publicKey.toBase58()}`);
 
   const refresh = await refreshFeedPrice(connection, payer, symbol);

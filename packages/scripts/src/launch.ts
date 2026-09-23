@@ -56,7 +56,7 @@ import {
   devnet,
   payerKeypair,
   requireDevnet,
-  rpcUrl,
+  shownRpc,
   sol,
   transactionLink,
 } from "./environment.js";
@@ -234,7 +234,7 @@ async function main(): Promise<void> {
 
   const endsAt = endsAtFrom(offering, await chainTime(connection));
   const started = await connection.getBalance(issuer.publicKey, "confirmed");
-  console.log(`network  : devnet, ${rpcUrl()}`);
+  console.log(`network  : devnet, ${shownRpc()}`);
   console.log(`program  : ${PANGU_PROGRAM_ID.toBase58()}`);
   console.log(`issuer   : ${issuer.publicKey.toBase58()}, ${sol(started)} SOL`);
   console.log(

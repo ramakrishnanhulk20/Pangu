@@ -38,7 +38,7 @@ import {
   payerKeypair,
   repositoryRoot,
   requireDevnet,
-  rpcUrl,
+  shownRpc,
 } from "./environment.js";
 import { DEFAULT_FEED, FEEDS, MAX_PRICE_AGE_SECS } from "./feeds.js";
 import { liveSales, readSales, type SaleRecord } from "./sales.js";
@@ -742,7 +742,7 @@ async function main(): Promise<void> {
 
   // Asking for the RPC url is also what loads .env, which is where the Pyth key
   // and APP_URL are read from further down.
-  const endpoint = rpcUrl();
+  const endpoint = shownRpc();
   const connection = devnet();
   await requireDevnet(connection);
   const at = new Date();
