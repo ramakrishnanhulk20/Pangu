@@ -46,7 +46,15 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     const instance = new Lenis({ autoRaf: true });
     publish(instance);
 
+    // Pages that read the chain grow after their first paint: ledgers, holder
+    // lists, the directory. Lenis measured the shorter page, so the wheel
+    // stopped short of the rows that arrived later. Any change in the page's
+    // height makes it measure again.
+    const observer = new ResizeObserver(() => instance.resize());
+    observer.observe(document.body);
+
     return () => {
+      observer.disconnect();
       instance.destroy();
       publish(null);
     };

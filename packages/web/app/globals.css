@@ -144,6 +144,18 @@ body {
   border-color: var(--ink) !important;
 }
 
+/* On a phone a connected wallet shows its icon and address, which with the
+   theme switch and the menu pushed the bar a few pixels past the screen. The
+   address alone says whose wallet it is. */
+@media (max-width: 479px) {
+  header .wallet-adapter-button-trigger {
+    padding: 0 10px !important;
+  }
+  header .wallet-adapter-button-start-icon {
+    display: none !important;
+  }
+}
+
 .wallet-adapter-modal-wrapper {
   background: var(--raised) !important;
   color: var(--ink) !important;
