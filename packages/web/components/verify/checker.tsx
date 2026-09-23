@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useRef, useState } from "react";
 import type { CredentialStanding } from "pangu-sdk";
 
+import { CHAIN } from "@/lib/network";
 import { checkWallet, parseWallets, shortKey, type SaleVerifier, type VerifierPair } from "@/lib/verify";
 
 import { FIELD_CLASS, Failure, Label, PRIMARY_BUTTON, Seal } from "./bits";
@@ -33,7 +34,7 @@ const VERDICT: Record<CredentialStanding, { word: string; line: string }> = {
 };
 
 /**
- * Anyone can use this: paste a wallet, pick a verifier, and read off devnet
+ * Anyone can use this: paste a wallet, pick a verifier, and read off the chain
  * whether a sale checking that verifier would let the wallet buy.
  */
 export function Checker({
@@ -102,7 +103,7 @@ export function Checker({
       }
     } catch {
       if (latestTurn.current === turn) {
-        setTrouble("Devnet did not answer. Check the connection and press again.");
+        setTrouble(`${CHAIN.atStart} did not answer. Check the connection and press again.`);
       }
     } finally {
       if (latestTurn.current === turn) {
@@ -121,7 +122,7 @@ export function Checker({
         Check a wallet
       </h2>
       <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-muted">
-        Paste a wallet and see whether it holds a valid credential from a verifier, read straight off devnet.
+        Paste a wallet and see whether it holds a valid credential from a verifier, read straight off {CHAIN.inSentence}.
       </p>
 
       <form
@@ -205,7 +206,7 @@ export function Checker({
             className="mt-8 border-t border-line pt-6"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-pending">
-              checking devnet
+              {`checking ${CHAIN.inSentence}`}
             </p>
           </motion.div>
         )}

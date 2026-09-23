@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 
 import { LaunchPage } from "@/components/launch/launch-page";
 import type { FeedChoice } from "@/lib/launch";
+import { CHAIN } from "@/lib/network";
 import { openedSales } from "@/lib/sales";
 
 export const metadata: Metadata = {
   title: "Launch a sale | Pangu",
-  description: "Open a Pangu sale on devnet from the browser: the curve, the cap, who may buy and the price ceiling.",
+  description: `Open a Pangu sale on ${CHAIN.label} from the browser: the curve, the cap, who may buy and the price ceiling.`,
 };
 
 /** The Pyth feed each choice on the form follows, as the scripts record it in sales.json. */

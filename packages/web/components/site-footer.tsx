@@ -5,11 +5,12 @@ import Link from "next/link";
 import { PANGU_PROGRAM_ID } from "pangu-sdk";
 
 import { shortAddress } from "@/lib/format";
+import { CHAIN, explorerAddress } from "@/lib/network";
 
 import { CurveMark } from "./hero/curve-mark";
 
 const programId = PANGU_PROGRAM_ID.toBase58();
-const explorer = `https://explorer.solana.com/address/${programId}?cluster=devnet`;
+const explorer = explorerAddress(programId);
 
 /**
  * The last band of every page. Not mounted here: the root layout owns where it
@@ -62,7 +63,7 @@ export function SiteFooter() {
             title={programId}
             className="font-mono text-xs text-muted underline decoration-transparent underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
           >
-            devnet {shortAddress(programId)}
+            {CHAIN.short} {shortAddress(programId)}
           </a>
         </nav>
       </div>

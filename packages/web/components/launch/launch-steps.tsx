@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { Spinner } from "@/components/break/strike";
 import { STEPS, explorerTx, type StepId, type StepState, type StepStatus } from "@/lib/launch";
+import { CHAIN } from "@/lib/network";
 
 import { Tag } from "./fields";
 
@@ -16,9 +17,9 @@ const WORDS: Record<StepStatus, string> = {
   "uploading-logo": "your wallet signs the logo, then it uploads",
   "uploading-json": "your wallet signs the description, then it uploads",
   building: "putting it together",
-  simulating: "asking devnet what would happen",
+  simulating: `asking ${CHAIN.inSentence} what would happen`,
   signing: "waiting for your wallet",
-  sending: "sent, waiting for devnet to confirm",
+  sending: `sent, waiting for ${CHAIN.inSentence} to confirm`,
   done: "on chain",
   reused: "already on chain from your last try, reused",
   failed: "stopped",

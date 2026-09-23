@@ -16,8 +16,9 @@ import {
 import { loadPool, saleProgress, type PoolView } from "pangu-sdk/dbc";
 
 import { feedWords, type FeedWords } from "./feeds";
+import { CHAIN, NETWORK, payingUnit, type Money } from "./network";
 import { openedSales, type OpenedSale } from "./sales";
-import { devnetConnection } from "./solana";
+import { chainConnection } from "./solana";
 
 /** One point of the real price path: how many shares are gone, and the price there. */
 export interface CurvePoint {
@@ -39,17 +40,17 @@ export interface HolderRow {
 export interface SaleChoice {
   mint: string;
   name: string;
-  /** Null when devnet did not say. A sale nobody could read is never called finished. */
+  /** Null when the chain did not say. A sale nobody could read is never called finished. */
   running: boolean | null;
 }
 
-/** Everything the readout paints, all of it read off devnet. */
+/** Everything the readout paints, all of it read off the chain. */
 export interface SaleReadout {
   mint: string;
   pool: string;
   name: string;
   /** The token buyers pay in, in the word a person uses for it. */
-  money: "dollars" | "SOL";
+  money: Money;
   running: boolean;
   graduated: boolean;
   /** Where the liquidity went, once somebody has sent the migration. */
@@ -100,23 +101,22 @@ export interface SaleReadout {
   /** Unix milliseconds this reading was taken. */
   readAt: number;
   /**
-   * True when devnet did not answer the latest read and this is the last
+   * True when the chain did not answer the latest read and this is the last
    * reading that did answer, handed back as it was, never adjusted.
    */
   stale: boolean;
-  /** Unix milliseconds of the read devnet did not answer, when stale. */
+  /** Unix milliseconds of the read the chain did not answer, when stale. */
   missedAt: number | null;
   /** Set when this sale would not read. Nothing is invented in its place. */
   failure: string | null;
   /**
-   * True when that failure is devnet not answering, which the next read may
+   * True when that failure is the chain not answering, which the next read may
    * fix, rather than a sale this app can never read. The picker keeps the sale
    * on screen when a switch lands on one of these.
    */
   unanswered: boolean;
 }
 
-const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 const CURVE_SAMPLES = 72;
 const Q128 = 1n << 128n;
 
@@ -219,7 +219,7 @@ async function quoteDecimalsOf(view: PoolView): Promise<number> {
   if (view.sale.quoteDecimals > 0) {
     return view.sale.quoteDecimals;
   }
-  const info = await devnetConnection().getAccountInfo(view.quoteMint);
+  const info = await chainConnection().getAccountInfo(view.quoteMint);
   if (info === null) {
     return 0;
   }
@@ -297,7 +297,7 @@ function bindingRule(
 }
 
 function refused(
-  about: { mint: string; pool: string; name: string; money: "dollars" | "SOL" },
+  about: { mint: string; pool: string; name: string; money: Money },
   reason: string,
   unanswered = false
 ): SaleReadout {
@@ -352,19 +352,19 @@ export function oldestFirst(sales: OpenedSale[]): OpenedSale[] {
   return [...sales].sort((left, right) => time(left) - time(right));
 }
 
-function moneyOf(opened: OpenedSale): "dollars" | "SOL" {
-  return opened.quoteMint === WRAPPED_SOL ? "SOL" : "dollars";
+function moneyOf(opened: OpenedSale): Money {
+  return payingUnit(opened.quoteMint);
 }
 
 /**
- * Reads one sale off devnet: the pool, its launch template, its buyer records
+ * Reads one sale off the chain: the pool, its launch template, its buyer records
  * and, on a banded sale, the published stock price.
  *
  * Every number handed back is measured here. The curve points are the launch
  * template's own, so the path the page draws is the path the program prices on.
  */
 async function readSale(opened: OpenedSale): Promise<SaleReadout> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const mint = new PublicKey(opened.mint);
   const view = await loadPool(connection, mint);
   const sale = view.sale;
@@ -498,7 +498,7 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
 // the hero and the readout must not show two different readings of one second.
 const FRESH_MS = 10_000;
 
-// The last reading devnet answered, per sale, kept for as long as this server
+// The last reading the chain answered, per sale, kept for as long as this server
 // runs. When a read fails it goes back marked stale instead of a blank page,
 // and a miss is remembered for the same ten seconds so an outage does not turn
 // every visit into another read of a node that is not answering.
@@ -512,7 +512,7 @@ const reading = new Map<string, Promise<SaleReadout>>();
  * lib/directory reaches lib/live-sale, which reads this file.
  *
  * Only a mint the directory knows is ever read, so a stranger naming made-up
- * mints costs devnet the directory's own shared read and nothing per mint (C17).
+ * mints costs the chain the directory's own shared read and nothing per mint (C17).
  */
 async function fromDirectory(mint: string): Promise<OpenedSale | "unanswered" | undefined> {
   const { findSale } = await import("./directory");
@@ -522,7 +522,7 @@ async function fromDirectory(mint: string): Promise<OpenedSale | "unanswered" | 
   }
   const { sale } = found;
   return {
-    network: "devnet",
+    network: NETWORK,
     name: sale.name,
     symbol: sale.symbol,
     mode: String(sale.accessMode),
@@ -536,20 +536,20 @@ async function fromDirectory(mint: string): Promise<OpenedSale | "unanswered" | 
   };
 }
 
-/** One sale's numbers, live off devnet, shared between the loads that land together. */
+/** One sale's numbers, live off the chain, shared between the loads that land together. */
 export async function readReadout(mint: string): Promise<SaleReadout> {
   const opened = openedSales().find((sale) => sale.mint === mint) ?? (await fromDirectory(mint));
   if (opened === "unanswered") {
     return refused(
       { mint, pool: "", name: "This sale", money: "dollars" },
-      "Devnet did not answer, so there is nothing true to show yet.",
+      `${CHAIN.atStart} did not answer, so there is nothing true to show yet.`,
       true
     );
   }
   if (opened === undefined) {
     return refused(
       { mint, pool: "", name: "This sale", money: "dollars" },
-      "No sale with this mint was opened on Solana devnet."
+      `No sale with this mint was opened on ${CHAIN.label}.`
     );
   }
 
@@ -578,7 +578,7 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
   const started = readSale(opened)
     .catch((error: unknown) => {
       // A sale written by an earlier build decodes at the wrong offsets, which
-      // is a different thing from devnet being slow, and the page says so.
+      // is a different thing from the chain being slow, and the page says so.
       if (error instanceof PanguLayoutError) {
         return refused(
           about,
@@ -591,7 +591,7 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
       }
       return refused(
         about,
-        "Devnet did not answer, so there is nothing true to show yet.",
+        `${CHAIN.atStart} did not answer, so there is nothing true to show yet.`,
         true
       );
     })
@@ -611,7 +611,7 @@ export async function readReadout(mint: string): Promise<SaleReadout> {
 }
 
 /**
- * Every devnet sale, newest first, with whether it still takes buys.
+ * Every sale on this network, newest first, with whether it still takes buys.
  *
  * Running is read off the tokens themselves in one call: a mint names Pangu as
  * its transfer hook for exactly as long as the sale is open.
@@ -622,7 +622,7 @@ export async function readSaleChoices(): Promise<SaleChoice[]> {
 
   let accounts;
   try {
-    accounts = await devnetConnection().getMultipleAccountsInfo(mints);
+    accounts = await chainConnection().getMultipleAccountsInfo(mints);
   } catch {
     return opened.map((sale) => ({ mint: sale.mint, name: sale.name, running: null }));
   }

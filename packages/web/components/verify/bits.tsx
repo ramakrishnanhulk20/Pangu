@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Spinner } from "@/components/break/strike";
 import { explorerTx, type Phase } from "@/lib/verify";
+import { CHAIN } from "@/lib/network";
 
 // The wallet button reads the browser's injected wallets, so rendering it on
 // the server would only produce markup the client replaces at once.
@@ -42,11 +43,11 @@ export function StepHead({
 }
 
 const PHASE_WORDS: Record<Phase, string> = {
-  reading: "reading devnet",
+  reading: `reading ${CHAIN.inSentence}`,
   simulating: "asking the chain first, nothing signed yet",
   signing: "waiting for your wallet to sign",
-  sending: "sending to devnet",
-  confirming: "waiting for devnet to confirm, usually a few seconds",
+  sending: `sending to ${CHAIN.inSentence}`,
+  confirming: `waiting for ${CHAIN.inSentence} to confirm, usually a few seconds`,
 };
 
 /** The one line that says what a button press is doing right now. */

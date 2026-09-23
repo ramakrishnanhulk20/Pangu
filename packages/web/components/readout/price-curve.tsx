@@ -384,7 +384,7 @@ function Drawing({
  * graduation, shaded as far as buyers have taken it, with the cap on one
  * wallet lying underneath at its true width.
  *
- * The points come from the launch template on devnet, the same numbers the
+ * The points come from the sale's launch template on chain, the same numbers the
  * program prices a swap with. Nothing here is drawn to look like a curve.
  */
 export function PriceCurve({

@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { dollars, getSale, priceCeiling, readPrice } from "pangu-sdk";
 
 import { openedSales } from "@/lib/sales";
-import { devnetConnection } from "@/lib/solana";
+import { CHAIN } from "@/lib/network";
+import { chainConnection } from "@/lib/solana";
 
 // Reading the price needs no key: readPrice decodes the account the Pyth
 // receiver already owns on chain. Writing a fresh price is a different job,
@@ -46,7 +47,7 @@ export async function GET(
   const known = key.toBase58();
   if (!openedSales().some((sale) => sale.mint === known)) {
     return NextResponse.json(
-      { error: "no Pangu sale at this mint on devnet" },
+      { error: `no Pangu sale at this mint on ${CHAIN.inSentence}` },
       { status: 404 }
     );
   }
@@ -69,7 +70,7 @@ export async function GET(
   return NextResponse.json(body, { status });
 }
 
-/** Every way devnet can fail this read ends as JSON a caller can act on, never a bare 500. */
+/** Every way the chain can fail this read ends as JSON a caller can act on, never a bare 500. */
 async function readAnswer(key: PublicKey): Promise<Answer> {
   try {
     return await readFromChain(key);
@@ -78,17 +79,17 @@ async function readAnswer(key: PublicKey): Promise<Answer> {
     // RPC address in its message, and a keyed address must never leave here.
     return {
       status: 502,
-      body: { error: "devnet did not answer the price read, try again in a few seconds" },
+      body: { error: `${CHAIN.inSentence} did not answer the price read, try again in a few seconds` },
     };
   }
 }
 
 async function readFromChain(key: PublicKey): Promise<Answer> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const sale = await getSale(connection, key);
 
   if (sale === null) {
-    return { body: { error: "no Pangu sale at this mint on devnet" }, status: 404 };
+    return { body: { error: `no Pangu sale at this mint on ${CHAIN.inSentence}` }, status: 404 };
   }
 
   if (!sale.hasBand) {

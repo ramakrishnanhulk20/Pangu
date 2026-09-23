@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { readDirectory } from "@/lib/directory";
 
-// Every Pangu sale on devnet, read off the chain and shared for thirty seconds.
+// Every Pangu sale on this network, read off the chain and shared for thirty seconds.
 // Server only: the read goes through the server's own endpoint, which may carry
 // a key. ?all=1 adds the demo sales sales.json marks as retired.
 export const dynamic = "force-dynamic";

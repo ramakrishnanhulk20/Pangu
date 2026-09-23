@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { CHAIN } from "@/lib/network";
 import { heroSaleName } from "@/lib/pulse";
 
 import { HeroMotif } from "./hero-motif";
@@ -10,13 +11,13 @@ import { WatchSaleButton } from "./watch-sale-button";
 
 const FACTS = [
   "Built on Meteora's Dynamic Bonding Curve",
-  "Live on Solana devnet",
+  `Live on ${CHAIN.label}`,
   "Price by Pyth",
 ];
 
 /**
  * The poster. The title, the sentence and the action are in the first HTML the
- * browser gets; only the live numbers wait on devnet, inside their own
+ * browser gets; only the live numbers wait on the chain, inside their own
  * boundary, so nothing about the message is held up by a chain read.
  */
 export function Hero({ readoutId }: { readoutId: string }) {

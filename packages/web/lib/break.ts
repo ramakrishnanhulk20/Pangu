@@ -55,21 +55,6 @@ import {
 } from "pangu-sdk/dbc";
 
 /**
- * The endpoint every read and every attack goes through. Nothing here ever
- * talks to mainnet: the program is only deployed on devnet.
- *
- * Spelled out rather than imported from lib/solana so this file stands alone
- * and lab-evidence/break-simulations.mjs can run the very same builders under
- * plain Node, with no bundler and no path aliases.
- */
-function devnetRpcUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_DEVNET_RPC_URL;
-  return configured !== undefined && configured !== ""
-    ? configured
-    : "https://api.devnet.solana.com";
-}
-
-/**
  * The gap between two calls to the node, in milliseconds.
  *
  * Building one attack reads a dozen accounts, and the public devnet endpoint
@@ -109,12 +94,15 @@ async function pacedFetch(input: RequestInfo | URL, init?: RequestInit): Promise
 }
 
 /**
- * A devnet connection that paces itself, for the attack ledger and its proof.
+ * A connection that paces itself, for the attack ledger and its proof.
  *
- * The browser's copy talks to the public endpoint. The server's reading of the
- * sale passes its own keyed endpoint instead, which never reaches a browser.
+ * The endpoint is always handed in, never looked up here: this file stands
+ * alone so lab-evidence scripts can run the very same builders under plain
+ * Node, with no bundler and no path aliases. The browser passes its own
+ * endpoint from lib/network; the server passes its keyed one, which never
+ * reaches a browser.
  */
-export function breakConnection(endpoint: string = devnetRpcUrl()): Connection {
+export function breakConnection(endpoint: string): Connection {
   // web3.js types its fetch option against its own bundled fetch declaration,
   // which the platform's own fetch does not line up with by name. The call
   // shape is the same one, so it is handed over as the config wants it.
@@ -371,16 +359,6 @@ export interface Target {
   offeringOver: boolean;
 }
 
-/** Every attack lands on devnet, so every link goes to devnet's explorer. */
-export function explorerTx(signature: string): string {
-  return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-}
-
-export function explorerAddress(address: PublicKey | string): string {
-  const text = typeof address === "string" ? address : address.toBase58();
-  return `https://explorer.solana.com/address/${text}?cluster=devnet`;
-}
-
 /**
  * Picks the sale a visitor can attack, and reads its live state.
  *
@@ -615,11 +593,11 @@ export interface TargetReading {
   target: TargetWire | null;
   /** A sentence for the visitor when there is no target, naming what to do next. */
   failure: string | null;
-  /** True when devnet did not answer, which trying again may fix. */
+  /** True when the chain did not answer, which trying again may fix. */
   unanswered: boolean;
   /** Unix milliseconds this reading was taken. */
   readAt: number;
-  /** True when devnet missed the latest read and this is the last one it answered. */
+  /** True when the chain missed the latest read and this is the last one it answered. */
   stale: boolean;
   /**
    * True when this is the round-the-clock sale because Apple's exchange price
@@ -1577,7 +1555,6 @@ export interface AttackResult {
   /** Every log line the node returned, kept so a failure can be named for what it is. */
   logs: string[];
   signature: string | null;
-  link: string | null;
 }
 
 const UNSEEN =
@@ -1592,7 +1569,6 @@ function unseen(signature: string | null): AttackResult {
     rpcError: null,
     logs: [],
     signature,
-    link: null,
   };
 }
 
@@ -1621,7 +1597,6 @@ function readLogs(logs: string[] | null, error: unknown): AttackResult {
       rpcError: null,
       logs: logs ?? [],
       signature: null,
-      link: null,
     };
   }
   const lines = logs ?? [];
@@ -1634,7 +1609,6 @@ function readLogs(logs: string[] | null, error: unknown): AttackResult {
     rpcError,
     logs: lines,
     signature: null,
-    link: null,
   };
 }
 
@@ -1673,7 +1647,14 @@ const NO_SOL_LOGS = /insufficient lamports/i;
 /** The token program's words for an account short of the token, or not opened at all. */
 const SHORT_TOKEN_LOGS = /insufficient funds|AccountNotInitialized|account not initialized/i;
 
-const NO_SOL = "This wallet has no devnet SOL: use the faucet link above.";
+/**
+ * What the ledger tells a wallet short of SOL or of the paying token. Handed in
+ * by the page, because what fixes each one depends on the network.
+ */
+export interface FundingWords {
+  noSol: string;
+  shortToken: string;
+}
 
 /**
  * Names a failure the sale's rules did not cause.
@@ -1681,23 +1662,21 @@ const NO_SOL = "This wallet has no devnet SOL: use the faucet link above.";
  * The ones a visitor meets most are an empty wallet, which the runtime reports
  * before any program runs, and a wallet short of the token the sale is priced
  * in, which the token program reports from inside Meteora's swap. Both point at
- * the button that fixes them. Anything else is shown in the node's own words.
+ * what fixes them. Anything else is shown in the node's own words.
  */
 export function plainFailure(
   result: AttackResult,
   target: Target | null,
-  attack: Attack
+  attack: Attack,
+  words: FundingWords
 ): PlainFailure {
   const logs = result.logs.join("\n");
   if (NO_SOL_ERRORS.test(result.rpcError ?? "") || NO_SOL_LOGS.test(logs)) {
-    return { sentence: NO_SOL, raw: null };
+    return { sentence: words.noSol, raw: null };
   }
   if (attack.needsPayingToken && SHORT_TOKEN_LOGS.test(logs)) {
     return {
-      sentence:
-        target !== null && target.payingInSol
-          ? NO_SOL
-          : "Get demo dollars above first. This wallet does not hold enough of the token this sale is priced in, so the token program stopped the buy before the sale's rules were reached.",
+      sentence: target !== null && target.payingInSol ? words.noSol : words.shortToken,
       raw: null,
     };
   }
@@ -1764,7 +1743,7 @@ export async function readLanded(
   const result = readLogs(detail.meta?.logMessages ?? null, detail.meta?.err ?? null);
   return result.outcome === "unseen"
     ? unseen(signature)
-    : { ...result, signature, link: explorerTx(signature) };
+    : { ...result, signature };
 }
 
 /** The tally at the foot of the ledger, in the prove command's own shape. */

@@ -1,25 +1,28 @@
 /** The words the readout puts numbers in. Nothing here decides a number, only how it reads. */
 
-export type Money = "dollars" | "SOL";
+import type { Money } from "@/lib/network";
+
+export type { Money };
+export { explorerAddress } from "@/lib/network";
 
 /**
  * An amount of the token buyers pay in.
  *
- * A dollar sale is quoted the way a price is quoted. The demo's other sale is
- * paid for in SOL, where a share costs a tiny fraction of one, so that side
- * keeps significant digits instead of two decimal places and never rounds a
- * real price down to zero.
+ * A dollar sale is quoted the way a price is quoted. A sale paid in SOL or in a
+ * stock token, where a share can cost a tiny fraction of one, keeps significant
+ * digits instead of two decimal places and never rounds a real price down to
+ * zero, and names the token after the number.
  */
 export function money(value: number, unit: Money): string {
-  if (unit === "SOL") {
+  if (unit !== "dollars") {
     if (value === 0) {
-      return "0 SOL";
+      return `0 ${unit}`;
     }
     const digits =
       value >= 0.0001
         ? { maximumFractionDigits: 4 }
         : { maximumSignificantDigits: 2, maximumFractionDigits: 20 };
-    return `${value.toLocaleString("en-US", digits)} SOL`;
+    return `${value.toLocaleString("en-US", digits)} ${unit}`;
   }
 
   if (value >= 1_000_000) {
@@ -113,10 +116,6 @@ export function clock(at: number, against: number = at): string {
 
 export function shortAddress(address: string): string {
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
-}
-
-export function explorerAddress(address: string): string {
-  return `https://explorer.solana.com/address/${address}?cluster=devnet`;
 }
 
 /**

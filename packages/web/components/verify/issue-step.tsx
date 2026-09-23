@@ -4,6 +4,7 @@ import type { Connection, PublicKey } from "@solana/web3.js";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMemo, useState } from "react";
 
+import { CHAIN } from "@/lib/network";
 import {
   VerifyError,
   defaultExpiryDay,
@@ -105,7 +106,7 @@ export function IssueStep({
         error instanceof VerifyError
           ? { message: error.message, detail: error.detail }
           : {
-              message: "Devnet did not answer. Check the connection and press again.",
+              message: `${CHAIN.atStart} did not answer. Check the connection and press again.`,
               detail: error instanceof Error ? error.message : String(error),
             }
       );
@@ -252,7 +253,7 @@ export function IssueStep({
           <p className="text-[15px]">
             {outcome.issued === 0
               ? "Nothing new to issue."
-              : `${outcome.issued} ${outcome.issued === 1 ? "credential" : "credentials"} issued on devnet.`}
+              : `${outcome.issued} ${outcome.issued === 1 ? "credential" : "credentials"} issued on ${CHAIN.inSentence}.`}
           </p>
           {outcome.alreadyHeld.length > 0 && (
             <p className="max-w-[56ch] text-[13px] text-muted">

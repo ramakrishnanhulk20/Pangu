@@ -25,7 +25,7 @@ export interface Signable {
   signers: Keypair[];
 }
 
-/** What the issuer panel shows, read off devnet. */
+/** What the issuer panel shows, read off the chain. */
 export interface IssuerView {
   /** Wallets whose buyer record says approved, oldest record first as the node lists them. */
   approved: string[];

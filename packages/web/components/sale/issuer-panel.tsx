@@ -10,6 +10,7 @@ import { explorerAddress, shortAddress, utcMoment } from "@/components/readout/f
 import { ceilingWords, whoMayBuy } from "@/components/sales/words";
 import type { DirectorySale, SaleTermsWire } from "@/lib/directory";
 import { tokenAmount } from "@/lib/format";
+import { CHAIN } from "@/lib/network";
 import {
   approveTransactions,
   claimTransaction,
@@ -32,7 +33,7 @@ const BUTTON =
 /**
  * The issuer's controls, shown only to the wallet the rules name as issuer: who
  * may buy, the trading fees, the move to DAMM v2, and the terms read back.
- * Every action is simulated on devnet first, then signed by that wallet.
+ * Every action is simulated on the chain first, then signed by that wallet.
  */
 export function IssuerPanel({
   sale,
@@ -75,7 +76,7 @@ export function IssuerPanel({
 
   const quoteDecimals = sale.quoteDecimals ?? 0;
   const paying = (raw: bigint) =>
-    sale.money === "SOL" ? `${tokenAmount(raw, quoteDecimals)} SOL` : `$${tokenAmount(raw, quoteDecimals)}`;
+    sale.money === "dollars" ? `$${tokenAmount(raw, quoteDecimals)}` : `${tokenAmount(raw, quoteDecimals)} ${sale.money}`;
 
   return (
     <div data-testid="issuer-panel" className="border-t border-accent pt-8">
@@ -222,7 +223,7 @@ function ApprovedList({
           ? "Approve"
           : `Approve ${parsed.wallets.length} ${parsed.wallets.length === 1 ? "wallet" : "wallets"}`}
       </button>
-      <ActionStatus step={approve.step} testId="issuer-approve-status" landedLine="Approved on devnet." />
+      <ActionStatus step={approve.step} testId="issuer-approve-status" landedLine={`Approved on ${CHAIN.inSentence}.`} />
 
       <p className={`${LABEL} mt-8`}>
         {approved === null ? "reading the list" : `on the list now, ${approved.length}`}
@@ -325,7 +326,7 @@ function Fees({
         share until you claim it, and it can only go to the wallet the pool names.
       </p>
       {view === null ? (
-        <p className="mt-4 text-[14px] text-muted">Reading the pool on devnet.</p>
+        <p className="mt-4 text-[14px] text-muted">Reading the pool on {CHAIN.inSentence}.</p>
       ) : (
         <div className="mt-4 border-t border-line">
           {isCreator && row("creator", view.creatorFees, creator, "yours as the pool's creator")}
@@ -405,7 +406,7 @@ function Terms({ sale, terms }: { sale: DirectorySale; terms: SaleTermsWire }) {
     "offering ends",
     sale.endsAt === null ? "no end date: the rules hold until graduation" : utcMoment(sale.endsAt * 1000),
   ]);
-  rows.push(["paid in", sale.quoteMint === null ? "unknown" : `${sale.money === "SOL" ? "SOL" : "dollars"}, ${shortAddress(sale.quoteMint)}`]);
+  rows.push(["paid in", sale.quoteMint === null ? "unknown" : `${sale.money}, ${shortAddress(sale.quoteMint)}`]);
 
   return (
     <div data-testid="issuer-terms">

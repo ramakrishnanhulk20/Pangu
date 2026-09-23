@@ -4,13 +4,14 @@ import { DirectoryMotif } from "@/components/sales/directory-motif";
 import { SalesLedger } from "@/components/sales/sales-ledger";
 import { SalesTitle } from "@/components/sales/sales-title";
 import { readDirectory } from "@/lib/directory";
+import { CHAIN } from "@/lib/network";
 
 // Every load reads the chain's list of sales rather than a snapshot from build time.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Every sale on the chain | Pangu",
-  description: "Every Pangu sale on Solana devnet, read off the program itself.",
+  description: `Every Pangu sale on ${CHAIN.label}, read off the program itself.`,
 };
 
 export default async function SalesPage({

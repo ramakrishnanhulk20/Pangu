@@ -31,16 +31,17 @@ import {
 } from "pangu-sdk/dbc";
 
 import { breakConnection, heldIn, tokensHeld } from "./break";
+import { CHAIN, FAUCET_ON, browserRpcUrl } from "./network";
 
 /*
  * Buying and selling on one sale's page. Browser-safe: no key, no server-only
  * import. Everything a wallet signs is built by pangu-sdk, simulated against
- * devnet first, and only then handed to the wallet.
+ * the chain first, and only then handed to the wallet.
  */
 
-/** The paced devnet connection the sale page reads through, the ledger's own. */
+/** The paced connection the sale page reads through, the ledger's own. */
 export function tradeConnection(): Connection {
-  return breakConnection();
+  return breakConnection(browserRpcUrl());
 }
 
 /** Where the curve stands: the pool, its template and the sale's rules, read together. */
@@ -136,7 +137,7 @@ export function quoteSell(view: PoolView, shares: bigint): bigint {
   }
 }
 
-/** One wallet's standing in one sale, read off devnet. */
+/** One wallet's standing in one sale, read off the chain. */
 export interface WalletStanding {
   lamports: number;
   /** Raw units of the sale token in the wallet's ordinary account for it. */
@@ -281,7 +282,7 @@ export function buildSell(
   return sellTransaction({ connection, seller: wallet, mint, amountIn: shares });
 }
 
-/** What devnet says a transaction would do, before anybody signs it. */
+/** What the chain says a transaction would do, before anybody signs it. */
 export interface Verdict {
   ok: boolean;
   /** The program's own refusal, when the refusal was Pangu's. */
@@ -290,8 +291,9 @@ export interface Verdict {
   sentence: string | null;
 }
 
-const NO_SOL =
-  "This wallet does not have enough devnet SOL for the fees and the accounts this opens. Take some from the faucet, then try again.";
+const NO_SOL = FAUCET_ON
+  ? `This wallet does not have enough ${CHAIN.sol} for the fees and the accounts this opens. Take some from the faucet, then try again.`
+  : "This wallet does not have enough SOL for the fees and the accounts this opens. Add some SOL, then try again.";
 const SHORT_TOKEN =
   "This wallet does not hold enough of the token this sale is priced in. Get some first, then try again.";
 
@@ -311,11 +313,11 @@ function plainFailure(error: unknown, logs: readonly string[]): string {
   const said = logs
     .filter((line) => line.startsWith("Program log: ") && !line.startsWith("Program log: Instruction:"))
     .pop();
-  return `Devnet refused it: ${said === undefined ? text : said.slice("Program log: ".length)}`;
+  return `${CHAIN.atStart} refused it: ${said === undefined ? text : said.slice("Program log: ".length)}`;
 }
 
 /**
- * Runs a transaction against devnet without anybody signing it, so a wallet is
+ * Runs a transaction against the chain without anybody signing it, so a wallet is
  * never asked to sign something the chain would refuse.
  */
 export async function simulate(connection: Connection, transaction: Transaction): Promise<Verdict> {
@@ -400,10 +402,10 @@ export function messageOf(error: unknown): string {
     return "You turned this down in your wallet, so nothing was sent.";
   }
   if (/429|rate limit/i.test(text)) {
-    return "The public devnet node is rate limiting this browser. Wait a moment and try again.";
+    return `The public ${CHAIN.inSentence} node is rate limiting this browser. Wait a moment and try again.`;
   }
   if (/failed to fetch|fetch failed|network/i.test(text)) {
-    return "Devnet did not answer. Check the connection and try again.";
+    return `${CHAIN.atStart} did not answer. Check the connection and try again.`;
   }
   return text;
 }

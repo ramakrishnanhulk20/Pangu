@@ -7,7 +7,7 @@ import {
   type SendOptions,
   type Transaction,
 } from "@solana/web3.js";
-import { NATIVE_MINT, getMint } from "@solana/spl-token";
+import { getMint } from "@solana/spl-token";
 import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import {
   ACCESS_MODE,
@@ -23,6 +23,17 @@ import {
 import { capFromShare, launchTemplateTransaction, openSaleTransaction } from "pangu-sdk/dbc";
 
 import { AAPLX_FEED, APPLE_EXCHANGE_FEED, feedWords } from "./feeds";
+import {
+  CHAIN,
+  FAUCET_ON,
+  PAYING_TOKENS,
+  explorerAddress,
+  explorerTx,
+  isListedDollar,
+  payingToken,
+  type Money,
+  type PayingToken,
+} from "./network";
 import {
   LogoRefused,
   MAX_DESCRIPTION,
@@ -57,21 +68,7 @@ import {
  * transaction writes their address into the mint.
  */
 
-/**
- * The demo dollar, the one dollar paying token on devnet. Minted by
- * packages/scripts/src/mint-dollars.ts; every banded demo sale is paid in it.
- */
-export const DEMO_DOLLAR_MINT = "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5";
-
-/** Decimals of each paying token, checked against the mint on chain before anything is sent. */
-const QUOTE_DECIMALS = { sol: 9, dollar: 6 } as const;
-
-/**
- * The sale token's decimals. Nine on a dollar sale leaves Meteora's builder room
- * for a three figure share price, as every banded devnet sale was launched;
- * six is the terminal launch's own default and what its SOL sales used.
- */
-const BASE_DECIMALS = { sol: 6, dollar: 9 } as const;
+export { explorerAddress, explorerTx };
 
 /** The same limits packages/scripts/src/feeds.ts writes into every banded demo sale. */
 const MAX_PRICE_AGE_SECS = 3_600;
@@ -94,7 +91,6 @@ const MAX_BAND_PERCENT = 20;
 const MAX_DAYS = 60;
 const SECONDS_PER_DAY = 86_400;
 
-export type Paying = "sol" | "dollar";
 export type Access = "open" | "list" | "credential";
 export type FeedChoice = "apple" | "aaplx";
 
@@ -106,7 +102,8 @@ export interface LaunchForm {
   website: string;
   x: string;
   supply: string;
-  paying: Paying;
+  /** The id of one of this network's paying tokens, in lib/network. */
+  paying: string;
   raise: string;
   keptBack: string;
   capPercent: string;
@@ -127,7 +124,7 @@ export const DEFAULT_FORM: LaunchForm = {
   website: "",
   x: "",
   supply: "1000",
-  paying: "dollar",
+  paying: PAYING_TOKENS[0]?.id ?? "",
   raise: "200000",
   keptBack: "45",
   capPercent: "10",
@@ -154,6 +151,7 @@ export type FieldName =
   | "website"
   | "x"
   | "supply"
+  | "paying"
   | "raise"
   | "keptBack"
   | "capPercent"
@@ -183,7 +181,7 @@ export interface StockReading {
 
 export interface PlanContext {
   stock: StockReading | null;
-  /** The connected wallet's devnet balance, or null when no wallet is connected or it is still being read. */
+  /** The connected wallet's SOL balance, or null when no wallet is connected or it is still being read. */
   lamports: number | null;
   /** What Irys charges to store the logo and description, once it has been asked. Null when there is nothing to store. */
   storageLamports: number | null;
@@ -198,7 +196,7 @@ export interface PlanContext {
 /** Every number the preview shows, computed from the form. */
 export interface Preview {
   shape: CurveShape;
-  money: "dollars" | "SOL";
+  money: Money;
   opening: number;
   graduation: number;
   /** How far under the graduation price the curve opens, 0 to 1. */
@@ -230,6 +228,8 @@ export interface LaunchTerms {
   website: string | null;
   x: string | null;
   quoteMint: string;
+  /** DBC's badge for the paying token, when it is a stock token that needs one. */
+  badge: string | null;
   shape: CurveShape;
   capShareBps: number;
   accessMode: number;
@@ -322,9 +322,18 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
     refuse("x", x.refusal, "Fix the link or leave the box empty.");
   }
 
-  const quoteDecimals = QUOTE_DECIMALS[form.paying];
-  const baseDecimals = BASE_DECIMALS[form.paying];
-  const money = form.paying === "dollar" ? "dollars" : "SOL";
+  const known = payingToken(form.paying);
+  if (known === null) {
+    refuse("paying", "The paying token this form names is not offered on this network.", "Pick what buyers pay in.");
+  }
+  const paying: PayingToken = known ?? (PAYING_TOKENS[0] as PayingToken);
+  const quoteDecimals = paying.decimals;
+  const baseDecimals = paying.saleDecimals;
+  const money = paying.unit;
+  // A ceiling is a dollar price, so it only means something on a sale paid in
+  // a dollar the program lists for this network.
+  const priced = isListedDollar(paying.mint);
+  const dollar = PAYING_TOKENS.find((token) => isListedDollar(token.mint)) ?? null;
 
   const supply = wholeIn(form.supply, 1, MAX_SUPPLY);
   if (supply === null) {
@@ -413,11 +422,13 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
 
   let bandBps: number | null = null;
   if (form.band) {
-    if (form.paying === "sol") {
+    if (!priced) {
       refuse(
         "band",
         explainPanguError("BandNeedsDollarQuote"),
-        "Have buyers pay in the demo dollar, or switch the price ceiling off.",
+        dollar === null
+          ? "Switch the price ceiling off."
+          : `Have buyers pay in ${dollar.called}, or switch the price ceiling off.`,
         "BandNeedsDollarQuote"
       );
     }
@@ -450,10 +461,10 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
   if (context.lamports !== null && context.lamports < needed) {
     refuse(
       "wallet",
-      `This wallet holds ${(context.lamports / LAMPORTS_PER_SOL).toFixed(4)} devnet SOL and a launch costs about ${(
+      `This wallet holds ${(context.lamports / LAMPORTS_PER_SOL).toFixed(4)} ${CHAIN.sol} and a launch costs about ${(
         needed / LAMPORTS_PER_SOL
       ).toFixed(4)}${context.storageLamports === null ? "" : ", storing the logo included"}.`,
-      "Top it up from faucet.solana.com, then launch."
+      FAUCET_ON ? "Top it up from faucet.solana.com, then launch." : "Add SOL to it, then launch."
     );
   }
 
@@ -493,7 +504,6 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
   const scale = 10 ** baseDecimals;
   const opening = openingPrice(shape);
   const graduation = graduationPrice(shape);
-  const priced = form.paying === "dollar";
   const stockPrice = bandBps !== null && context.stock !== null ? context.stock.price : null;
   const ceiling = stockPrice !== null && bandBps !== null ? stockPrice * (1 + bandBps / 10_000) : null;
   const ceilingShare = ceiling !== null && priced ? shareSoldAtPrice(shape, ceiling) : null;
@@ -520,7 +530,7 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
   };
   preview.rules = ruleSentences(form, preview, bandBps);
 
-  const quoteMint = priced ? DEMO_DOLLAR_MINT : NATIVE_MINT.toBase58();
+  const quoteMint = paying.mint;
   const terms: LaunchTerms | null =
     refusals.length === 0 && capPercent !== null
       ? {
@@ -530,6 +540,7 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
           website: website.url,
           x: x.url,
           quoteMint,
+          badge: paying.badge,
           shape,
           capShareBps: capPercent * 100,
           accessMode,
@@ -932,6 +943,7 @@ export async function runLaunch(
         partner: owner,
         quoteMint,
         curve: demoCurve(terms.shape),
+        ...(terms.badge !== null ? { tokenBadge: new PublicKey(terms.badge) } : {}),
       });
     } catch (error) {
       return fail(onStep, "template", sayTemplate(messageOf(error)), null);
@@ -1004,6 +1016,9 @@ export async function runLaunch(
           : {}),
         ...(endsAt > 0 ? { endsAt } : {}),
       },
+      // DBC refuses a pool paid in a stock token unless its badge is named on
+      // the pool instruction as well as on the template.
+      ...(terms.badge !== null ? { tokenBadge: new PublicKey(terms.badge) } : {}),
     });
   } catch (error) {
     return fail(onStep, "sale", saySale(messageOf(error)), null);
@@ -1179,14 +1194,14 @@ async function preSendChecks(
   });
   const info = await connection.getAccountInfo(quoteMint, "confirmed");
   if (info === null) {
-    throw new StepError("template", say("The paying token has no mint on devnet."));
+    throw new StepError("template", say(`The paying token has no mint on ${CHAIN.inSentence}.`));
   }
   const state = await getMint(connection, quoteMint, "confirmed", info.owner);
   if (state.decimals !== terms.shape.quoteDecimals) {
     throw new StepError(
       "template",
       say(
-        `The paying token has ${state.decimals} decimals on devnet, not the ${terms.shape.quoteDecimals} this curve was worked out for.`
+        `The paying token has ${state.decimals} decimals on ${CHAIN.inSentence}, not the ${terms.shape.quoteDecimals} this curve was worked out for.`
       )
     );
   }
@@ -1205,7 +1220,7 @@ async function preSendChecks(
       throw new StepError(
         "template",
         say(
-          `${credential === null ? "The credential" : "The schema"} address has no account on devnet, so no buyer could ever carry it.`
+          `${credential === null ? "The credential" : "The schema"} address has no account on ${CHAIN.inSentence}, so no buyer could ever carry it.`
         )
       );
     }
@@ -1332,7 +1347,7 @@ async function simulateSignSend(
         return fail(
           onStep,
           step,
-          say("Devnet did not confirm this in time and has no record of it, so it did not land."),
+          say(`${CHAIN.atStart} did not confirm this in time and has no record of it, so it did not land.`),
           signature
         );
       }
@@ -1361,7 +1376,7 @@ function refusalOf(logs: string[], error: unknown): { sentence: string; tag: Pan
   const raw = typeof error === "string" ? error : JSON.stringify(error);
   if (/insufficient lamports|InsufficientFundsForRent|InsufficientFundsForFee|AccountNotFound/i.test(`${logs.join("\n")}\n${raw}`)) {
     return {
-      sentence: `This wallet does not hold enough devnet SOL for the launch, about ${(
+      sentence: `This wallet does not hold enough ${CHAIN.sol} for the launch, about ${(
         LAUNCH_COST_LAMPORTS / LAMPORTS_PER_SOL
       ).toFixed(4)}.`,
       tag: null,
@@ -1372,7 +1387,7 @@ function refusalOf(logs: string[], error: unknown): { sentence: string; tag: Pan
   );
   const said = spoken[spoken.length - 1];
   return {
-    sentence: `Devnet refused it: ${said !== undefined ? said.slice("Program log: ".length) : raw}`,
+    sentence: `${CHAIN.atStart} refused it: ${said !== undefined ? said.slice("Program log: ".length) : raw}`,
     tag: null,
   };
 }
@@ -1443,18 +1458,10 @@ const CLOCK_UNIX_TIME_OFFSET = 32;
 async function chainTime(connection: Connection): Promise<number> {
   const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, "confirmed");
   if (info === null || info.data.length < CLOCK_UNIX_TIME_OFFSET + 8) {
-    throw new Error("devnet returned no clock, so the end of the offering cannot be dated");
+    throw new Error("the chain returned no clock, so the end of the offering cannot be dated");
   }
   const view = new DataView(info.data.buffer, info.data.byteOffset, info.data.byteLength);
   return Number(view.getBigInt64(CLOCK_UNIX_TIME_OFFSET, true));
-}
-
-export function explorerTx(signature: string): string {
-  return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-}
-
-export function explorerAddress(address: string): string {
-  return `https://explorer.solana.com/address/${address}?cluster=devnet`;
 }
 
 function messageOf(error: unknown): string {

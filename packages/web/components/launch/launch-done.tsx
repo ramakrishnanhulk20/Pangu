@@ -11,6 +11,7 @@ import type { TokenMetadata } from "@/lib/token-metadata";
 import { feedWords } from "@/lib/feeds";
 import { accessModeLabel, shortAddress, tokenAmount } from "@/lib/format";
 import { explorerAddress, explorerTx, type LaunchResult } from "@/lib/launch";
+import { CHAIN } from "@/lib/network";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -108,7 +109,7 @@ export function LaunchDone({ result, name, symbol }: { result: LaunchResult; nam
       transition={still ? { duration: 0 } : { duration: 0.8, ease: EASE }}
       className="relative"
     >
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">live on devnet</p>
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">{`live on ${CHAIN.inSentence}`}</p>
       <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-4">
         <motion.span
           data-testid="launch-done-logo"

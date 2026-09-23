@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { Spinner } from "@/components/break/strike";
-import { explorerTx } from "@/lib/break";
+import { CHAIN, explorerTx } from "@/lib/network";
 
 import type { ActionStep } from "./use-chain-action";
 
@@ -23,7 +23,7 @@ function TxLink({ signature, children }: { signature: string; children: string }
 }
 
 /**
- * One action's state in words: checking with devnet, waiting on the wallet,
+ * One action's state in words: checking with the chain, waiting on the wallet,
  * waiting on the chain, landed with its link, or refused with the program's
  * own sentence and what to do about it.
  */
@@ -55,21 +55,21 @@ export function ActionStatus({ step, landedLine, testId }: { step: ActionStep; l
         {step.kind === "checking" && (
           <p className="flex items-center gap-2.5 text-muted">
             <Spinner />
-            Building it and asking devnet whether it would pass, before your wallet sees it.
+            Building it and asking {CHAIN.inSentence} whether it would pass, before your wallet sees it.
           </p>
         )}
         {step.kind === "signing" && (
           <p className="flex items-center gap-2.5">
             <Spinner />
             {step.parts > 1
-              ? `Devnet would take it. Waiting for your wallet to sign part ${step.part} of ${step.parts}.`
-              : "Devnet would take it. Waiting for your wallet to sign."}
+              ? `${CHAIN.atStart} would take it. Waiting for your wallet to sign part ${step.part} of ${step.parts}.`
+              : `${CHAIN.atStart} would take it. Waiting for your wallet to sign.`}
           </p>
         )}
         {step.kind === "pending" && (
           <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-muted">
             <Spinner />
-            <span>Sent. Waiting for devnet to confirm, usually a few seconds.</span>
+            <span>Sent. Waiting for {CHAIN.inSentence} to confirm, usually a few seconds.</span>
             <TxLink signature={step.signature}>open it</TxLink>
           </p>
         )}

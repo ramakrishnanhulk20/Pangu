@@ -17,10 +17,11 @@ import { loadPool } from "pangu-sdk/dbc";
 
 import { feedWords } from "./feeds";
 import { chooseLiveSale, lastLiveSale, type LiveSale } from "./live-sale";
+import { CHAIN } from "./network";
 import { oldestFirst } from "./readout";
 import { openedSales, type OpenedSale } from "./sales";
 import { firstReadableSharing, type Standing } from "./sharing";
-import { devnetConnection } from "./solana";
+import { chainConnection } from "./solana";
 
 const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
 
@@ -32,13 +33,13 @@ const REFRESHING =
 
 // When the node itself is not answering, the line says that instead. Calling
 // an outage a refresh would promise numbers that are not on their way.
-const DEVNET_SILENT = "Devnet did not answer, so there is nothing true to show yet.";
+const CHAIN_SILENT = `${CHAIN.atStart} did not answer, so there is nothing true to show yet.`;
 
 /** Why the sales that would not read did not, counted over one reading. */
 interface Misses {
   /** Written by another build of the program, so they will never decode here. */
   layout: number;
-  /** Devnet did not answer, or answered with an error. */
+  /** The chain did not answer, or answered with an error. */
   silent: number;
 }
 
@@ -155,7 +156,7 @@ async function runningFirst(candidates: OpenedSale[]): Promise<OpenedSale[]> {
 
   try {
     const mints = newestFirst.map((sale) => new PublicKey(sale.mint));
-    const accounts = await devnetConnection().getMultipleAccountsInfo(mints);
+    const accounts = await chainConnection().getMultipleAccountsInfo(mints);
     const running: OpenedSale[] = [];
     const rest: OpenedSale[] = [];
 
@@ -185,7 +186,7 @@ async function runningFirst(candidates: OpenedSale[]): Promise<OpenedSale[]> {
 /** The name of the sale the hero is about, for the poster's metadata row. */
 export function heroSaleName(): string {
   const sales = oldestFirst(openedSales());
-  // The poster renders before any devnet read finishes, so it takes the last
+  // The poster renders before any chain read finishes, so it takes the last
   // choice already made rather than waiting on a new one.
   const priced = leadSale(sales, lastLiveSale());
   const listed = listedSales(sales, "");
@@ -193,7 +194,7 @@ export function heroSaleName(): string {
 }
 
 async function standingOf(sale: Sale): Promise<Standing> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const records = await listBuyerRecords(connection, sale.mint);
   const standing = saleStanding(sale, records);
   return {
@@ -212,7 +213,7 @@ async function standingOfMint(
   mint: string,
   seen: (offering: Offering) => void
 ): Promise<Standing | null> {
-  const sale = await getSale(devnetConnection(), new PublicKey(mint));
+  const sale = await getSale(chainConnection(), new PublicKey(mint));
   if (sale === null) {
     return null;
   }
@@ -243,7 +244,7 @@ async function readPricedSale(
   opened: OpenedSale,
   misses: Misses
 ): Promise<PricedNumbers | null> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
 
   try {
     const pool = await loadPool(connection, new PublicKey(opened.mint));
@@ -294,11 +295,11 @@ async function readPricedSale(
 }
 
 /**
- * Reads the hero's numbers off devnet. Server only: it pulls in Meteora's own
+ * Reads the hero's numbers off the chain. Server only: it pulls in Meteora's own
  * SDK to reach the pool's square root price, which no browser should download.
  *
  * Every field is read from the chain on the spot. Nothing is invented: when
- * devnet does not answer, the fields stay null and the page says so.
+ * the chain does not answer, the fields stay null and the page says so.
  *
  * Each sale is read on its own and a sale that will not decode is passed over
  * and counted, so one account written by another build of the program costs its
@@ -310,7 +311,7 @@ async function readFromChain(): Promise<HeroPulse> {
   const candidates = listedSales(sales, priced?.mint ?? "");
 
   if (priced === null && candidates.length === 0) {
-    return { ...EMPTY, failure: "No devnet sale has been opened yet." };
+    return { ...EMPTY, failure: `No ${CHAIN.inSentence} sale has been opened yet.` };
   }
 
   const misses: Misses = { layout: 0, silent: 0 };
@@ -368,7 +369,7 @@ async function readFromChain(): Promise<HeroPulse> {
   pulse.readAt = Date.now();
   if (pricedNumbers === null && pulse.buyers === null) {
     const onlyOldBuilds = misses.silent === 0;
-    return { ...pulse, failure: onlyOldBuilds ? REFRESHING : DEVNET_SILENT };
+    return { ...pulse, failure: onlyOldBuilds ? REFRESHING : CHAIN_SILENT };
   }
 
   return pulse;
@@ -394,7 +395,7 @@ function startReading(): Promise<HeroPulse> {
   // A reading that throws is turned into the outage line and cleared like any
   // other, or the next visit would wait on a promise that already gave up.
   reading = readFromChain()
-    .catch((): HeroPulse => ({ ...EMPTY, failure: DEVNET_SILENT, readAt: Date.now() }))
+    .catch((): HeroPulse => ({ ...EMPTY, failure: CHAIN_SILENT, readAt: Date.now() }))
     .then((pulse) => {
       if (pulse.failure === null) {
         lastGood = { at: Date.now(), pulse };
@@ -405,7 +406,7 @@ function startReading(): Promise<HeroPulse> {
   return reading;
 }
 
-/** The numbers for the hero, live off devnet, shared between the loads that land together. */
+/** The numbers for the hero, live off the chain, shared between the loads that land together. */
 export async function readPulse(): Promise<HeroPulse> {
   const now = Date.now();
   if (lastGood !== null && now - lastGood.at < FRESH_MS) {

@@ -1,5 +1,7 @@
+import { CHAIN } from "@/lib/network";
+
 /**
- * Holds the shape of the section while devnet is answering.
+ * Holds the shape of the section while the chain is answering.
  *
  * The heading row is the loaded section's own, word for word and class for
  * class, so nothing above the numbers moves when they land. It carries the
@@ -10,14 +12,14 @@ export function ReadoutSkeleton({ id }: { id: string }) {
   return (
     <section
       id={id}
-      aria-label="Reading the sale from Solana devnet"
+      aria-label={`Reading the sale from ${CHAIN.label}`}
       className="relative isolate overflow-hidden border-t border-line px-[6vw] py-20 sm:py-28"
     >
       <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-2 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
             <span className="h-2 w-2 shrink-0 rounded-full bg-pending" />
-            reading devnet
+            {`reading ${CHAIN.inSentence}`}
           </div>
           <h2 className="mt-5 max-w-[15ch] font-display text-[clamp(2.25rem,4.6vw,3.9rem)] font-semibold leading-[0.92] tracking-[-0.035em]">
             Watch the price find itself.

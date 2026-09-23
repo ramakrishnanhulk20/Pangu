@@ -3,6 +3,7 @@ import { ACCESS_MODE } from "pangu-sdk";
 import { utcDay } from "@/components/readout/format";
 import type { DirectorySale } from "@/lib/directory";
 import { feedWords } from "@/lib/feeds";
+import { CHAIN } from "@/lib/network";
 
 /*
  * The words the ledger and the sale page put a sale's facts in. Every word is
@@ -52,7 +53,7 @@ export function stateWords(sale: DirectorySale): { word: string; detail: string 
         detail: sale.endsAt === null ? "no end date" : `offering ends ${utcDay(sale.endsAt * 1000)}`,
       };
     default:
-      return { word: "Unreadable", detail: "devnet did not say where it stands" };
+      return { word: "Unreadable", detail: `${CHAIN.inSentence} did not say where it stands` };
   }
 }
 

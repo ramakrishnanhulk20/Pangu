@@ -3,12 +3,14 @@
 import "@/lib/buffer-shim";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { motion, useReducedMotion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { Reveal, Spinner } from "@/components/break/strike";
+import { DBC_PROGRAM_ID } from "pangu-sdk";
+
 import { breakConnection } from "@/lib/break";
 import {
   DEFAULT_FORM,
@@ -31,6 +33,7 @@ import {
   type StockReading,
   type UploadRecord,
 } from "@/lib/launch";
+import { CHAIN, PAYING_TOKENS, browserRpcUrl, isListedDollar, payingToken } from "@/lib/network";
 import { LogoRefused, prepareLogo, storagePrice } from "@/lib/token-metadata";
 
 import { RefusalLine } from "./fields";
@@ -70,6 +73,7 @@ const IDLE_STEPS: Record<StepId, StepState> = {
   sale: { status: "waiting", signature: null, failure: null },
 };
 
+const BADGE_RETRY_MS = 5_000;
 const BALANCE_POLL_MS = 20_000;
 const BALANCE_RETRY_MS = 5_000;
 const STOCK_POLL_MS = 60_000;
@@ -92,7 +96,7 @@ const FACTS = ["Meteora's Dynamic Bonding Curve", "Pangu's rules on every transf
  */
 export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string | null> }) {
   const still = useReducedMotion() === true;
-  const connection = useMemo(() => breakConnection(), []);
+  const connection = useMemo(() => breakConnection(browserRpcUrl()), []);
   const { publicKey, signTransaction, signAllTransactions, signMessage, sendTransaction } = useWallet();
   const wallet = publicKey === null ? null : publicKey.toBase58();
 
@@ -109,6 +113,8 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const [upload, setUpload] = useState<UploadRecord | null>(null);
   const [storedAtLaunch, setStoredAtLaunch] = useState(false);
   const now = useSyncExternalStore(neverChanges, pageOpenedAt, () => null);
+  // Which stock tokens have their DBC badge on chain, by id. Null until read.
+  const [badged, setBadged] = useState<Record<string, boolean> | null>(null);
 
   // A wallet that comes back to this tab finds the form and the half finished
   // launch it left, so pressing Launch again resumes rather than starting over.
@@ -128,6 +134,53 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const set = useCallback(<K extends keyof Form>(key: K, value: Form[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   }, []);
+
+  // A stock token is offered only once its badge reads back from the chain:
+  // Meteora refuses a stock-paid template whose badge is missing, and a badge
+  // can be taken away. The read is tried again until it answers.
+  useEffect(() => {
+    const stocks = PAYING_TOKENS.filter((token) => token.badge !== null);
+    if (stocks.length === 0) {
+      return;
+    }
+    let alive = true;
+    let timer: number | undefined;
+    const read = () => {
+      connection
+        .getMultipleAccountsInfo(stocks.map((token) => new PublicKey(token.badge as string)), "confirmed")
+        .then(
+          (accounts) => {
+            if (alive) {
+              setBadged(
+                Object.fromEntries(
+                  stocks.map((token, place) => [token.id, accounts[place]?.owner.equals(DBC_PROGRAM_ID) === true])
+                )
+              );
+            }
+          },
+          () => {
+            if (alive) {
+              timer = window.setTimeout(read, BADGE_RETRY_MS);
+            }
+          }
+        );
+    };
+    read();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [connection]);
+  const offered = useMemo(
+    () => PAYING_TOKENS.filter((token) => token.badge === null || badged?.[token.id] === true),
+    [badged]
+  );
+  const stocksReading = badged === null && PAYING_TOKENS.some((token) => token.badge !== null);
+  // A saved form naming a stock whose badge turned out to be gone falls back to
+  // the first choice rather than offering a launch that cannot land.
+  if (badged !== null && offered.length > 0 && !offered.some((token) => token.id === form.paying)) {
+    setForm((current) => ({ ...current, paying: offered[0]?.id ?? current.paying, band: false }));
+  }
 
   const pickTurn = useRef(0);
   const pickLogo = useCallback((file: File, restored = false) => {
@@ -279,7 +332,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
     };
   }, [connection, publicKey, result]);
 
-  const wantsStock = form.band && form.paying === "dollar";
+  const wantsStock = form.band && isListedDollar(payingToken(form.paying)?.mint);
   useEffect(() => {
     if (!wantsStock) {
       return;
@@ -422,8 +475,8 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
             signature: before[current].signature,
             failure: {
               sentence: /429|rate limit/i.test(text)
-                ? "The public devnet node is rate limiting this browser."
-                : `Devnet did not answer as expected: ${text}`,
+                ? `The public ${CHAIN.inSentence} node is rate limiting this browser.`
+                : `${CHAIN.atStart} did not answer as expected: ${text}`,
               tag: null,
               onChain:
                 landedTemplate === null
@@ -467,7 +520,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
       <div className="relative z-10 mx-auto w-full max-w-[1500px] px-[6vw] pb-28 pt-12 sm:pt-16">
         <header>
           <Reveal>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted">for issuers, on devnet</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted">{`for issuers, on ${CHAIN.inSentence}`}</p>
           </Reveal>
           <Reveal delay={0.08}>
             <h1 className="-ml-[0.02em] mt-6 font-display text-[clamp(3rem,10vw,9rem)] font-semibold leading-[0.88] tracking-[-0.045em]">
@@ -508,6 +561,8 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
               onLogo={pickLogo}
               onClearLogo={clearLogo}
               storage={storageState}
+              offered={offered}
+              stocksReading={stocksReading}
             />
           </div>
 
@@ -533,7 +588,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
                   <p className="mt-5 max-w-[56ch] text-[14px] leading-relaxed text-muted">
                     {storing &&
                       `First the ${logo.state === "ready" ? "logo and description go" : "description and links go"} to Irys: your wallet pays for the storage and signs ${logo.state === "ready" ? "each of the two files" : "the one file"}. `}
-                    {storing ? "Then two" : "Two"} transactions, each tried against devnet first so a refusal shows before your wallet is asked, and the second needs the first on chain.
+                    {storing ? "Then two" : "Two"} transactions, each tried against {CHAIN.inSentence} first so a refusal shows before your wallet is asked, and the second needs the first on chain.
                     About {cost} SOL in all, most of it rent: the deposit Solana holds to keep the new accounts open.
                   </p>
 
@@ -579,7 +634,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
                     {wallet === null ? (
                       <>
                         <WalletButton />
-                        <span className="text-[14px] text-muted">Connect a devnet wallet to launch.</span>
+                        <span className="text-[14px] text-muted">Connect {CHAIN.wallet} to launch.</span>
                       </>
                     ) : (
                       <motion.button
@@ -602,7 +657,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
                     )}
                     {wallet !== null && (
                       <span data-testid="launch-balance" className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                        {lamports === null ? "reading your balance" : `${(lamports / LAMPORTS_PER_SOL).toFixed(4)} devnet SOL`}
+                        {lamports === null ? "reading your balance" : `${(lamports / LAMPORTS_PER_SOL).toFixed(4)} ${CHAIN.sol}`}
                       </span>
                     )}
                     {wallet !== null && !canSign && (

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { explorerAddress, shortAddress, utcDay } from "@/components/readout/format";
 import type { DirectorySale, SaleTermsWire } from "@/lib/directory";
+import { CHAIN } from "@/lib/network";
 import { messageOf, readMarket, tradeConnection } from "@/lib/trade";
 import type { PoolView } from "pangu-sdk/dbc";
 
@@ -80,14 +81,14 @@ export function SaleDesk({ sale, terms }: { sale: DirectorySale; terms: SaleTerm
       >
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-            from your own wallet, on devnet
+            {`from your own wallet, on ${CHAIN.inSentence}`}
           </p>
           <h2 className="mt-5 max-w-[14ch] font-display text-[clamp(2.25rem,4.6vw,3.9rem)] font-semibold leading-[0.92] tracking-[-0.035em]">
             {sale.graduated ? "It trades freely now." : "Buy it. Sell it back."}
           </h2>
         </div>
         <p className="max-w-[40ch] text-[16px] leading-[1.5] text-muted">
-          Every transaction is built by pangu-sdk and run against devnet first. Your
+          Every transaction is built by pangu-sdk and run against {CHAIN.inSentence} first. Your
           wallet is only asked to sign what the chain would take.
         </p>
       </motion.div>

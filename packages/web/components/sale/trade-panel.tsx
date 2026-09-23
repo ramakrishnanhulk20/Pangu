@@ -10,7 +10,7 @@ import type { BuyPreflight, PoolView } from "pangu-sdk/dbc";
 
 import { Spinner } from "@/components/break/strike";
 import { clock, explorerAddress, utcDay } from "@/components/readout/format";
-import { explorerTx } from "@/lib/break";
+import { CHAIN, DEMO_DOLLARS_ON, FAUCET_ON, explorerTx } from "@/lib/network";
 import type { DirectorySale } from "@/lib/directory";
 import { feedWords } from "@/lib/feeds";
 import { tokenAmount } from "@/lib/format";
@@ -76,7 +76,7 @@ const PRIMARY =
   "group inline-flex h-12 items-center gap-2.5 rounded-lg border border-accent bg-accent px-6 text-[15px] font-medium text-accent-ink transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-12px_var(--accent)] disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent";
 
 /**
- * Buying and selling one sale. Every number is read off devnet for the
+ * Buying and selling one sale. Every number is read off the chain for the
  * connected wallet; the rules' answer to a buy is given in words before the
  * wallet is asked for anything.
  */
@@ -112,14 +112,15 @@ export function TradePanel({
   const symbol = "shares";
   const baseDecimals = view?.sale.baseDecimals ?? sale.baseDecimals;
   const quoteDecimals = sale.quoteDecimals ?? view?.sale.quoteDecimals ?? 0;
-  const inSol = sale.money === "SOL";
+  const unitWord = sale.money;
   const rulesOff = sale.offeringOver;
   const feed = feedWords(sale.feedId);
 
   const shares = useCallback((raw: bigint) => `${tokenAmount(raw, baseDecimals)} ${symbol}`, [baseDecimals, symbol]);
   const paying = useCallback(
-    (raw: bigint) => (inSol ? `${tokenAmount(raw, quoteDecimals)} SOL` : `$${tokenAmount(raw, quoteDecimals)}`),
-    [inSol, quoteDecimals]
+    (raw: bigint) =>
+      unitWord === "dollars" ? `$${tokenAmount(raw, quoteDecimals)}` : `${tokenAmount(raw, quoteDecimals)} ${unitWord}`,
+    [unitWord, quoteDecimals]
   );
 
   // A wallet's numbers belong to that wallet. A switch clears them before the new read lands.
@@ -410,7 +411,7 @@ export function TradePanel({
       <div className="mt-8">
         <div className="flex items-end justify-between gap-4">
           <label htmlFor="trade-amount" className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-            {mode === "sell" ? `${symbol} to sell back` : unit === "shares" ? `${symbol} to buy` : `${inSol ? "SOL" : "dollars"} to spend`}
+            {mode === "sell" ? `${symbol} to sell back` : unit === "shares" ? `${symbol} to buy` : `${unitWord} to spend`}
           </label>
           {mode === "buy" ? (
             <div className="inline-flex gap-1 font-mono text-[10px] uppercase tracking-[0.14em]">
@@ -425,7 +426,7 @@ export function TradePanel({
                     unit === option ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"
                   }`}
                 >
-                  {option === "shares" ? "in shares" : inSol ? "in SOL" : "in dollars"}
+                  {option === "shares" ? "in shares" : `in ${unitWord}`}
                 </button>
               ))}
             </div>
@@ -464,7 +465,7 @@ export function TradePanel({
             <span className="text-refused">{`Type a number above zero, with at most ${decimalsNow} decimals.`}</span>
           ) : quote === null ? (
             view === null ? (
-              <span className="text-muted">Reading the pool on devnet.</span>
+              <span className="text-muted">Reading the pool on {CHAIN.inSentence}.</span>
             ) : null
           ) : !quote.ok ? (
             <span className="text-refused">{quote.message}</span>
@@ -519,7 +520,7 @@ export function TradePanel({
           </button>
           {publicKey === null && (
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
-              connect a devnet wallet first
+              connect {CHAIN.wallet} first
             </span>
           )}
         </div>
@@ -527,7 +528,7 @@ export function TradePanel({
         <ActionStatus
           step={step}
           testId="trade-status"
-          landedLine={mode === "buy" ? "The buy landed on devnet." : "The sell landed on devnet."}
+          landedLine={mode === "buy" ? `The buy landed on ${CHAIN.inSentence}.` : `The sell landed on ${CHAIN.inSentence}.`}
         />
 
         {wallet !== null && (
@@ -618,7 +619,7 @@ function AccessNote({
           {!connected
             ? "Connect a wallet to see whether it holds a valid approval."
             : credential === null
-              ? "Reading your wallet's approval on devnet."
+              ? `Reading your wallet's approval on ${CHAIN.inSentence}.`
               : credential.valid
                 ? "Your wallet holds a valid approval from this verifier."
                 : `${credential.sentence ?? ""} Ask the verifier to attest this wallet under the schema above, then come back.`}
@@ -695,7 +696,7 @@ function Holding({
   if (standing === null) {
     return (
       <p className="mt-2 text-[14px] text-muted" data-testid="trade-holding">
-        {failure ?? "Reading your wallet on devnet."}
+        {failure ?? `Reading your wallet on ${CHAIN.inSentence}.`}
       </p>
     );
   }
@@ -749,7 +750,7 @@ function CheckLine({
   );
 }
 
-/** The devnet SOL faucet on a SOL sale, the demo dollars on a demo dollar sale. */
+/** The devnet SOL faucet on a SOL sale, the demo dollars on a demo dollar sale. Neither exists on mainnet. */
 function Funding({
   sale,
   connection,
@@ -809,11 +810,11 @@ function Funding({
       const { PublicKey } = await import("@solana/web3.js");
       const signature = await connection.requestAirdrop(new PublicKey(wallet), AIRDROP_SOL * LAMPORTS_PER_SOL);
       await connection.confirmTransaction(signature, "confirmed");
-      setNote({ text: `${AIRDROP_SOL} devnet SOL landed.`, signature });
+      setNote({ text: `${AIRDROP_SOL} ${CHAIN.sol} landed.`, signature });
       onFunded();
     } catch {
       setNote({
-        text: "The devnet faucet turned this wallet down, which it does when an address has asked recently. Take some from faucet.solana.com instead.",
+        text: `The ${CHAIN.inSentence} faucet turned this wallet down, which it does when an address has asked recently. Take some from faucet.solana.com instead.`,
         signature: null,
       });
     } finally {
@@ -821,14 +822,16 @@ function Funding({
     }
   };
 
-  if (!sale.demoDollar && sale.money !== "SOL") {
+  const dollarsHere = DEMO_DOLLARS_ON && sale.demoDollar;
+  const faucetHere = FAUCET_ON && sale.money === "SOL";
+  if (!dollarsHere && !faucetHere) {
     return null;
   }
 
   return (
     <div className="mt-10 border-t border-line pt-6">
       <div className="flex flex-wrap items-center gap-3">
-        {sale.demoDollar ? (
+        {dollarsHere ? (
           <button
             type="button"
             data-testid="trade-demo-dollars"
@@ -837,13 +840,13 @@ function Funding({
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent px-3.5 font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-ink disabled:translate-y-0 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
           >
             {asking && <Spinner />}
-            {asking ? "minting on devnet" : "get demo dollars"}
+            {asking ? `minting on ${CHAIN.inSentence}` : "get demo dollars"}
           </button>
         ) : (
           <>
             <button type="button" onClick={askSol} disabled={asking} className={SMALL_BUTTON}>
               {asking && <Spinner />}
-              {asking ? "asking the faucet" : `take ${AIRDROP_SOL} devnet SOL`}
+              {asking ? "asking the faucet" : `take ${AIRDROP_SOL} ${CHAIN.sol}`}
             </button>
             <a
               href="https://faucet.solana.com"
@@ -857,9 +860,9 @@ function Funding({
         )}
       </div>
       <p className="mt-3 max-w-[52ch] text-[13px] leading-relaxed text-muted">
-        {sale.demoDollar
-          ? "This sale is priced in a dollar token minted for the demo. The button hands your devnet wallet some, once an hour."
-          : "This sale is priced in SOL. A devnet wallet with none can take some here."}
+        {dollarsHere
+          ? `This sale is priced in a dollar token minted for the demo. The button hands your ${CHAIN.inSentence} wallet some, once an hour.`
+          : `This sale is priced in SOL. ${CHAIN.wallet.replace(/^a /, "A ")} with none can take some here.`}
       </p>
       {note !== null && (
         <p className="mt-3 max-w-[52ch] text-[13px] leading-relaxed">

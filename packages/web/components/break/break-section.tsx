@@ -27,6 +27,7 @@ import {
 import { utcDay, utcMoment } from "@/components/readout/format";
 import { feedWords, isAppleExchange } from "@/lib/feeds";
 import { tokenAmount } from "@/lib/format";
+import { CHAIN, LEDGER_SENDS, browserRpcUrl } from "@/lib/network";
 
 import {
   AttackRow,
@@ -70,16 +71,17 @@ const UNREACHABLE =
 /**
  * The whole "Try to break it" ledger.
  *
- * Every number on it is read off devnet and every row is a real transaction
+ * Every number on it is read off the chain and every row is a real transaction
  * built by pangu-sdk. Simulating is the default, so a wallet is never asked to
  * sign something meant to fail; sending for real is a deliberate switch, and it
- * is what leaves a refusal on chain with a signature anybody can open.
+ * is what leaves a refusal on chain with a signature anybody can open. On
+ * mainnet there is no switch: the ledger only simulates.
  */
 export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   // Its own paced connection, not the wallet adapter's: building nine attacks
-  // reads a hundred accounts and the public devnet node rate limits bursts.
+  // reads a hundred accounts and a public node rate limits bursts.
   // Only a connected wallet's own work goes through it.
-  const connection = useMemo(() => breakConnection(), []);
+  const connection = useMemo(() => breakConnection(browserRpcUrl()), []);
   const { connection: walletConnection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
 
@@ -388,12 +390,13 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     setRows((current) => ({ ...current, [attack.id]: state }));
   };
 
-  // `how` lets the real first buy offered on rows 03, 06 and 09 send row 01
-  // whatever the toggle says.
-  const run = async (attack: Attack, how: Mode = mode) => {
+  // `asked` lets the real first buy offered on rows 03, 06 and 09 send row 01
+  // whatever the toggle says. Where the ledger may not send, nothing does.
+  const run = async (attack: Attack, asked: Mode = mode) => {
     if (publicKey === null || target === null) {
       return;
     }
+    const how: Mode = LEDGER_SENDS ? asked : "simulate";
     const startedUnder = walletTurn.current;
     const turn = (latestRun.current.get(attack.id) ?? 0) + 1;
     latestRun.current.set(attack.id, turn);
@@ -534,7 +537,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
 
           <Reveal delay={0.16}>
             <p className="max-w-[40ch] text-[17px] leading-[1.5]">
-              Connect a devnet wallet and run the attacks yourself. Every refusal
+              Connect {CHAIN.wallet} and run the attacks yourself. Every refusal
               comes from the program, not from this page.
             </p>
             <div className="mt-8">
@@ -569,7 +572,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
         </Reveal>
 
         <Reveal delay={0.05} className="mt-12">
-          <ModeToggle mode={mode} onPick={setMode} />
+          {LEDGER_SENDS ? <ModeToggle mode={mode} onPick={setMode} /> : <SimulateOnly />}
         </Reveal>
 
         <ol className="mt-10 border-b border-line">
@@ -639,6 +642,22 @@ function ModeToggle({ mode, onPick }: { mode: Mode; onPick: (mode: Mode) => void
   );
 }
 
+/** Where the ledger may not send: the toggle's place, holding the one reason why. */
+function SimulateOnly() {
+  return (
+    <div data-testid="break-simulate-only" className="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <span className="inline-flex items-center gap-2.5 rounded-lg border border-accent/60 px-3.5 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+        simulate only
+      </span>
+      <p className="max-w-[56ch] text-[13px] leading-relaxed text-muted">
+        On mainnet an attack sent for real costs real money, so every row asks the chain what would happen and
+        sends nothing. The refusals are the program&rsquo;s own, the same ones a sent transaction would meet.
+      </p>
+    </div>
+  );
+}
+
 function SaleFacts({
   target,
   exchangeShut,
@@ -666,7 +685,7 @@ function SaleFacts({
         className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending"
       >
         <Spinner />
-        reading the sale from devnet
+        {`reading the sale from ${CHAIN.inSentence}`}
       </p>
     );
   }
@@ -790,7 +809,7 @@ function StalePrice({
         className="mt-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending"
       >
         <Spinner />
-        {`bringing ${feed.price} up to date on devnet`}
+        {`bringing ${feed.price} up to date on ${CHAIN.inSentence}`}
       </p>
     );
   }
@@ -924,7 +943,7 @@ function messageOf(error: unknown): string {
     return "You turned this down in your wallet, so nothing was sent.";
   }
   if (/429|rate limit/i.test(text)) {
-    return "The public devnet node is rate limiting this browser. Wait a moment and run it again.";
+    return `The public ${CHAIN.inSentence} node is rate limiting this browser. Wait a moment and run it again.`;
   }
   return text;
 }

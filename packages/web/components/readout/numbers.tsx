@@ -10,7 +10,7 @@ import { explorerAddress, percent, shortAddress } from "./format";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /**
- * Counts up to the number devnet just gave.
+ * Counts up to the number the chain just gave.
  *
  * The true value is what the server rendered, so it is in the HTML from the
  * first paint. The count is written straight to the text node, so no frame of

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Reveal } from "@/components/story/reveal";
+import { explorerTxOn } from "@/lib/network";
 
 // Every figure below is copied from a file in the repository, named in the
 // comment above it. Nothing here is rounded, guessed, or live.
@@ -23,8 +24,12 @@ const SUITES = [
 // refused at the ceiling. The 16 of 19 below is that run: 9 attacks on PBAND2
 // and 10 on the credential sale PVRFD, 8 refused on each, and 3 allowed as
 // expected, one attested buy under the cap and two sells.
-const REFUSAL_LINK =
-  "https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet";
+// The run was on devnet, so the link stays on devnet whatever network the app
+// is built for.
+const REFUSAL_LINK = explorerTxOn(
+  "devnet",
+  "4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc"
+);
 
 const REPOSITORY: string = "https://github.com/ramakrishnanhulk20/Pangu";
 

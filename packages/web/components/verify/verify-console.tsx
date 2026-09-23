@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { IssuedCredential } from "pangu-sdk";
 
 import { Rise } from "@/components/hero/rise";
+import { CHAIN } from "@/lib/network";
 import { Reveal } from "@/components/break/strike";
 import {
   findVerifiers,
@@ -41,7 +42,7 @@ type Listed =
   | { key: string; items: IssuedCredential[] }
   | { key: string; failure: string };
 
-/** What the list should show once devnet's index catches up with a landed transaction. */
+/** What the list should show once the node's index catches up with a landed transaction. */
 interface Expectation {
   present: string[];
   absent: string[];
@@ -54,8 +55,7 @@ interface Expectation {
 const CATCH_UP_TRIES = 6;
 const CATCH_UP_WAIT_MS = 2_000;
 
-const UNREACHABLE =
-  "Devnet did not answer the read. Check the connection and read again.";
+const UNREACHABLE = `${CHAIN.atStart} did not answer the read. Check the connection and read again.`;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((wake) => setTimeout(wake, ms));
@@ -203,7 +203,7 @@ export function VerifyConsole({ credentialSales }: { credentialSales: readonly C
         <header>
           <Rise>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
-              for verifiers, on devnet
+              {`for verifiers, on ${CHAIN.inSentence}`}
             </p>
           </Rise>
           <Rise delay={0.08}>

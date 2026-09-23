@@ -13,7 +13,7 @@ import { isAaplx, isAppleExchange } from "./feeds";
 import { refreshIfStale } from "./price-refresh";
 import { oldestFirst } from "./readout";
 import { openedSales, type OpenedSale } from "./sales";
-import { devnetConnection } from "./solana";
+import { chainConnection } from "./solana";
 
 /*
  * Which sale the page opens on. Server only: it can ask lib/price-refresh to
@@ -60,11 +60,11 @@ function candidateOf(entry: Checked): LiveCandidate {
 
 /**
  * One banded sale, read for the choice: null when it is not open to anyone, not
- * running, has no band, or its offering is over. Throws when devnet did not
+ * running, has no band, or its offering is over. Throws when the chain did not
  * answer, so a node that is down is told apart from a sale that is shut.
  */
 async function check(opened: OpenedSale): Promise<Checked | null> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const mint = new PublicKey(opened.mint);
   let sale: Sale | null;
   let running: boolean;
@@ -75,7 +75,7 @@ async function check(opened: OpenedSale): Promise<Checked | null> {
     ]);
   } catch (error) {
     // A sale written by an earlier build of the program never decodes here, so
-    // it is left out rather than counted as devnet going quiet.
+    // it is left out rather than counted as the chain going quiet.
     if (error instanceof PanguLayoutError) {
       return null;
     }
@@ -106,7 +106,7 @@ async function usableAfterRefresh(entry: Checked): Promise<boolean> {
     if (outcome.status !== "fresh" && outcome.status !== "posted") {
       return false;
     }
-    return (await readPrice(devnetConnection(), entry.sale)).usable;
+    return (await readPrice(chainConnection(), entry.sale)).usable;
   } catch {
     return false;
   }
@@ -122,7 +122,7 @@ async function choose(): Promise<LiveSale | null> {
 
   const settled = await Promise.allSettled(banded.map(check));
   if (settled.every((result) => result.status === "rejected")) {
-    throw new Error("devnet did not answer any read of the banded sales");
+    throw new Error("the chain did not answer any read of the banded sales");
   }
   const live = settled
     .map((result) => (result.status === "fulfilled" ? result.value : null))
@@ -174,7 +174,7 @@ let generation = 0;
 
 /**
  * The sale the page leads with, or null when no banded sale is live, in which
- * case each caller keeps its own older rule. Never throws: when devnet does not
+ * case each caller keeps its own older rule. Never throws: when the chain does not
  * answer, the last answer that did is handed back, or null.
  */
 export function chooseLiveSale(): Promise<LiveSale | null> {
@@ -195,7 +195,7 @@ export function chooseLiveSale(): Promise<LiveSale | null> {
     .catch(() => {
       // The error's own text can carry the keyed endpoint, so the log gets a
       // fixed line and never the message.
-      console.error("live sale: devnet did not answer, the last answer stands");
+      console.error("live sale: the chain did not answer, the last answer stands");
       return held?.live ?? null;
     })
     .finally(() => {
@@ -207,7 +207,7 @@ export function chooseLiveSale(): Promise<LiveSale | null> {
   return started;
 }
 
-/** The last answer, however old, for a caller that cannot wait on devnet. */
+/** The last answer, however old, for a caller that cannot wait on the chain. */
 export function lastLiveSale(): LiveSale | null {
   return held?.live ?? null;
 }

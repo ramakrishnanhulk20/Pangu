@@ -1,7 +1,9 @@
 import record from "../../scripts/sales.json";
 
+import { NETWORK } from "./network";
+
 /**
- * The sales the devnet scripts opened. This file is the one the scripts append
+ * The sales the scripts opened on this network. This file is the one the scripts append
  * to, so the app and the commands never disagree about which mints exist. Only
  * the mint is used as an input: every number on screen is read back off the
  * chain, never taken from here.
@@ -26,6 +28,6 @@ export function openedSales(): OpenedSale[] {
   // A retired entry stays in the file as history but never becomes a default
   // or a picker choice: the scripts mark it with retiredAt.
   return (record as OpenedSale[]).filter(
-    (sale) => sale.network === "devnet" && sale.retiredAt === undefined
+    (sale) => sale.network === NETWORK && sale.retiredAt === undefined
   );
 }

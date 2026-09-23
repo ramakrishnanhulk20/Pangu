@@ -1,0 +1,73 @@
+fork     : http://localhost:8899, genesis EeqbLoFxWQXXZP8QBxPqQR9T9dqxicbdcV6zwLbvLBbu, not mainnet's
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG, executable on the fork
+site     : http://localhost:3471, built for mainnet
+wallet   : 87m7k9NTWCtACBBzvu9MFznZL9pmmcExsk5mqNy9o5wX, a throwaway made for this run, its key kept outside the repository
+funded   : 5 SOL by the fork's airdrop, 50000 USDC and 20 AAPLx from the rehearsal's genesis wallets
+apple    : $0.0298 on the fork, a 5 percent ceiling at $0.0312
+curve    : 1000 shares, 20 percent kept, raise $90.9, 800.00 on the curve
+ok    /: the page says rehearsal
+ok    the attack ledger says simulate only, with no send toggle
+ok    no 'send for real' switch on the page
+ok    the demo dollar route answers 404 on mainnet: 404 There are no demo dollars on this network.
+ok    /launch: the page says rehearsal
+paying   : USDC, AAPLx
+ok    USDC is the default paying token
+ok    AAPLx is offered, its badge being on the fork
+ok    TSLAx, NVDAx and SPYx are left out, their badges not being cloned into the fork
+ok    no demo dollar and no devnet SOL on mainnet
+ok    the balance is written in SOL, not devnet SOL
+
+launch 1 : PRCEIL, USDC, open, 5 percent over Apple, cap 10 percent, 14 days
+ok    launch 1 reached the done state: 9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX
+ok    launch 1: the sale reads back from the fork
+ok    launch 1: paid in USDC: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+ok    launch 1: ceiling 5 percent: 500
+ok    launch 1: ceiling follows Apple's exchange price
+ok    launch 1: issuer is the throwaway
+ok    launch 1: explorer links point at the fork, never at mainnet: https://explorer.solana.com/address/9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX?cluster=custom&customUrl=http%3A%2F%2Flocalhost%3A8899
+ok    /sale/9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX: the page says rehearsal
+holding  : You hold 0 shares, you may still buy 79.99 shares under the cap. You have $50,000 to spend.
+check    : 23 shares, pass, "The rules would take this buy right now. A pass is the chain as it stands, not a promise: the buy is checked again when it lands."
+ok    a buy of 23 shares passes the page's check
+buy      : landed, "The buy landed on Solana. open the transaction"
+ok    the buy under the cap landed
+holding  : You hold 23 shares, you may still buy 56.99 shares under the cap. You have $49,999 to spend.
+check    : 39 more shares, refused, "This purchase would push the price too far above the real stock price. Buy fewer shares so the curve stays under the ceiling, or wait for the stock price to rise."
+ok    a further 39 shares, still under the cap, is refused by the ceiling before signing
+ok    the buy button is held while the rules refuse
+sell     : landed, "The sell landed on Solana. open the transaction"
+ok    the shares sold back
+holding  : 0.000001555 shares left on chain after selling 23 back
+ok    under a thousandth of a share left after the sell: 1555 raw units
+ok    /launch: the page says rehearsal
+ok    paying in AAPLx turns the ceiling off and says why
+ceiling  : Off. A ceiling compares the curve with a stock price in dollars, so the program refuses one on a sale paid in AAPLx BandNeedsDollarQuote. Pick USDC above to set one.
+ok    the raise is written in AAPLx
+
+launch 2 : PRAAPL, AAPLx, open, no ceiling, cap 10 percent, 14 days
+ok    launch 2 reached the done state: 8rogTETC8247CKrcWcipDKBTJTJf6DkaHNR6mZf8WoRA
+ok    launch 2: paid in AAPLx: XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp
+ok    launch 2: no ceiling
+ok    /sale/8rogTETC8247CKrcWcipDKBTJTJf6DkaHNR6mZf8WoRA: the page says rehearsal
+quote    : About 5 shares for 0.1573 AAPLx, fee included, at the pool's price now.
+ok    the quote is written in AAPLx, never in dollars
+buy      : landed, "The buy landed on Solana. open the transaction"
+ok    a buy paid in AAPLx landed
+holding  : You hold 5 shares, you may still buy 75 shares under the cap. You have 19.84 AAPLx to spend.
+ok    /sales: the page says rehearsal
+ok    /sales lists both launched sales
+ok    /sales writes the AAPLx sale in AAPLx
+ok    /sale/9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX: the page says rehearsal
+ok    /portfolio: the page says rehearsal
+ok    /portfolio shows both sales this wallet issued: 2 issued
+ok    /portfolio shows the AAPLx holding: 2 held
+totals   : SALES YOU ARE IN 02 IN DOLLARS under $0.01 across 1 sale IN AAPLX 0.1577 AAPLx across 1 sale SALES YOU ISSUED 02
+refresh  : 503 {"reason":"Price refreshes are not switched on for this deploy."}
+ok    no uncaught errors on any page: 
+blocked  : fonts.googleapis.com
+
+every check passed; mints 9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX and 8rogTETC8247CKrcWcipDKBTJTJf6DkaHNR6mZf8WoRA, on the fork only
+
+refresh floor, a second mainnet-mode server whose PRICE_REFRESH_KEY is a throwaway holding 0 SOL on the fork:
+  POST /api/price/refresh 9m1Sur8ZUFRb4vr1JFcHuohJvphty9JgKtjzAdRND6gX -> 503 {"reason":"The price is waiting for a refresh: the key that pays for price updates is running low. Buys wait for a fresh price; selling back is never affected."}
+  server log: price refresh: 3aR6LnqSutqkZx5tFrCTFH9Z5bKmUxMsWmJrNDCYqbpJ holds 0 SOL, under the 0.05 SOL floor; nothing is posted until it is topped up

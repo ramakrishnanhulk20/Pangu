@@ -1,0 +1,16 @@
+light 1440: opening $275.95; AAPLx, trades all week: $339.10, last published price; sideways overflow 0px; page errors 0
+01
+No wallet can end up holding more than 1.09 shares, 10 percent of what the curve sells, however many buys or accounts it spreads them over.
+02
+Anyone with a wallet can buy.
+03
+No buy may leave the price more than 5 percent over AAPLx's price. At $356.05 today, buying stops once 66 percent of the curve has sold, until the stock moves up.
+04
+With no fresh stock price, buys wait for one.
+05
+Every rule lifts 14 days after launch, cap and access included, and the token then moves freely.
+06
+Selling back to the pool is always open.
+light 375: opening $275.95; AAPLx, trades all week: $339.10, last published price; sideways overflow 0px; page errors 0
+dark 1440: opening $275.95; AAPLx, trades all week: $339.10, last published price; sideways overflow 0px; page errors 0
+dark 375: opening $275.95; AAPLx, trades all week: $339.10, last published price; sideways overflow 0px; page errors 0

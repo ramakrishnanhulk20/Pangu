@@ -5,7 +5,8 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
 import { tokenAmount } from "@/lib/format";
-import { explorerTx, type Target } from "@/lib/break";
+import type { Target } from "@/lib/break";
+import { CHAIN, DEMO_DOLLARS_ON, FAUCET_ON, explorerTx } from "@/lib/network";
 
 import { Spinner } from "./strike";
 
@@ -89,13 +90,13 @@ export function WalletStrip({
       );
       await connection.confirmTransaction(signature, "confirmed");
       if (stillHere()) {
-        setFaucetNote(`${AIRDROP_SOL} devnet SOL landed.`);
+        setFaucetNote(`${AIRDROP_SOL} ${CHAIN.sol} landed.`);
         onFunded();
       }
     } catch {
       if (stillHere()) {
         setFaucetNote(
-          "The devnet faucet turned this wallet down, which it does when an address or an address range has asked recently. Take some from faucet.solana.com instead."
+          `The ${CHAIN.inSentence} faucet turned this wallet down, which it does when an address or an address range has asked recently. Take some from faucet.solana.com instead.`
         );
       }
     } finally {
@@ -148,14 +149,14 @@ export function WalletStrip({
     }
   };
 
-  const dollarsOffered = target !== null && !target.payingInSol;
+  const dollarsOffered = DEMO_DOLLARS_ON && target !== null && !target.payingInSol;
 
   return (
     <div className="border-t border-line pt-6">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <WalletButton />
 
-        {wallet !== null && (
+        {wallet !== null && FAUCET_ON && (
           <button
             type="button"
             onClick={askFaucet}
@@ -163,29 +164,31 @@ export function WalletStrip({
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-3.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors duration-200 hover:border-ink hover:text-ink disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
           >
             {asking && <Spinner />}
-            {asking ? "asking the faucet" : `take ${AIRDROP_SOL} devnet SOL`}
+            {asking ? "asking the faucet" : `take ${AIRDROP_SOL} ${CHAIN.sol}`}
           </button>
         )}
 
-        <a
-          href={FAUCET}
-          target="_blank"
-          rel="noreferrer"
-          className="border-b border-line pb-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          faucet.solana.com
-        </a>
+        {FAUCET_ON && (
+          <a
+            href={FAUCET}
+            target="_blank"
+            rel="noreferrer"
+            className="border-b border-line pb-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            faucet.solana.com
+          </a>
+        )}
       </div>
 
       <dl className="mt-5 flex flex-wrap gap-x-10 gap-y-4 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
         <div>
-          <dt>your devnet SOL</dt>
+          <dt>your {CHAIN.sol}</dt>
           <dd className="mt-1.5 text-[15px] normal-case tracking-normal text-ink tabular-nums">
             {lamports !== null
               ? (lamports / LAMPORTS_PER_SOL).toFixed(4)
               : wallet === null
                 ? "not connected"
-                : "reading devnet"}
+                : `reading ${CHAIN.inSentence}`}
           </dd>
         </div>
         {target !== null && (
@@ -197,7 +200,7 @@ export function WalletStrip({
                   ? "wrapped SOL"
                   : wallet === null
                     ? "not connected"
-                    : "reading devnet"
+                    : `reading ${CHAIN.inSentence}`
                 : `${tokenAmount(payingRaw, target.quoteDecimals)}${target.payingInSol ? " wrapped SOL" : ""}`}
             </dd>
             {dollarsOffered && (
@@ -209,7 +212,7 @@ export function WalletStrip({
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent px-3.5 font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-ink disabled:translate-y-0 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                 >
                   {minting && <Spinner />}
-                  {minting ? "minting on devnet" : "get demo dollars"}
+                  {minting ? `minting on ${CHAIN.inSentence}` : "get demo dollars"}
                 </button>
               </dd>
             )}
@@ -219,7 +222,7 @@ export function WalletStrip({
 
       {dollarsOffered && wallet === null && (
         <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
-          connect a devnet wallet first
+          connect {CHAIN.wallet} first
         </p>
       )}
 
@@ -248,7 +251,7 @@ export function WalletStrip({
         <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">{faucetNote}</p>
       )}
 
-      {target !== null && !target.payingInSol && payingRaw === 0n && granted === null && (
+      {dollarsOffered && payingRaw === 0n && granted === null && (
         <p className="mt-4 max-w-[52ch] text-[13px] leading-relaxed text-muted">
           This sale is priced in a token minted for the demo, not in SOL, and your
           wallet holds none of it. Take some above and every row on the ledger is

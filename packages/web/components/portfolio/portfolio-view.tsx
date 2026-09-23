@@ -10,6 +10,7 @@ import { Spinner } from "@/components/break/strike";
 import { clock, explorerAddress, money, shortAddress } from "@/components/readout/format";
 import { DirectoryMotif } from "@/components/sales/directory-motif";
 import { useLenis } from "@/components/smooth-scroll";
+import { CHAIN } from "@/lib/network";
 import type { Portfolio } from "@/lib/portfolio";
 
 import { HoldingsLedger, LABEL } from "./holdings-ledger";
@@ -48,7 +49,7 @@ function Title({ wallet, still }: { wallet: string | null; still: boolean }) {
   return (
     <header className="mx-auto max-w-[1500px]">
       <motion.p {...rise(0)} className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
-        your wallet, read off devnet
+        {`your wallet, read off ${CHAIN.inSentence}`}
       </motion.p>
       <h1 className="-ml-[0.03em] mt-6 font-display text-[clamp(3rem,10vw,9rem)] font-semibold leading-[0.88] tracking-[-0.05em]">
         <span className="block overflow-hidden pb-[0.04em]">
@@ -214,7 +215,7 @@ function Reading({ wallet }: { wallet: string }) {
     <div data-testid="portfolio-reading" className="mx-auto mt-16 max-w-[1500px] sm:mt-24">
       <p className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.16em] text-pending">
         <Spinner />
-        {`reading every sale on devnet for ${shortAddress(wallet)}, up to half a minute when the list of sales is read fresh`}
+        {`reading every sale on ${CHAIN.inSentence} for ${shortAddress(wallet)}, up to half a minute when the list of sales is read fresh`}
       </p>
       <div aria-hidden="true" className="mt-8 border-t border-ink">
         {[0, 1, 2].map((row) => (
@@ -353,7 +354,7 @@ export function PortfolioView() {
             <p className="flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted" data-testid="portfolio-read-at">
               <span className={`inline-flex h-2 w-2 rounded-full ${reading || portfolio.stale ? "bg-pending" : "bg-accent"}`} />
               {reading
-                ? "reading devnet"
+                ? `reading ${CHAIN.inSentence}`
                 : `read ${clock(portfolio.readAt)}${portfolio.stale ? ", the latest read went unanswered" : ""}, again every 15 s`}
             </p>
             <button

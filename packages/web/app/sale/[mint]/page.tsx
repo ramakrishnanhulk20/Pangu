@@ -8,8 +8,9 @@ import { SaleNotFound } from "@/components/sale/sale-not-found";
 import { SaleReadoutBlock } from "@/components/sale/sale-readout-block";
 import { SaleTitle } from "@/components/sale/sale-title";
 import { findSale } from "@/lib/directory";
+import { CHAIN } from "@/lib/network";
 
-// Every load reads devnet rather than a snapshot from build time.
+// Every load reads the chain rather than a snapshot from build time.
 export const dynamic = "force-dynamic";
 
 const READOUT = "the-sale";
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return lookup.found
     ? {
         title: `${lookup.sale.name} | Pangu`,
-        description: `${lookup.sale.name}, a Pangu sale on Solana devnet, read live off the chain.`,
+        description: `${lookup.sale.name}, a Pangu sale on ${CHAIN.label}, read live off the chain.`,
       }
     : { title: "No sale here | Pangu" };
 }

@@ -12,13 +12,15 @@ import { dbcProgram } from "pangu-sdk/dbc";
 import record from "../../scripts/sales.json";
 
 import { chooseLiveSale } from "./live-sale";
+import { CHAIN, NETWORK, payingUnit, type Money } from "./network";
 import type { OpenedSale } from "./sales";
-import { devnetConnection } from "./solana";
+import { chainConnection } from "./solana";
 
 /*
- * Every Pangu sale on devnet, read off the chain. Server only: it reads through
- * DEVNET_RPC_URL, which may carry a key, and it asks lib/live-sale which sale
- * the front page leads with, which can reach the demo key.
+ * Every Pangu sale on the network this app was built for, read off the chain.
+ * Server only: it reads through the server's endpoint, which may carry a key,
+ * and it asks lib/live-sale which sale the front page leads with, which can
+ * reach the demo key.
  *
  * sales.json does not decide which sales exist. It only says which ones are the
  * app's own demo sales, the order they are featured in, and which of them were
@@ -50,7 +52,7 @@ export interface DirectorySale {
   feedId: string | null;
   /** Null only when neither the rules nor the launch template could be read. */
   quoteMint: string | null;
-  money: "dollars" | "SOL";
+  money: Money;
   /** True when the sale is paid for in the demo dollar the demo dollars button mints. */
   demoDollar: boolean;
   quoteDecimals: number | null;
@@ -91,7 +93,7 @@ export interface Directory {
   skipped: number;
   /** Unix milliseconds of the read this came from. */
   readAt: number;
-  /** True when devnet did not answer the latest read and this is the last one that did. */
+  /** True when the chain did not answer the latest read and this is the last one that did. */
   stale: boolean;
   /** Set when there is no reading at all. A sentence that says what to do next. */
   failure: string | null;
@@ -110,20 +112,19 @@ const FRESH_MS = 30_000;
 
 // A mint the held list does not know may be a sale launched a moment ago, so a
 // miss reads the chain again, but never more often than this. A stranger asking
-// for made-up mints costs devnet one directory read per window, not one per ask.
+// for made-up mints costs the chain one directory read per window, not one per ask.
 const MISS_REREAD_MS = 5_000;
 
-// After devnet fails to answer, the next ten seconds are served from what is
+// After the chain fails to answer, the next ten seconds are served from what is
 // held, the window lib/readout.ts keeps a miss for, so an outage does not turn
 // every visit into another read of a node that is not answering.
 const FAILED_MS = 10_000;
 
-const NO_ANSWER =
-  "Devnet did not answer the read of every sale. Press try again in a moment.";
+const NO_ANSWER = `${CHAIN.atStart} did not answer the read of every sale. Press try again in a moment.`;
 
 const WRAPPED_SOL = NATIVE_MINT.toBase58();
 
-const DEMO_SALES = (record as OpenedSale[]).filter((sale) => sale.network === "devnet");
+const DEMO_SALES = (record as OpenedSale[]).filter((sale) => sale.network === NETWORK);
 
 /**
  * The paying tokens of the demo sales that do not pay in SOL: the demo dollar
@@ -174,7 +175,7 @@ function dammConfigOf(config: PoolConfig): PublicKey | null {
  * each in one batched call. About six calls whatever the number of sales.
  */
 async function readFresh(): Promise<Held> {
-  const connection: Connection = devnetConnection();
+  const connection: Connection = chainConnection();
   let skipped = 0;
   const entries = await saleDirectory(connection, { onSkipped: () => (skipped += 1) });
 
@@ -291,7 +292,7 @@ async function readFresh(): Promise<Held> {
       bandBps: entry.sale.bandBps,
       feedId: entry.hasBand ? entry.sale.priceFeedId : null,
       quoteMint: quoteKey,
-      money: quoteKey === WRAPPED_SOL ? "SOL" : "dollars",
+      money: payingUnit(quoteKey),
       demoDollar: quoteKey !== null && DEMO_DOLLARS.has(quoteKey),
       quoteDecimals: decimals,
       baseDecimals: entry.sale.baseDecimals,
@@ -347,7 +348,7 @@ function readShared(): Promise<Held> {
       failedAt = Date.now();
       // The thrown text can carry the keyed endpoint, so the log gets a fixed
       // line and never the message.
-      console.error("sale directory: devnet did not answer, the last reading stands");
+      console.error("sale directory: the chain did not answer, the last reading stands");
       throw error;
     })
     .finally(() => {
@@ -358,7 +359,7 @@ function readShared(): Promise<Held> {
 }
 
 /**
- * The held reading when it is fresh, a new one otherwise. Null when devnet has
+ * The held reading when it is fresh, a new one otherwise. Null when the chain has
  * never answered. A failed read is not tried again for ten seconds.
  */
 async function current(): Promise<{ held: Held; stale: boolean } | null> {
@@ -413,7 +414,7 @@ export type Lookup =
  * reads the chain again once the list is a few seconds old, so a sale launched
  * a moment ago is found without waiting out the thirty seconds.
  *
- * `unanswered` is true when devnet has not answered, which trying again may
+ * `unanswered` is true when the chain has not answered, which trying again may
  * fix, as against a mint no Pangu sale uses.
  */
 export async function findSale(mint: string): Promise<Lookup> {

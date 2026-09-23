@@ -10,6 +10,7 @@ import {
   type Refusal,
 } from "@/lib/launch";
 import { Reveal } from "@/components/break/strike";
+import { PAYING_TOKENS, isListedDollar, payingToken, type PayingToken } from "@/lib/network";
 import { MAX_DESCRIPTION, STORAGE_WORDS } from "@/lib/token-metadata";
 
 import { Choice, Field, Tag, TextArea, TextInput } from "./fields";
@@ -37,6 +38,8 @@ export function LaunchForm({
   onLogo,
   onClearLogo,
   storage,
+  offered,
+  stocksReading,
 }: {
   form: Form;
   set: Set;
@@ -46,9 +49,16 @@ export function LaunchForm({
   onLogo: (file: File) => void;
   onClearLogo: () => void;
   storage: StorageState;
+  /** The paying tokens this network offers, less any stock whose badge is not on chain. */
+  offered: readonly PayingToken[];
+  /** True while the stock tokens' badges are still being read. */
+  stocksReading: boolean;
 }) {
   const preview = plan.preview;
-  const money = form.paying === "dollar" ? "dollars" : "SOL";
+  const paying = payingToken(form.paying);
+  const money = paying?.unit ?? "dollars";
+  const priced = paying !== null && isListedDollar(paying.mint);
+  const dollar = PAYING_TOKENS.find((token) => isListedDollar(token.mint)) ?? null;
   const soldOnCurve = Number.isFinite(Number(form.keptBack)) ? 100 - Number(form.keptBack) : null;
 
   return (
@@ -101,11 +111,11 @@ export function LaunchForm({
           <Field
             id="launch-paying"
             label="Buyers pay in"
-            refusals={[]}
+            refusals={refusalsFor(plan, "paying")}
             helper={
-              form.paying === "dollar"
-                ? "The demo dollar: a devnet dollar token this site hands out for testing. A price ceiling needs buyers paying in dollars."
-                : "Devnet SOL, free from the faucet. A sale paid in SOL cannot carry a price ceiling."
+              stocksReading
+                ? `${paying?.about ?? ""} Reading which stock tokens Meteora takes as payment.`.trim()
+                : paying?.about
             }
           >
             <Choice
@@ -113,14 +123,11 @@ export function LaunchForm({
               value={form.paying}
               onPick={(value) => {
                 set("paying", value);
-                if (value === "sol") {
+                if (!isListedDollar(payingToken(value)?.mint)) {
                   set("band", false);
                 }
               }}
-              options={[
-                { value: "dollar", label: "Demo dollar" },
-                { value: "sol", label: "Devnet SOL" },
-              ]}
+              options={offered.map((token) => ({ value: token.id, label: token.label }))}
             />
           </Field>
 
@@ -345,9 +352,10 @@ export function LaunchForm({
             tag="PriceOutsideBand"
             refusals={refusalsFor(plan, "band", "bandPercent")}
           >
-            {form.paying === "sol" ? (
+            {!priced ? (
               <p data-testid="launch-band-sol" className="max-w-[54ch] text-[14px] leading-relaxed text-muted">
-                Off. A ceiling compares the curve with a stock price in dollars, so the program refuses one on a sale paid in SOL <Tag>BandNeedsDollarQuote</Tag>. Pick the demo dollar above to set one.
+                Off. A ceiling compares the curve with a stock price in dollars, so the program refuses one on a sale paid in {paying?.called ?? "this token"} <Tag>BandNeedsDollarQuote</Tag>.
+                {dollar !== null && ` Pick ${dollar.called} above to set one.`}
               </p>
             ) : (
               <>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { IssuedCredential } from "pangu-sdk";
 
 import { Strike } from "@/components/break/strike";
+import { CHAIN } from "@/lib/network";
 import {
   VerifyError,
   explorerAddress,
@@ -25,7 +26,7 @@ type RowState =
   | { kind: "revoked"; signature: string }
   | { kind: "failed"; message: string; detail: string | null };
 
-/** Step 03. Everything issued under the verifier, read off devnet, with a revoke on each row. */
+/** Step 03. Everything issued under the verifier, read off the chain, with a revoke on each row. */
 export function IssuedList({
   connection,
   wallet,
@@ -78,7 +79,7 @@ export function IssuedList({
           ? { kind: "failed", message: error.message, detail: error.detail }
           : {
               kind: "failed",
-              message: "Devnet did not answer. Check the connection and press again.",
+              message: `${CHAIN.atStart} did not answer. Check the connection and press again.`,
               detail: error instanceof Error ? error.message : String(error),
             }
       );
@@ -211,7 +212,7 @@ export function IssuedList({
           {revokedHere.length > 0 && (
             <div className="mt-5 space-y-2">
               <p className="max-w-[56ch] text-[13px] text-muted">
-                Revoked on devnet. The deposit came back to your wallet, and the next buy from that
+                Revoked on {CHAIN.inSentence}. The deposit came back to your wallet, and the next buy from that
                 wallet in a credential-mode sale is refused.
               </p>
               <Landed

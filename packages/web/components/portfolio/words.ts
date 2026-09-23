@@ -1,6 +1,7 @@
 import { ACCESS_MODE } from "pangu-sdk";
 
 import { utcDay } from "@/components/readout/format";
+import { CHAIN } from "@/lib/network";
 import type { Holding, Total } from "@/lib/portfolio";
 
 /*
@@ -47,7 +48,7 @@ export function noBuyReason(holding: Holding): string | null {
     return null;
   }
   if (holding.state === "unknown") {
-    return "Devnet did not say where this sale stands.";
+    return `${CHAIN.atStart} did not say where this sale stands.`;
   }
   if (BigInt(holding.capRoom) === 0n) {
     return "Your cap is used up. Sell some back to make room.";
@@ -84,14 +85,17 @@ export function stateLine(sale: {
         detail: sale.endsAt === null ? "no end date" : `offering ends ${utcDay(sale.endsAt * 1000)}`,
       };
     default:
-      return { word: "Unreadable", detail: "devnet did not say where it stands" };
+      return { word: "Unreadable", detail: `${CHAIN.inSentence} did not say where it stands` };
   }
 }
 
 /** What a total is counted in: the demo dollar says so, so it is never read as real money. */
 export function totalUnit(total: Total): string {
   if (total.money === "SOL") {
-    return "in devnet SOL";
+    return `in ${CHAIN.sol}`;
+  }
+  if (total.money !== "dollars") {
+    return `in ${total.money}`;
   }
   return total.demoDollar ? "in demo dollars" : "in dollars";
 }

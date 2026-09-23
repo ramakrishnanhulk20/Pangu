@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { timeUntil } from "@/components/readout/format";
 import { feedWords } from "@/lib/feeds";
+import { CHAIN } from "@/lib/network";
 import type { HeroPulse, Offering } from "@/lib/pulse";
 
 const POLL_MS = 15_000;
@@ -25,7 +26,7 @@ function whole(value: number): string {
 }
 
 /**
- * Counts up to the number devnet just gave. The true value is what the server
+ * Counts up to the number the chain just gave. The true value is what the server
  * rendered, so it is in the HTML from the first paint; the count is written
  * straight to the text node afterwards, so no frame of it re-renders React.
  */
@@ -124,7 +125,7 @@ export function PulseFallback() {
       <div className="flex items-center gap-2 pt-1">
         <LiveDot still />
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-          reading devnet
+          {`reading ${CHAIN.inSentence}`}
         </span>
       </div>
       <Cell label="on the curve now">
@@ -142,7 +143,7 @@ export function PulseFallback() {
 
 /**
  * The live line above the title. It arrives server rendered with real numbers
- * in it, then asks devnet again every fifteen seconds. No wallet is involved.
+ * in it, then asks the chain again every fifteen seconds. No wallet is involved.
  */
 export function PulseRow({ initial }: { initial: HeroPulse }) {
   const still = useReducedMotion() === true;

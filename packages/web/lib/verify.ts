@@ -23,13 +23,15 @@ import {
   type IssuedCredential,
 } from "pangu-sdk";
 
-import { devnetRpcUrl } from "./solana";
+import { CHAIN, FAUCET_ON, browserRpcUrl } from "./network";
+
+export { explorerAddress, explorerTx } from "./network";
 
 /*
  * The verifier console's chain work: set up a credential and schema, issue
  * credentials to wallets, revoke them, list them, and check one wallet.
  *
- * Everything here runs in the browser against devnet. Every transaction is
+ * Everything here runs in the browser against the chain. Every transaction is
  * simulated before the wallet is asked to sign it, so a verifier never signs
  * something the chain would refuse, and every refusal is put in plain words.
  */
@@ -45,7 +47,7 @@ const SCHEMA_DESCRIPTION = "a wallet this verifier has checked, for Pangu creden
 /** The attestation service writes names into addresses, which caps them at 32 bytes. */
 export const MAX_NAME_BYTES = 32;
 
-/** Devnet's transaction size limit, in bytes. */
+/** Solana's transaction size limit, in bytes. */
 const TRANSACTION_LIMIT = 1232;
 
 /** getMultipleAccounts answers at most this many addresses per call. */
@@ -104,8 +106,8 @@ function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respo
   return fetch(input, { ...init, signal });
 }
 
-/** A devnet connection that paces itself. Nothing here ever talks to mainnet. */
-export function verifyConnection(endpoint: string = devnetRpcUrl()): Connection {
+/** A connection that paces itself, on the browser's endpoint unless another is handed in. */
+export function verifyConnection(endpoint: string = browserRpcUrl()): Connection {
   // web3.js types its fetch option against its own bundled fetch declaration.
   // The call shape is the platform's, so it is handed over as the config wants.
   const config = { commitment: "confirmed", fetch: pacedFetch } as unknown as ConnectionConfig;
@@ -537,7 +539,9 @@ function plainRefusal(logs: readonly string[] | null, error: unknown): VerifyErr
 
   if (/insufficient lamports|InsufficientFundsForFee|AccountNotFound/i.test(`${joined} ${errorText}`)) {
     return new VerifyError(
-      "This wallet does not have enough devnet SOL for the fees and deposits. Take some from faucet.solana.com and press again.",
+      FAUCET_ON
+        ? `This wallet does not have enough ${CHAIN.sol} for the fees and deposits. Take some from faucet.solana.com and press again.`
+        : "This wallet does not have enough SOL for the fees and deposits. Add some SOL and press again.",
       last
     );
   }
@@ -693,15 +697,6 @@ export async function saleVerifiers(
     });
   }
   return found;
-}
-
-export function explorerTx(signature: string): string {
-  return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-}
-
-export function explorerAddress(address: PublicKey | string): string {
-  const text = typeof address === "string" ? address : address.toBase58();
-  return `https://explorer.solana.com/address/${text}?cluster=devnet`;
 }
 
 /** First and last four characters, the way wallets show an address. */

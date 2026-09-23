@@ -6,13 +6,24 @@ import type { Attack, AttackResult, Expected, Target } from "@/lib/break";
 import {
   NEEDS_REAL_BUY,
   OFFERING_OVER_LINE,
-  explorerTx,
   liftedByOffering,
   plainFailure,
+  type FundingWords,
 } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
+import { CHAIN, DEMO_DOLLARS_ON, FAUCET_ON, LEDGER_SENDS, explorerTx } from "@/lib/network";
 
 import { Spinner, Strike } from "./strike";
+
+/** What a wallet short of SOL or of the paying token is told to do on this network. */
+const FUNDING: FundingWords = {
+  noSol: FAUCET_ON
+    ? `This wallet has no ${CHAIN.sol}: use the faucet link above.`
+    : "This wallet has no SOL for the fee. Add a little SOL to it and run the row again.",
+  shortToken: DEMO_DOLLARS_ON
+    ? "Get demo dollars above first. This wallet does not hold enough of the token this sale is priced in, so the token program stopped the buy before the sale's rules were reached."
+    : "This wallet does not hold enough of the token this sale is priced in, so the token program stopped the buy before the sale's rules were reached.",
+};
 
 /** Where one row has got to. */
 export type RowStatus =
@@ -106,7 +117,7 @@ export function AttackRow({
   target: Target | null;
   state: RowState;
   connected: boolean;
-  /** True once devnet has answered and the sale behind the row is known. */
+  /** True once the chain has answered and the sale behind the row is known. */
   ready: boolean;
   /** True when this row spends more of the paying token than the wallet holds. */
   payingShort: boolean;
@@ -186,11 +197,16 @@ export function AttackRow({
 
           {payingShort && (
             <p className="mt-3 font-mono text-[10px] uppercase leading-none tracking-[0.16em] text-accent">
-              get demo dollars above first
+              {DEMO_DOLLARS_ON ? "get demo dollars above first" : "not enough of the paying token"}
             </p>
           )}
 
-          {offerRealBuy && <RealBuyOffer firstBuy={firstBuy} onRealBuy={onRealBuy} />}
+          {offerRealBuy &&
+            (LEDGER_SENDS ? (
+              <RealBuyOffer firstBuy={firstBuy} onRealBuy={onRealBuy} />
+            ) : (
+              <SharesFirst mint={target?.mint.toBase58() ?? null} />
+            ))}
 
           <AnimatePresence initial={false}>
             {(state.status === "done" ||
@@ -288,7 +304,7 @@ export function AttackRow({
             </button>
           ) : (
             <span className="block max-w-[14rem] font-mono text-[10px] uppercase leading-relaxed tracking-[0.16em] text-muted">
-              {connected ? "reading devnet" : "connect a devnet wallet to run this"}
+              {connected ? `reading ${CHAIN.inSentence}` : `connect ${CHAIN.wallet} to run this`}
             </span>
           )}
         </div>
@@ -343,10 +359,41 @@ function RealBuyOffer({ firstBuy, onRealBuy }: { firstBuy: FirstBuy; onRealBuy: 
           </span>
         ) : (
           <span className="max-w-[36ch] text-[13px] leading-relaxed text-muted">
-            Your wallet signs row 01 and it lands on devnet.
+            Your wallet signs row 01 and it lands on {CHAIN.inSentence}.
           </span>
         )}
       </div>
+    </motion.div>
+  );
+}
+
+/**
+ * What a row that needs shares says where the ledger only simulates. Row 01
+ * cannot be sent from here, so the shares come from an ordinary buy on the
+ * sale's own page.
+ */
+function SharesFirst({ mint }: { mint: string | null }) {
+  const still = useReducedMotion() === true;
+  return (
+    <motion.div
+      initial={still ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={still ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="mt-5 max-w-[62ch] border-l-2 border-accent/60 pl-4"
+    >
+      <p className="text-[14px] leading-relaxed">{NEEDS_REAL_BUY}</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-muted">
+        The ledger only simulates here, so buy some shares on the sale&rsquo;s own page, then run this row.
+      </p>
+      {mint !== null && (
+        <a
+          href={`/sale/${mint}`}
+          className="group/buy mt-4 inline-flex h-11 items-center gap-2.5 rounded-lg border border-accent px-5 text-[13px] font-medium text-accent transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        >
+          Buy on the sale page
+          <span className="transition-transform duration-200 group-hover/buy:translate-x-0.5">&rarr;</span>
+        </a>
+      )}
     </motion.div>
   );
 }
@@ -389,7 +436,7 @@ function Verdict({
   }
   const matched = asExpected(attack, state);
   const seen = result.outcome !== "unseen";
-  const failure = result.outcome === "unclear" ? plainFailure(result, target, attack) : null;
+  const failure = result.outcome === "unclear" ? plainFailure(result, target, attack, FUNDING) : null;
   const tone =
     result.outcome === "allowed"
       ? "text-accent"
@@ -441,9 +488,9 @@ function Verdict({
         </span>
         {!seen ? (
           <span className="text-muted">the chain has no record of it</span>
-        ) : result.link !== null ? (
+        ) : result.signature !== null ? (
           <a
-            href={result.link}
+            href={explorerTx(result.signature)}
             target="_blank"
             rel="noreferrer"
             className="border-b border-line pb-0.5 text-ink transition-colors hover:border-accent hover:text-accent"
@@ -455,9 +502,11 @@ function Verdict({
         )}
       </div>
 
-      {attack.id === "honest-buy" && seen && result.link === null && (
+      {attack.id === "honest-buy" && seen && result.signature === null && (
         <p className="mt-3 text-[13px] leading-relaxed text-muted">
-          Simulated only, nothing landed. Rows 03, 06 and 09 need a real buy.
+          {LEDGER_SENDS
+            ? "Simulated only, nothing landed. Rows 03, 06 and 09 need a real buy."
+            : "Simulated only, nothing landed. Rows 03, 06 and 09 need shares bought on the sale's own page."}
         </p>
       )}
     </div>

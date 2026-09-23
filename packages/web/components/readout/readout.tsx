@@ -1,10 +1,11 @@
 import { chooseLiveSale } from "@/lib/live-sale";
+import { CHAIN } from "@/lib/network";
 import { defaultChoice, readReadout, readSaleChoices } from "@/lib/readout";
 
 import { SaleReadout } from "./sale-readout";
 
 /**
- * Reads devnet on the server so the section's numbers are in the first HTML,
+ * Reads the chain on the server so the section's numbers are in the first HTML,
  * then hands them to the client piece that keeps them moving.
  *
  * Server only: the read behind it pulls in Meteora's own SDK to reach the
@@ -18,7 +19,7 @@ export async function Readout({ id }: { id: string }) {
     return (
       <section id={id} className="border-t border-line px-[6vw] py-24">
         <p className="max-w-[46ch] text-[15px] text-muted">
-          No sale has been opened on Solana devnet yet, so there is nothing true
+          No sale has been opened on {CHAIN.label} yet, so there is nothing true
           to show here.
         </p>
       </section>

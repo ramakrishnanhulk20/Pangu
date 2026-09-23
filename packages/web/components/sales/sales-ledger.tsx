@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from "react";
 
 import { clock, explorerAddress, money, shortAddress } from "@/components/readout/format";
 import type { Directory, DirectorySale } from "@/lib/directory";
+import { CHAIN } from "@/lib/network";
 
 import { ceilingWords, stateWords, whoMayBuy } from "./words";
 
@@ -180,7 +181,7 @@ function Row({ sale, index, still }: { sale: DirectorySale; index: number; still
 
 /**
  * The directory as a ledger: one ruled line per sale, newest demo sale first,
- * every fact read off devnet. A row opens the sale's own page.
+ * every fact read off the chain. A row opens the sale's own page.
  */
 export function SalesLedger({ initial, all }: { initial: Directory; all: boolean }) {
   const still = useReducedMotion() === true;
@@ -228,7 +229,7 @@ export function SalesLedger({ initial, all }: { initial: Directory; all: boolean
             }`}
           />
           {reading
-            ? "reading devnet"
+            ? `reading ${CHAIN.inSentence}`
             : failure !== null
               ? "no reading"
               : `${directory.sales.length} ${directory.sales.length === 1 ? "sale" : "sales"}, read ${clock(

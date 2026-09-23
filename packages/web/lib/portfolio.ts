@@ -14,12 +14,13 @@ import {
 import { dbcProgram } from "pangu-sdk/dbc";
 
 import { findSale, readDirectory, type DirectorySale, type SaleState } from "./directory";
-import { devnetConnection } from "./solana";
+import { CHAIN, type Money } from "./network";
+import { chainConnection } from "./solana";
 
 /*
  * One wallet's place in every Pangu sale: what it holds, what the cap still
  * lets it buy, whether the rules let it buy at all, and the sales it issued.
- * Server only: every read goes through the server's own devnet endpoint, which
+ * Server only: every read goes through the server's own endpoint, which
  * may carry a key, and the directory it starts from is server only too.
  */
 
@@ -42,7 +43,7 @@ export interface Holding {
   retired: boolean;
   pool: string;
   dammPool: string | null;
-  money: "dollars" | "SOL";
+  money: Money;
   quoteMint: string | null;
   baseDecimals: number;
   /** Raw units of the sale token in the wallet's own account for it. */
@@ -77,7 +78,7 @@ export interface Issued {
   accessMode: number;
   retired: boolean;
   dammPool: string | null;
-  money: "dollars" | "SOL";
+  money: Money;
   buyers: number;
   raised: number | null;
   threshold: number | null;
@@ -86,7 +87,7 @@ export interface Issued {
 /** What a holding is worth in one paying token. Two paying tokens are never added together. */
 export interface Total {
   quoteMint: string;
-  money: "dollars" | "SOL";
+  money: Money;
   demoDollar: boolean;
   sales: number;
   value: number;
@@ -101,7 +102,7 @@ export interface Portfolio {
   totals: Total[];
   /** Unix milliseconds of the read this came from. */
   readAt: number;
-  /** True when devnet did not answer the latest read and this is the last one that did. */
+  /** True when the chain did not answer the latest read and this is the last one that did. */
   stale: boolean;
   /** Set when there is no reading at all. A sentence that says what to do next. */
   failure: string | null;
@@ -116,11 +117,11 @@ export type PortfolioAnswer =
 // and a second tab share one read, short enough that a sell shows on the next.
 const FRESH_MS = 15_000;
 
-// After devnet fails to answer for a wallet, the next ten seconds are served
+// After the chain fails to answer for a wallet, the next ten seconds are served
 // from what is held, the window the directory keeps a miss for.
 const FAILED_MS = 10_000;
 
-// A stranger asking about made-up wallets costs devnet about four calls each.
+// A stranger asking about made-up wallets costs the chain about four calls each.
 // This many fresh wallets per window, across every visitor, is plenty for real
 // use and caps what a script can spend of the keyed endpoint.
 const NEW_READS_PER_WINDOW = 24;
@@ -132,7 +133,7 @@ const MOST_HELD = 500;
 // getMultipleAccountsInfo takes at most one hundred addresses a call.
 const BATCH = 100;
 
-const NO_ANSWER = "Devnet did not answer the read of this wallet. Press read again in a moment.";
+const NO_ANSWER = `${CHAIN.atStart} did not answer the read of this wallet. Press read again in a moment.`;
 const BUSY =
   "This server is reading a lot of wallets right now. Wait ten seconds, then read again.";
 
@@ -229,9 +230,14 @@ function totalsOf(holdings: readonly Holding[], sales: readonly DirectorySale[])
     }
     byToken.set(holding.quoteMint, total);
   }
-  // Dollars first, then SOL, each by value, so the biggest number leads its kind.
-  return [...byToken.values()].sort((left, right) =>
-    left.money === right.money ? right.value - left.value : left.money === "dollars" ? -1 : 1
+  // Dollars first, then SOL, then any stock token, each by value, so the
+  // biggest number leads its kind.
+  const rank = (money: Money) => (money === "dollars" ? 0 : money === "SOL" ? 1 : 2);
+  return [...byToken.values()].sort(
+    (left, right) =>
+      rank(left.money) - rank(right.money) ||
+      left.money.localeCompare(right.money) ||
+      right.value - left.value
   );
 }
 
@@ -246,7 +252,7 @@ async function readFresh(wallet: PublicKey): Promise<Portfolio> {
   if (directory.failure !== null) {
     throw new Error("directory unanswered");
   }
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const sales = directory.sales;
 
   const keys: PublicKey[] = [];
@@ -395,7 +401,7 @@ function readShared(slot: Slot, wallet: PublicKey): Promise<Portfolio> {
     .catch((error: unknown) => {
       slot.failedAt = Date.now();
       // The thrown text can carry the keyed endpoint, so the log gets a fixed line.
-      console.error("portfolio: devnet did not answer, the last reading stands");
+      console.error("portfolio: the chain did not answer, the last reading stands");
       throw error;
     })
     .finally(() => {

@@ -16,8 +16,9 @@ import {
   type Target,
 } from "@/lib/break";
 import { chooseLiveSale } from "@/lib/live-sale";
+import { DEMO_DOLLARS_ON } from "@/lib/network";
 import { openedSales } from "@/lib/sales";
-import { devnetConnection } from "@/lib/solana";
+import { chainConnection } from "@/lib/solana";
 
 /**
  * Hands a visitor's devnet wallet the token the live sale is priced in.
@@ -25,6 +26,9 @@ import { devnetConnection } from "@/lib/solana";
  * Server only. Nothing here may be imported by a client component: this file
  * reads the key that mints the demo dollar, and the moment a client component
  * pulls it in, that key is in the browser bundle.
+ *
+ * Devnet only. On mainnet the demo key is never read, whatever the settings
+ * hold, and the route answers 404.
  *
  * The token is a demo dollar minted for devnet by packages/scripts/src/mint-dollars.ts.
  * Devnet has no dollar token a stranger can get in quantity, so without this a
@@ -87,6 +91,9 @@ let triedRootEnv = false;
  * variable is missing.
  */
 export function demoKey(): Keypair {
+  if (!DEMO_DOLLARS_ON) {
+    throw new Refused(404, "There are no demo dollars on this network.");
+  }
   if (process.env[VARIABLE] === undefined && !triedRootEnv) {
     triedRootEnv = true;
     try {
@@ -248,7 +255,7 @@ async function landed(connection: Connection, sent: Sent): Promise<boolean> {
  * its signature is returned instead, so one grant is never minted twice.
  */
 async function send(transaction: Transaction, authority: Keypair): Promise<string> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   let previous: Sent | null = null;
   for (let attempt = 0; attempt < SEND_TRIES; attempt += 1) {
     if (previous !== null && (await landed(connection, previous))) {
@@ -350,7 +357,7 @@ function grantSize(authority: Keypair, wallet: PublicKey): Promise<GrantSize> {
  * is the same for every wallet it is shared with.
  */
 async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<GrantSize> {
-  const connection = breakConnection(devnetConnection().rpcEndpoint);
+  const connection = breakConnection(chainConnection().rpcEndpoint);
   const candidates = openedSales().map((sale) => ({
     mint: sale.mint,
     name: sale.name,
@@ -386,7 +393,7 @@ async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<Gran
 async function mintGrant(wallet: PublicKey): Promise<Grant> {
   const authority = demoKey();
   const { target, amount } = await grantSize(authority, wallet);
-  const connection = breakConnection(devnetConnection().rpcEndpoint);
+  const connection = breakConnection(chainConnection().rpcEndpoint);
   const held = await payingHeld(connection, target, wallet);
   if (held >= amount) {
     throw new Refused(400, "You already hold enough demo dollars for every row.");

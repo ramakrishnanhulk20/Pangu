@@ -1,6 +1,6 @@
 import type { Connection, PublicKey, SendOptions, Transaction, VersionedTransaction } from "@solana/web3.js";
 
-import { devnetRpcUrl } from "./solana";
+import { IRYS, browserRpcUrl } from "./network";
 
 /**
  * A sale token's face: its logo, a paragraph about it and its links, written as
@@ -12,19 +12,13 @@ import { devnetRpcUrl } from "./solana";
  */
 
 /**
- * Where the files go. This is devnet: Irys's devnet node is paid in devnet SOL
- * and keeps what it is given for about 60 days. The same code pointed at
- * Irys's mainnet node (uploader.irys.xyz, read back through gateway.irys.xyz)
+ * Where the files go, per network in lib/network. Irys's devnet node is paid in
+ * devnet SOL and keeps what it is given for about 60 days; its mainnet node
  * stores the files on Arweave permanently.
  */
-export const STORAGE = {
-  node: "https://devnet.irys.xyz",
-  gateway: "https://devnet.irys.xyz",
-  kept: "about 60 days",
-} as const;
+export const STORAGE = { node: IRYS.node, gateway: IRYS.gateway, kept: IRYS.kept } as const;
 
-export const STORAGE_WORDS =
-  "Stored through Irys, paid from your wallet. On devnet Irys keeps the files for about 60 days; the same launch on mainnet stores them on Arweave for good.";
+export const STORAGE_WORDS = IRYS.words;
 
 export const LOGO_TYPES: Readonly<Record<string, string>> = {
   "image/png": "PNG",
@@ -383,7 +377,7 @@ async function connectIrys(wallet: MetadataWallet) {
     sendTransaction: (transaction: Transaction, connection: Connection, options?: SendOptions) =>
       wallet.sendTransaction(transaction, connection, options),
   };
-  return WebUploader(WebSolana).withProvider(provider).withRpc(devnetRpcUrl()).bundlerUrl(STORAGE.node).timeout(60_000).build();
+  return WebUploader(WebSolana).withProvider(provider).withRpc(browserRpcUrl()).bundlerUrl(STORAGE.node).timeout(60_000).build();
 }
 
 async function balanceOf(irys: Irys): Promise<number> {

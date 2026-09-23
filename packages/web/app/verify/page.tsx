@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 
 import { VerifyConsole, type CredentialSale } from "@/components/verify/verify-console";
+import { CHAIN } from "@/lib/network";
 import { openedSales } from "@/lib/sales";
 
 export const metadata: Metadata = {
   title: "Verify buyers | Pangu",
   description:
-    "Set up as a verifier on devnet, issue credentials to buyer wallets, revoke them, and check any wallet against any verifier.",
+    `Set up as a verifier on ${CHAIN.label}, issue credentials to buyer wallets, revoke them, and check any wallet against any verifier.`,
 };
 
 /**

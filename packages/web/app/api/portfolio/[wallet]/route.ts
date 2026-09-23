@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { readPortfolio } from "@/lib/portfolio";
 
-// One wallet's place in every Pangu sale, read through the server's own devnet
+// One wallet's place in every Pangu sale, read through the server's own
 // endpoint and shared for fifteen seconds per wallet. Only public data is read:
 // anyone may ask about any address, the way any explorer answers.
 export const dynamic = "force-dynamic";

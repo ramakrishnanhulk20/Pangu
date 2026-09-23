@@ -1,22 +1,48 @@
-import type { Connection, Keypair, PublicKey, Signer, VersionedTransaction } from "@solana/web3.js";
+import path from "node:path";
+
+import {
+  Keypair,
+  LAMPORTS_PER_SOL,
+  type Connection,
+  type PublicKey,
+  type Signer,
+  type VersionedTransaction,
+} from "@solana/web3.js";
 import { getSale, readPrice, type Sale } from "pangu-sdk";
 import { API_KEY_VARIABLE, refreshPriceTransaction } from "pangu-sdk/price";
 
 import { Refused, demoKey } from "@/lib/demo-dollars";
-import { devnetConnection } from "@/lib/solana";
+import { CHAIN, DEMO_DOLLARS_ON } from "@/lib/network";
+import { chainConnection } from "@/lib/solana";
 
 /**
  * Keeps a banded sale's Pyth price fresh without anyone running a script.
  *
  * Server only. Nothing here may be imported by a client component: it reads the
- * devnet demo key and the Hermes key, and pulls in pangu-sdk/price, which is
- * where the Hermes key is used. Either key in a client import is that key in the
- * browser bundle.
+ * key that pays for the posts and the Hermes key, and pulls in pangu-sdk/price,
+ * which is where the Hermes key is used. Either key in a client import is that
+ * key in the browser bundle.
  *
  * Pyth is a pull oracle. The account a sale reads only moves when somebody
  * posts a newer guardian-signed price into it, so the page that needs a fresh
- * price posts one, paid for by the demo key, about 0.000035 SOL a time.
+ * price posts one, about 0.000035 SOL a time. On devnet the demo key pays. On
+ * mainnet a key kept for this one job pays, PRICE_REFRESH_KEY, and the demo key
+ * is never read.
  */
+
+/** The mainnet key that pays for price posts, as a Solana key file holds it: a JSON array of bytes. */
+const REFRESH_KEY_VARIABLE = "PRICE_REFRESH_KEY";
+const DEMO_KEY_VARIABLE = "DEMO_DOLLAR_MINT_AUTHORITY";
+
+/**
+ * Under this the refresh key stops posting. A post costs about 0.000035 SOL, so
+ * the floor sits well clear of any one post and keeps the key able to pay rent
+ * on the accounts a post opens.
+ */
+const REFRESH_FLOOR_LAMPORTS = 0.05 * LAMPORTS_PER_SOL;
+
+const WAITING =
+  "The price is waiting for a refresh: the key that pays for price updates is running low. Buys wait for a fresh price; selling back is never affected.";
 
 /** A stored price younger than this is left alone. */
 const FRESH_ENOUGH_SECS = 10 * 60;
@@ -25,7 +51,7 @@ const FRESH_ENOUGH_SECS = 10 * 60;
 const POST_GAP_MS = 60 * 1000;
 
 /**
- * A "fresh" answer is shared for this long, so a burst of calls costs devnet
+ * A "fresh" answer is shared for this long, so a burst of calls costs the chain
  * one read, the way the price route's own answers are shared (C17).
  */
 const FRESH_SHARED_MS = 10_000;
@@ -63,8 +89,8 @@ const freshSeen = new Map<string, { at: number; outcome: RefreshOutcome }>();
  * same old price again.
  *
  * Throws {@link Refused} with a sentence a visitor can read when the sale has no
- * band or the deploy has no key for this. Any other throw is devnet or Hermes
- * failing, and its text may carry an endpoint, so it stays on the server.
+ * band, the deploy has no key for this, or the key is under its floor. Any
+ * other throw is the chain or Hermes failing, and its text may carry an endpoint, so it stays on the server.
  */
 export function refreshIfStale(mint: PublicKey): Promise<RefreshOutcome> {
   const key = mint.toBase58();
@@ -98,10 +124,10 @@ export function refreshIfStale(mint: PublicKey): Promise<RefreshOutcome> {
 }
 
 async function refresh(mint: PublicKey): Promise<RefreshOutcome> {
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const sale = await getSale(connection, mint);
   if (sale === null) {
-    throw new Refused(404, "There is no Pangu sale at this mint on devnet.");
+    throw new Refused(404, `There is no Pangu sale at this mint on ${CHAIN.inSentence}.`);
   }
   if (!sale.hasBand) {
     throw new Refused(409, "This sale has no price band, so it has no price to bring up to date.");
@@ -127,6 +153,15 @@ async function refresh(mint: PublicKey): Promise<RefreshOutcome> {
   }
 
   const payer = payingKey();
+  if (!DEMO_DOLLARS_ON) {
+    const lamports = await connection.getBalance(payer.publicKey, "confirmed");
+    if (lamports < REFRESH_FLOOR_LAMPORTS) {
+      console.error(
+        `price refresh: ${payer.publicKey.toBase58()} holds ${lamports / LAMPORTS_PER_SOL} SOL, under the 0.05 SOL floor; nothing is posted until it is topped up`
+      );
+      throw new Refused(503, WAITING);
+    }
+  }
   const latest = await hermesPublishTime(sale.priceFeedId);
   if (chainNow - latest > sale.maxPriceAgeSecs) {
     const outcome: RefreshOutcome = { status: "closed", closed: true, lastPublishedAt: latest };
@@ -158,15 +193,71 @@ function freshOf(outcome: RefreshOutcome): RefreshOutcome {
     : outcome;
 }
 
-/** The demo key, with a refusal that names this job rather than demo dollars. */
-function payingKey(): Keypair {
+let triedRootEnv = false;
+
+/**
+ * On a developer machine the keys live in the repository root .env, two
+ * folders above this app, which Next does not read by itself. A variable
+ * already set in the environment is never overwritten by it.
+ */
+function loadRootEnv(): void {
+  if (triedRootEnv) {
+    return;
+  }
+  triedRootEnv = true;
   try {
-    return demoKey();
-  } catch (error) {
-    if (error instanceof Refused) {
-      throw new Refused(503, "Price refreshes are not switched on for this deploy.");
+    process.loadEnvFile(path.join(process.cwd(), "..", "..", ".env"));
+  } catch {
+    // No root .env is what a deploy looks like, where the variables are set in
+    // the project's own settings instead.
+  }
+}
+
+/** The same key, whatever spacing it was pasted with. */
+function sameKey(left: string, right: string | undefined): boolean {
+  if (right === undefined || right.trim() === "") {
+    return false;
+  }
+  try {
+    return JSON.stringify(JSON.parse(left)) === JSON.stringify(JSON.parse(right));
+  } catch {
+    return left.trim() === right.trim();
+  }
+}
+
+/**
+ * The key that pays for a post, with a refusal that names this job. On devnet
+ * that is the demo key. On mainnet it is PRICE_REFRESH_KEY, refused when it is
+ * the demo key under another name.
+ */
+function payingKey(): Keypair {
+  if (DEMO_DOLLARS_ON) {
+    try {
+      return demoKey();
+    } catch (error) {
+      if (error instanceof Refused) {
+        throw new Refused(503, "Price refreshes are not switched on for this deploy.");
+      }
+      throw error;
     }
-    throw error;
+  }
+
+  if (process.env[REFRESH_KEY_VARIABLE] === undefined || process.env[API_KEY_VARIABLE] === undefined) {
+    loadRootEnv();
+  }
+  const raw = process.env[REFRESH_KEY_VARIABLE];
+  if (raw === undefined || raw.trim() === "") {
+    throw new Refused(503, "Price refreshes are not switched on for this deploy.");
+  }
+  if (sameKey(raw, process.env[DEMO_KEY_VARIABLE])) {
+    console.error("price refresh: PRICE_REFRESH_KEY is the demo dollar key, which is never used on mainnet");
+    throw new Refused(503, "Price refreshes are not switched on for this deploy.");
+  }
+  try {
+    return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw) as number[]));
+  } catch {
+    console.error("price refresh: PRICE_REFRESH_KEY is not the JSON array a Solana key file holds");
+    throw new Refused(503, "Price refreshes are not switched on for this deploy.");
   }
 }
 
@@ -179,7 +270,7 @@ function payingKey(): Keypair {
  * scrubbed of it, because an error text ends up in a log.
  */
 async function hermesPublishTime(feedId: string): Promise<number> {
-  // demoKey() has loaded the repository root .env on a developer machine by
+  // payingKey() has loaded the repository root .env on a developer machine by
   // now, which is where this key lives there too.
   const key = process.env[API_KEY_VARIABLE];
   if (key === undefined || key.trim() === "") {
@@ -209,7 +300,7 @@ async function hermesPublishTime(feedId: string): Promise<number> {
 }
 
 /**
- * Builds the two transactions of a refresh, signs them with the demo key and
+ * Builds the two transactions of a refresh, signs them with the paying key and
  * the throwaway keys the update is posted through, and lands them in order.
  *
  * Preflight is skipped, as the refresh script skips it: the second transaction

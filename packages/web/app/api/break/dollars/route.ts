@@ -2,6 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { NextResponse } from "next/server";
 
 import { Refused, grantDemoDollars } from "@/lib/demo-dollars";
+import { CHAIN, DEMO_DOLLARS_ON } from "@/lib/network";
 
 // The demo dollar key is read inside lib/demo-dollars, which only a server
 // route may import. Nothing in this file is ever bundled for a browser.
@@ -9,6 +10,10 @@ import { Refused, grantDemoDollars } from "@/lib/demo-dollars";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!DEMO_DOLLARS_ON) {
+    return NextResponse.json({ reason: "There are no demo dollars on this network." }, { status: 404 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -22,7 +27,7 @@ export async function POST(request: Request) {
   const asked = (body as { wallet?: unknown } | null)?.wallet;
   if (typeof asked !== "string" || asked.trim() === "") {
     return NextResponse.json(
-      { reason: "Connect a devnet wallet first, then press this again." },
+      { reason: `Connect ${CHAIN.wallet} first, then press this again.` },
       { status: 400 }
     );
   }
@@ -50,7 +55,7 @@ export async function POST(request: Request) {
       `demo dollars: ${error instanceof Error ? error.message : String(error)}`
     );
     return NextResponse.json(
-      { reason: "Devnet did not take the mint. Wait a moment and press this again." },
+      { reason: `${CHAIN.atStart} did not take the mint. Wait a moment and press this again.` },
       { status: 502 }
     );
   }

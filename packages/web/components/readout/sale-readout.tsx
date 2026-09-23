@@ -4,6 +4,7 @@ import { motion, useInView, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { feedWords } from "@/lib/feeds";
+import { CHAIN } from "@/lib/network";
 import type { SaleChoice, SaleReadout as Readout } from "@/lib/readout";
 
 import {
@@ -47,7 +48,7 @@ function Dot({ tone, beating }: { tone: "accent" | "pending"; beating: boolean }
  * What a new answer does to the reading on screen.
  *
  * A failed read never wipes a good one: the numbers stay and are marked as
- * held, with the time devnet went quiet. A held reading from the server that
+ * held, with the time the chain went quiet. A held reading from the server that
  * is older than the one already on screen does not replace it either, which
  * can happen when two server instances each kept their own last reading.
  */
@@ -164,7 +165,7 @@ function Picker({
             {choice.name}
             <span className="mt-1 block text-[9px] opacity-70">
               {pending
-                ? "reading devnet"
+                ? `reading ${CHAIN.inSentence}`
                 : choice.running === null
                   ? "unknown right now"
                   : !choice.running
@@ -216,7 +217,7 @@ function ExplorerLink({
  * it on the right, and the rule a buyer would run into first underneath.
  *
  * The first reading is server rendered, so the numbers are in the HTML before
- * any script runs, and the page asks devnet again every fifteen seconds. No
+ * any script runs, and the page asks the chain again every fifteen seconds. No
  * wallet is involved in any of it.
  */
 export function SaleReadout({
@@ -272,7 +273,7 @@ export function SaleReadout({
       const current = shown.current;
       wanted.current = current.mint;
       setNotice(
-        `Devnet did not answer at ${clock(Date.now())} for ${name}, so ${current.name} stays on screen.`
+        `${CHAIN.atStart} did not answer at ${clock(Date.now())} for ${name}, so ${current.name} stays on screen.`
       );
     };
 
@@ -380,7 +381,7 @@ export function SaleReadout({
   const quietLine =
     notice ??
     (readout.stale && readout.missedAt !== null
-      ? `Devnet did not answer at ${clock(
+      ? `${CHAIN.atStart} did not answer at ${clock(
           readout.missedAt,
           readout.readAt
         )}, showing the reading from ${clock(readout.readAt)}.`
@@ -423,10 +424,10 @@ export function SaleReadout({
               beating={!still && !readout.stale}
             />
             {refreshing
-              ? "reading devnet"
+              ? `reading ${CHAIN.inSentence}`
               : readout.stale
                 ? "holding the last reading"
-                : "live on Solana devnet"}
+                : `live on ${CHAIN.label}`}
           </div>
           {/* The measure sits on the heading itself, so 15ch is fifteen of its
               own characters and the line breaks once, in the skeleton too. */}

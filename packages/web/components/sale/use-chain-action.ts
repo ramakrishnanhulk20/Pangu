@@ -5,6 +5,7 @@ import type { Connection } from "@solana/web3.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readLanded } from "@/lib/break";
+import { CHAIN } from "@/lib/network";
 import type { Signable } from "@/lib/issuer";
 import { messageOf, simulate } from "@/lib/trade";
 import type { PanguErrorName } from "pangu-sdk";
@@ -27,8 +28,8 @@ export function busy(step: ActionStep): boolean {
 
 /**
  * Runs one action the way every action on the sale page runs: build, simulate
- * against devnet, and only when the chain would take it, ask the wallet to
- * sign. Then wait for devnet to confirm, and say what happened with a link.
+ * against the chain, and only when the chain would take it, ask the wallet to
+ * sign. Then wait for the chain to confirm, and say what happened with a link.
  *
  * An action of several transactions runs them in order and stops at the first
  * one the chain would refuse, before the wallet is asked for it.
@@ -87,7 +88,7 @@ export function useChainAction(connection: Connection) {
           if (!verdict.ok) {
             show({
               kind: "refused",
-              sentence: verdict.sentence ?? "Devnet would refuse this.",
+              sentence: verdict.sentence ?? `${CHAIN.atStart} would refuse this.`,
               advice: advise(verdict.error),
               signature: null,
             });
@@ -127,8 +128,8 @@ export function useChainAction(connection: Connection) {
               kind: "failed",
               message:
                 result.outcome === "unseen"
-                  ? "Devnet never saw this transaction: it was dropped or expired while the wallet was open. Nothing moved. Try again."
-                  : `Devnet refused it: ${result.logLine ?? result.rpcError ?? "no reason given"}`,
+                  ? `${CHAIN.atStart} never saw this transaction: it was dropped or expired while the wallet was open. Nothing moved. Try again.`
+                  : `${CHAIN.atStart} refused it: ${result.logLine ?? result.rpcError ?? "no reason given"}`,
               signature: result.outcome === "unseen" ? null : signature,
             });
             return false;
@@ -136,7 +137,7 @@ export function useChainAction(connection: Connection) {
         } catch {
           show({
             kind: "failed",
-            message: "Sent, but devnet did not answer the read back. Open the transaction to see where it stands.",
+            message: `Sent, but ${CHAIN.inSentence} did not answer the read back. Open the transaction to see where it stands.`,
             signature,
           });
           return false;

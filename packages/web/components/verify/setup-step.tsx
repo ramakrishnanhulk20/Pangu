@@ -13,6 +13,7 @@ import {
   type VerifyWallet,
 } from "@/lib/verify";
 import type { Connection } from "@solana/web3.js";
+import { CHAIN } from "@/lib/network";
 
 import {
   CopyButton,
@@ -37,7 +38,7 @@ function troubleOf(error: unknown): Trouble {
     return { message: error.message, detail: error.detail };
   }
   return {
-    message: "Devnet did not answer. Check the connection and press again.",
+    message: `${CHAIN.atStart} did not answer. Check the connection and press again.`,
     detail: error instanceof Error ? error.message : String(error),
   };
 }
@@ -110,7 +111,7 @@ export function SetupStep({
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <WalletButton />
           <p className="text-[14px] text-muted">
-            Connect the devnet wallet that will sign your credentials.
+            Connect the {CHAIN.short === "devnet" ? "devnet wallet" : "wallet"} that will sign your credentials.
           </p>
         </div>
       )}
@@ -217,7 +218,7 @@ export function SetupStep({
           </p>
           <p className="mt-4 max-w-[56ch] text-[14px] leading-relaxed text-muted">
             This opens two accounts on the attestation service, a credential and a schema, with this
-            wallet as the one key allowed to sign. You pay for them once, in devnet SOL.
+            wallet as the one key allowed to sign. You pay for them once, in {CHAIN.sol}.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-5">
             <button
