@@ -53,7 +53,7 @@ import {
  * Browser safe: no key, no server-only import. It follows
  * packages/scripts/src/launch.ts transaction for transaction: the launch
  * template first, then the pool and the sale's rules together in one. Before
- * either, the logo and description are stored on Irys, because the pool
+ * either, any logo, description and links are stored on Irys, because the pool
  * transaction writes their address into the mint.
  */
 
@@ -185,9 +185,7 @@ export interface PlanContext {
   stock: StockReading | null;
   /** The connected wallet's devnet balance, or null when no wallet is connected or it is still being read. */
   lamports: number | null;
-  /** True once a logo has been picked and checked. */
-  hasLogo: boolean;
-  /** What Irys charges to store the logo and description, once it has been asked. */
+  /** What Irys charges to store the logo and description, once it has been asked. Null when there is nothing to store. */
   storageLamports: number | null;
   /**
    * Unix seconds, to date the end of the offering in the preview, or null
@@ -307,13 +305,8 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
     );
   }
 
-  if (!context.hasLogo) {
-    refuse("logo", "The token has no logo yet.", "Drop a square PNG, JPEG, WEBP or SVG of up to 1 MB into the logo box.");
-  }
   const description = form.description.trim();
-  if (description === "") {
-    refuse("description", "The token has no description yet.", "Say in a sentence or two what a buyer is buying.");
-  } else if (description.length > MAX_DESCRIPTION) {
+  if (description.length > MAX_DESCRIPTION) {
     refuse(
       "description",
       `The description is ${description.length} characters and wallets are handed ${MAX_DESCRIPTION} at most.`,
@@ -597,13 +590,18 @@ function ruleSentences(form: LaunchForm, preview: Preview, bandBps: number | nul
   return rules;
 }
 
+/** True when the launch has anything to store on Irys: a logo, a description or a link. Without any, the storage step is left out. */
+export function storesMetadata(form: LaunchForm, hasLogo: boolean): boolean {
+  return hasLogo || form.description.trim() !== "" || form.website.trim() !== "" || form.x.trim() !== "";
+}
+
 export type StepId = "metadata" | "template" | "sale";
 
 export const STEPS: readonly { id: StepId; title: string; detail: string }[] = [
   {
     id: "metadata",
     title: "Store the logo and description",
-    detail: "On Irys, paid from your wallet; your wallet signs each of the two files",
+    detail: "On Irys, paid from your wallet, which signs each file",
   },
   {
     id: "template",
@@ -848,7 +846,7 @@ type Say = (sentence: string, tag?: PanguErrorName | null) => StepFailure;
 export async function runLaunch(
   terms: LaunchTerms,
   form: LaunchForm,
-  logo: File,
+  logo: File | null,
   wallet: LaunchWallet,
   connection: Connection,
   onStep: (id: StepId, state: StepState) => void
@@ -856,14 +854,17 @@ export async function runLaunch(
   const owner = wallet.publicKey;
   const quoteMint = new PublicKey(terms.quoteMint);
   let progress = loadProgress(owner);
+  const storing = logo !== null || terms.description !== "" || terms.website !== null || terms.x !== null;
 
-  onStep("metadata", { status: "checking", signature: null, failure: null });
+  onStep(storing ? "metadata" : "template", { status: "checking", signature: null, failure: null });
 
   if (progress !== null && progress.mint !== null) {
     const opened = await getSale(connection, new PublicKey(progress.mint));
     if (opened !== null) {
       const upload = loadUpload(owner)?.stored ?? null;
-      onStep("metadata", { status: "done", signature: upload?.fundSignature ?? null, failure: null });
+      if (storing) {
+        onStep("metadata", { status: "done", signature: upload?.fundSignature ?? null, failure: null });
+      }
       onStep("template", { status: "done", signature: progress.templateSignature, failure: null });
       onStep("sale", { status: "done", signature: progress.saleSignature, failure: null });
       const result = await readBack(
@@ -888,12 +889,16 @@ export async function runLaunch(
   try {
     await preSendChecks(connection, terms, owner, quoteMint);
   } catch (error) {
-    onStep("metadata", { status: "waiting", signature: null, failure: null });
+    if (storing) {
+      onStep("metadata", { status: "waiting", signature: null, failure: null });
+    }
     throw error;
   }
   const startedWith = await connection.getBalance(owner, "confirmed");
 
-  const stored = await storeMetadata(terms, logo, wallet, onStep);
+  // With no logo, description or link there is nothing to store, and the mint
+  // carries an empty metadata link rather than one to an empty file.
+  const stored = storing ? await storeMetadata(terms, logo, wallet, onStep) : null;
 
   let config: PublicKey | null = null;
   let templateSignature: string | null = null;
@@ -979,7 +984,7 @@ export async function runLaunch(
       config,
       name: terms.name,
       symbol: terms.symbol,
-      uri: stored.uri,
+      uri: stored?.uri ?? "",
       sale: {
         capShareBps: terms.capShareBps,
         accessMode: terms.accessMode,
@@ -1049,7 +1054,7 @@ class WalletCannot extends Error {
  */
 async function storeMetadata(
   terms: LaunchTerms,
-  logo: File,
+  logo: File | null,
   wallet: LaunchWallet,
   onStep: (id: StepId, state: StepState) => void
 ): Promise<StoredMetadata> {

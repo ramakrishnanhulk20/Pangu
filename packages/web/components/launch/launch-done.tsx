@@ -133,7 +133,9 @@ export function LaunchDone({ result, name, symbol }: { result: LaunchResult; nam
       <p data-testid="launch-done-metadata" className="mt-4 max-w-[60ch] font-mono text-[10px] uppercase leading-relaxed tracking-[0.16em] text-muted">
         {onChainUri === null
           ? "the mint's metadata did not read back yet; open the token on the explorer in a moment"
-          : result.storedUri !== null && !matches
+          : onChainUri === "" && result.storedUri === null
+            ? "launched without a logo, description or link: the mint carries an empty metadata link and wallets show a blank icon"
+            : result.storedUri !== null && !matches
             ? "the mint carries a metadata link other than the one this launch stored"
             : !fetched
               ? "fetching the logo and description through the link the mint carries"

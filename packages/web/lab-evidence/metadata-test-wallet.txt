@@ -1,0 +1,70 @@
+(node:8084) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/Projects/Meteora/packages/web/lib/launch-curve.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\D:\Projects\Meteora\packages\web\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+network  : devnet
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
+site     : http://127.0.0.1:3480/launch
+issuer   : E7JNKYFLaBtbs1jXTVi5LQVMdAjfxvgx9bLZRB5KRNeN, a throwaway made for this run
+funded   : 0.1 SOL from the demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+           https://explorer.solana.com/tx/55ZwMU4dTAAAPSfTXDazhenTgjpYx2ed6Vfr3ZpnNA8h388vPCfaE8QHHwB3sB2TJyFNnhUjCvNvgZdGTsj8BV6o?cluster=devnet
+dollars  : the route answered 502: Devnet did not take the mint. Wait a moment and press this again.
+FAIL  demo dollars granted through the app's route
+ok    launch 1: the storage step is listed
+
+launch 1 : PLAUNCH, demo dollar, open, 5 percent over AAPLx, cap 10 percent, 14 days
+preview  : opens at $275.95, AAPLx, trades all week: $339.10
+ok    launch 1 reached the done state
+mint     : DKDhn1ZypcNtb1h4Y9kKmrzh9LthZcx5NCoeRPTREiPh
+           https://explorer.solana.com/address/DKDhn1ZypcNtb1h4Y9kKmrzh9LthZcx5NCoeRPTREiPh?cluster=devnet
+page says: THE LAUNCH COST
+page says: 0.019512 SOL
+page says: 0.000077 SOL to Irys
+cost     : 0.019512 SOL, the wallet's balance read off devnet before and after
+ok    launch 1: the sale's rules read back from devnet
+ok    launch 1: issuer is the throwaway wallet: E7JNKYFLaBtbs1jXTVi5LQVMdAjfxvgx9bLZRB5KRNeN
+ok    launch 1: paid in the demo dollar: 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5
+ok    launch 1: sale records the same paying token
+ok    launch 1: tokens on the curve match 20 shares, 3710 to raise, 45 percent kept: 10999999996
+ok    launch 1: cap is 10 percent of the curve: 1099999999 raw units
+ok    launch 1: access is open: 0
+ok    launch 1: ceiling 5 percent: 500
+ok    launch 1: ceiling follows AAPLx: 978e6cc68a119ce066aa830017318563a9ed04ec3a0a6439010fc11296a58675
+ok    launch 1: offering ends 14 days after launch: 2026-10-07T15:29:41.000Z
+ok    launch 1: the wallet signed the logo and the JSON as messages: 2
+uri      : https://devnet.irys.xyz/G1tbeWfasgtxQ7RcWcyiwmZrUaiJrBecb7VggChrHkhD
+ok    launch 1: the mint's link loads JSON naming the token
+ok    launch 1: the JSON's image is the logo the form was given: https://devnet.irys.xyz/F2kn8VrE9PBwLnSi6TsGmFJZ7ow2CS2Yy8PV6QHuyjLh
+ok    launch 1: the done state shows the logo
+ok    launch 2: with nothing to store the storage step is left out
+
+launch 2 : PLAUNCHL, devnet SOL, approved list, no ceiling, no end, no logo, description or link
+ok    launch 2, first press: the sale step stops when the wallet turns it down: launch-failure-sale
+ok    launch 2, first press: the template landed before it
+page says: You turned this down in your wallet, so it was not sent. / The launch template is on chain. No pool and no sale yet. see it on the explorer / Press Launch again to finish; the curve template already exists and will be reused.
+ok    launch 2, first press: sessionStorage holds the template's address and no secret
+ok    launch 2, first press: the button now offers to finish
+ok    launch 2, second press: the template step says reused
+ok    launch 2 reached the done state on the second press
+ok    launch 2: the wallet was asked three times in all, template, refused sale, sale: 3
+mint     : GTVaKD5rS59enGmAGLe3JPNFLx6s5xKB6tcnAufdnYMx
+           https://explorer.solana.com/address/GTVaKD5rS59enGmAGLe3JPNFLx6s5xKB6tcnAufdnYMx?cluster=devnet
+cost     : 0.018730 SOL across both presses, the refused one included
+ok    launch 2: the sale's rules read back from devnet
+ok    launch 2: issuer is the throwaway wallet: E7JNKYFLaBtbs1jXTVi5LQVMdAjfxvgx9bLZRB5KRNeN
+ok    launch 2: paid in wrapped SOL: So11111111111111111111111111111111111111112
+ok    launch 2: sale records the same paying token
+ok    launch 2: tokens on the curve match 1000000000 shares, 0.1 to raise, 20 percent kept: 799999670721719
+ok    launch 2: cap is 10 percent of the curve: 79999967072171 raw units
+ok    launch 2: access is the issuer's list: 1
+ok    launch 2: no price ceiling
+ok    launch 2: no end to the offering: null
+ok    launch 2: the mint's metadata link is empty: ""
+ok    launch 2: the done state says the token launched without a logo
+ok    launch 2: the pool was opened on the template the first press made, so it was reused: BdGD55b5xrit4Xvwj9NyseGmmigQtHPLVVUpQ5MXpwSF
+ok    no uncaught errors on the page: 
+
+returned : 0.061753 SOL to the demo wallet
+
+1 checks failed; mints DKDhn1ZypcNtb1h4Y9kKmrzh9LthZcx5NCoeRPTREiPh and GTVaKD5rS59enGmAGLe3JPNFLx6s5xKB6tcnAufdnYMx; neither is in sales.json

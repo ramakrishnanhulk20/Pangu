@@ -192,7 +192,12 @@ export function LaunchForm({
           title="How it looks"
           note="What wallets, explorers and every Pangu screen show for this token. The mint carries the address of these, written at launch."
         >
-          <Field id="launch-logo" label="Logo" refusals={logo.state === "refused" ? [] : refusalsFor(plan, "logo")}>
+          <Field
+            id="launch-logo"
+            label="Logo, optional"
+            refusals={[]}
+            helper={logo.state === "ready" ? undefined : "Without a logo, wallets show a blank icon for this token."}
+          >
             <LogoDrop
               pick={logo}
               name={form.name}
@@ -204,7 +209,7 @@ export function LaunchForm({
 
           <Field
             id="launch-description"
-            label="Description"
+            label="Description, optional"
             refusals={refusalsFor(plan, "description")}
             helper="One paragraph a buyer reads in their wallet: what the token is and who stands behind it."
           >
@@ -246,7 +251,7 @@ export function LaunchForm({
             <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.5]">
               {storage.state === "ready" ? (
                 <>
-                  Storing the logo and this description costs{" "}
+                  Storing {logo.state === "ready" ? "the logo and these words" : "these words"} costs{" "}
                   <span className="font-display text-[1.35em] font-semibold tracking-[-0.03em] text-accent">
                     {(storage.lamports / 1e9).toFixed(6)} SOL
                   </span>
@@ -257,7 +262,7 @@ export function LaunchForm({
               ) : storage.state === "missing" ? (
                 "Irys did not give a price just now. It is asked again when you launch, before anything is paid."
               ) : (
-                "Add a logo and Irys prices storing it with the description, before anything is paid."
+                "Nothing to store: with no logo, description or link the token launches with an empty metadata link, and nothing is paid to Irys."
               )}
             </p>
             <p className="mt-2 max-w-[56ch] text-[13px] leading-relaxed text-muted">

@@ -45,15 +45,18 @@ const BUSY: readonly StepStatus[] = [
 export function LaunchSteps({
   steps,
   storageLamports,
+  withStorage,
 }: {
   steps: Record<StepId, StepState>;
   storageLamports: number | null;
+  /** False when the launch stores nothing on Irys, so the storage step is left out. */
+  withStorage: boolean;
 }) {
   const still = useReducedMotion() === true;
 
   return (
     <ol className="border-t border-line">
-      {STEPS.map((step, place) => {
+      {STEPS.filter((step) => withStorage || step.id !== "metadata").map((step, place) => {
         const state = steps[step.id];
         const busy = BUSY.includes(state.status);
         const landed = state.status === "done" || state.status === "reused";
@@ -91,7 +94,7 @@ export function LaunchSteps({
                   {step.id === "metadata" && (
                     <span data-testid="launch-step-metadata-cost">
                       {storageLamports === null
-                        ? ". Irys prices it once a logo is picked."
+                        ? ". Irys prices it in a moment."
                         : `. About ${(storageLamports / 1e9).toFixed(6)} SOL, less whatever your Irys balance already holds.`}
                     </span>
                   )}

@@ -83,7 +83,8 @@ export interface MetadataInput {
   name: string;
   symbol: string;
   description: string;
-  image: File;
+  /** Optional: without one the JSON carries the words and links alone, and wallets show a blank icon. */
+  image: File | null;
   links: MetadataLinks;
 }
 
@@ -93,7 +94,8 @@ export interface TokenMetadata {
   name: string;
   symbol: string;
   description: string | null;
-  image: string;
+  /** Null when the issuer launched without a logo. */
+  image: string | null;
   website: string | null;
   x: string | null;
 }
@@ -112,6 +114,7 @@ export interface MetadataWallet {
 /** An upload that landed, all plain values, so a launch that stops later can keep it and use it again. */
 export interface StoredMetadata {
   uri: string;
+  /** Empty, as are the type and hash, when the launch stored no logo. */
   imageUri: string;
   imageType: string;
   imageSha: string;
@@ -302,10 +305,11 @@ export function checkX(text: string): { url: string | null; refusal: string | nu
  * external_url for the website, and the image again under properties.files.
  * The website and X profile also go under `extensions`, where the Solana token
  * list convention puts social links and several explorers look for them.
+ * Without a logo the image and properties are left out rather than faked.
  */
 export function metadataJson(
   text: { name: string; symbol: string; description: string; links: MetadataLinks },
-  image: { uri: string; type: string }
+  image: { uri: string; type: string } | null
 ): Record<string, unknown> {
   const website = text.links.website ?? null;
   const x = text.links.x ?? null;
@@ -320,12 +324,16 @@ export function metadataJson(
     name: text.name,
     symbol: text.symbol,
     description: text.description,
-    image: image.uri,
+    ...(image !== null ? { image: image.uri } : {}),
     ...(website !== null ? { external_url: website } : {}),
-    properties: {
-      files: [{ uri: image.uri, type: image.type }],
-      category: "image",
-    },
+    ...(image !== null
+      ? {
+          properties: {
+            files: [{ uri: image.uri, type: image.type }],
+            category: "image",
+          },
+        }
+      : {}),
     ...(Object.keys(extensions).length > 0 ? { extensions } : {}),
   };
 }
@@ -351,13 +359,14 @@ async function priceOne(bytes: number): Promise<number> {
 }
 
 /**
- * What Irys charges, in lamports, to store the logo and the JSON, asked of the
- * node itself. The JSON's size is worked out from a JSON of the real length.
+ * What Irys charges, in lamports, to store the logo, when there is one, and
+ * the JSON, asked of the node itself. The JSON's size is worked out from a
+ * JSON of the real length.
  */
-export async function storagePrice(logoBytes: number, text: Omit<MetadataInput, "image">): Promise<number> {
-  const stand = { uri: `${STORAGE.gateway}/${"x".repeat(44)}`, type: "image/svg+xml" };
+export async function storagePrice(logoBytes: number | null, text: Omit<MetadataInput, "image">): Promise<number> {
+  const stand = logoBytes === null ? null : { uri: `${STORAGE.gateway}/${"x".repeat(44)}`, type: "image/svg+xml" };
   const jsonBytes = new TextEncoder().encode(JSON.stringify(metadataJson(text, stand))).length;
-  const [logo, json] = await Promise.all([priceOne(logoBytes), priceOne(jsonBytes)]);
+  const [logo, json] = await Promise.all([logoBytes === null ? 0 : priceOne(logoBytes), priceOne(jsonBytes)]);
   return logo + json;
 }
 
@@ -410,6 +419,7 @@ export function unsentFundOf(error: unknown): string | null {
  *
  * With `previous` from an earlier press of this launch, a logo with the same
  * bytes is not stored twice, and neither is a JSON whose every word matches.
+ * Without a logo only the JSON is priced, signed and stored.
  */
 export async function uploadMetadata(
   wallet: MetadataWallet,
@@ -419,11 +429,16 @@ export async function uploadMetadata(
   const say = options.onStage ?? (() => {});
   const text = { name: input.name, symbol: input.symbol, description: input.description, links: input.links };
   const textKey = textKeyOf(text);
-  const logo = await prepareLogo(input.image);
-  const imageSha = await sha256(await logo.file.arrayBuffer());
+  const logo = input.image === null ? null : await prepareLogo(input.image);
+  const imageSha = logo === null ? "" : await sha256(await logo.file.arrayBuffer());
+  const imageType = logo?.type ?? "";
   const previous = options.previous ?? null;
-  const logoKept = previous !== null && previous.imageSha === imageSha && previous.imageType === logo.type;
-  if (logoKept && previous.textKey === textKey) {
+  const logoKept =
+    previous !== null &&
+    previous.imageSha === imageSha &&
+    previous.imageType === imageType &&
+    (logo === null || previous.imageUri !== "");
+  if (logoKept && previous.uri !== "" && previous.textKey === textKey) {
     say({ stage: "stored", uri: previous.uri });
     return previous;
   }
@@ -435,9 +450,9 @@ export async function uploadMetadata(
       // The node may already know it; the balance read below says what counts.
     });
   }
-  const stand = { uri: `${STORAGE.gateway}/${"x".repeat(44)}`, type: logo.type };
+  const stand = logo === null ? null : { uri: `${STORAGE.gateway}/${"x".repeat(44)}`, type: logo.type };
   const jsonBytes = new TextEncoder().encode(JSON.stringify(metadataJson(text, stand))).length;
-  const logoPrice = logoKept ? 0 : await priceOne(logo.bytes);
+  const logoPrice = logo === null || logoKept ? 0 : await priceOne(logo.bytes);
   const price = logoPrice + (await priceOne(jsonBytes));
   const held = await balanceOf(irys);
   const shortfall = Math.max(0, price - held);
@@ -452,25 +467,27 @@ export async function uploadMetadata(
     await waitForCredit(irys, price);
   }
 
-  let imageUri: string;
-  if (logoKept) {
-    imageUri = previous.imageUri;
-  } else {
-    say({ stage: "uploading", file: "logo" });
-    const stored = await irys.uploadFile(logo.file, { tags: [{ name: "Content-Type", value: logo.type }] });
-    imageUri = `${STORAGE.gateway}/${stored.id}`;
+  let imageUri = "";
+  if (logo !== null) {
+    if (logoKept) {
+      imageUri = previous.imageUri;
+    } else {
+      say({ stage: "uploading", file: "logo" });
+      const stored = await irys.uploadFile(logo.file, { tags: [{ name: "Content-Type", value: logo.type }] });
+      imageUri = `${STORAGE.gateway}/${stored.id}`;
+    }
+    say({ stage: "logo-stored", imageUri, imageType: logo.type, imageSha });
   }
-  say({ stage: "logo-stored", imageUri, imageType: logo.type, imageSha });
 
   say({ stage: "uploading", file: "description" });
-  const json = JSON.stringify(metadataJson(text, { uri: imageUri, type: logo.type }));
+  const json = JSON.stringify(metadataJson(text, logo === null ? null : { uri: imageUri, type: logo.type }));
   const stored = await irys.upload(json, { tags: [{ name: "Content-Type", value: "application/json" }] });
   const uri = `${STORAGE.gateway}/${stored.id}`;
   say({ stage: "stored", uri });
   return {
     uri,
     imageUri,
-    imageType: logo.type,
+    imageType,
     imageSha,
     textKey,
     priceLamports: price,
@@ -497,9 +514,10 @@ function shortText(value: unknown, max: number): string | null {
 
 /**
  * Fetches a token's metadata JSON and checks it: an https address, an answer
- * within eight seconds and 64 KB, a name, a symbol and an https image. Returns
- * null for anything else and never throws, so a page can call it for any
- * token and fall back to its own mark.
+ * within eight seconds and 64 KB, a name and a symbol. The image is kept only
+ * when it is an https address and is null otherwise. Returns null for anything
+ * else and never throws, so a page can call it for any token and fall back to
+ * its own mark.
  *
  * Everything in it was typed by an issuer and is shown as a label only.
  */
@@ -531,7 +549,7 @@ export async function readMetadata(uri: string | null | undefined, timeoutMs = R
     const name = shortText(record.name, 200);
     const symbol = shortText(record.symbol, 40);
     const image = httpsUrl(record.image);
-    if (name === null || symbol === null || image === null) {
+    if (name === null || symbol === null) {
       return null;
     }
     const extensions =

@@ -19,6 +19,7 @@ import {
   loadProgress,
   loadUpload,
   planLaunch,
+  storesMetadata,
   resumeState,
   runLaunch,
   type FeedChoice,
@@ -106,6 +107,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const [logo, setLogo] = useState<LogoPick>({ state: "empty" });
   const [storage, setStorage] = useState<{ key: string; lamports: number | null } | null>(null);
   const [upload, setUpload] = useState<UploadRecord | null>(null);
+  const [storedAtLaunch, setStoredAtLaunch] = useState(false);
   const now = useSyncExternalStore(neverChanges, pageOpenedAt, () => null);
 
   // A wallet that comes back to this tab finds the form and the half finished
@@ -165,13 +167,16 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
   // A launch that stopped after its logo was stored gets that logo back after
   // a reload, fetched from Irys, so the next press uses it again unpaid.
-  const storedImage = upload?.stored?.imageUri ?? null;
-  const storedType = upload?.stored?.imageType ?? null;
+  const storedImage = upload?.stored?.imageUri || null;
+  const storedType = upload?.stored?.imageType || null;
   const logoEmpty = logo.state === "empty";
+  // Brought back once per stored logo, so removing it on purpose keeps it removed.
+  const restoredImage = useRef<string | null>(null);
   useEffect(() => {
-    if (storedImage === null || storedType === null || !logoEmpty) {
+    if (storedImage === null || storedType === null || !logoEmpty || restoredImage.current === storedImage) {
       return;
     }
+    restoredImage.current = storedImage;
     let alive = true;
     fetch(storedImage)
       .then((answer) => (answer.ok ? answer.blob() : null))
@@ -190,10 +195,10 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
     };
   }, [storedImage, storedType, logoEmpty, pickLogo]);
 
-  const storageKey =
-    logo.state === "ready"
-      ? JSON.stringify([
-          logo.logo.bytes,
+  const storing = storesMetadata(form, logo.state === "ready");
+  const storageKey = storing
+    ? JSON.stringify([
+          logo.state === "ready" ? logo.logo.bytes : null,
           form.name.trim(),
           form.symbol.trim().toUpperCase(),
           form.description.trim(),
@@ -206,7 +211,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
       return;
     }
     const [bytes, name, symbol, description, website, x] = JSON.parse(storageKey) as [
-      number,
+      number | null,
       string,
       string,
       string,
@@ -352,10 +357,9 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
         stock: stock.state === "ready" ? stock.reading : null,
         lamports,
         now,
-        hasLogo: logo.state === "ready",
         storageLamports,
       }),
-    [form, stock, lamports, now, logo.state, storageLamports]
+    [form, stock, lamports, now, storageLamports]
   );
   const resume = resumeState(progress, plan.terms);
 
@@ -363,18 +367,19 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const turn = useRef(0);
 
   const launch = async () => {
-    if (publicKey === null || signTransaction === undefined || plan.terms === null || logo.state !== "ready" || running) {
+    if (publicKey === null || signTransaction === undefined || plan.terms === null || logo.state === "preparing" || running) {
       return;
     }
     turn.current += 1;
     const mine = turn.current;
     const terms = plan.terms;
     const launchedForm = form;
-    const launchedLogo = logo.logo.file;
+    const launchedLogo = logo.state === "ready" ? logo.logo.file : null;
     setRunning(true);
     setResult(null);
     setSteps(IDLE_STEPS);
-    let current: StepId = "metadata";
+    setStoredAtLaunch(storing);
+    let current: StepId = storing ? "metadata" : "template";
     const onStep = (id: StepId, state: StepState) => {
       if (turn.current !== mine) {
         return;
@@ -441,7 +446,11 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
   const blocking = plan.refusals;
   const canSign = signTransaction !== undefined;
-  const ready = wallet !== null && canSign && blocking.length === 0 && plan.terms !== null && !running;
+  const ready =
+    wallet !== null && canSign && blocking.length === 0 && plan.terms !== null && logo.state !== "preparing" && !running;
+  // While a launch runs, and after it stops, the list shows the steps that
+  // launch had; before the first press it follows the form.
+  const showStorage = running || steps !== IDLE_STEPS ? storedAtLaunch : storing;
   const cost = (LAUNCH_COST_LAMPORTS / LAMPORTS_PER_SOL).toFixed(4);
   const buttonWords = running
     ? "Launching"
@@ -522,8 +531,9 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
                   </div>
 
                   <p className="mt-5 max-w-[56ch] text-[14px] leading-relaxed text-muted">
-                    First the logo and description go to Irys: your wallet pays for the storage and signs each of the two files.
-                    Then two transactions, each tried against devnet first so a refusal shows before your wallet is asked, and the second needs the first on chain.
+                    {storing &&
+                      `First the ${logo.state === "ready" ? "logo and description go" : "description and links go"} to Irys: your wallet pays for the storage and signs ${logo.state === "ready" ? "each of the two files" : "the one file"}. `}
+                    {storing ? "Then two" : "Two"} transactions, each tried against devnet first so a refusal shows before your wallet is asked, and the second needs the first on chain.
                     About {cost} SOL in all, most of it rent: the deposit Solana holds to keep the new accounts open.
                   </p>
 
@@ -602,9 +612,9 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
                   <div className="mt-10">
                     <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-                      {STEPS.length} steps, in order
+                      {showStorage ? STEPS.length : STEPS.length - 1} steps, in order
                     </p>
-                    <LaunchSteps steps={steps} storageLamports={storageLamports} />
+                    <LaunchSteps steps={steps} storageLamports={storageLamports} withStorage={showStorage} />
                   </div>
                 </div>
               </Reveal>

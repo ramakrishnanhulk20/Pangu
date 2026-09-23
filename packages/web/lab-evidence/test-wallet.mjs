@@ -16,16 +16,22 @@
  * the scripts package loads from the path in .env, and with demo dollars from
  * the app's own demo dollar route. What is left is sent back at the end.
  *
- *   1. demo dollar, open access, 5 percent ceiling on AAPLx, cap 10 percent, 14 days
- *   2. devnet SOL, approved list, no ceiling, no end. Its sale signature is
- *      refused once on purpose, then Launch is pressed again and the run
- *      checks the template from the first press was reused, not remade.
+ *   1. demo dollar, open access, 5 percent ceiling on AAPLx, cap 10 percent,
+ *      14 days, with lab-evidence/metadata-logo.png as its logo and a
+ *      description, so the logo and the JSON are stored on Irys first. The
+ *      wallet signs those two files as messages.
+ *   2. devnet SOL, approved list, no ceiling, no end, and no logo, description
+ *      or link, so the storage step is left out and the mint's metadata link
+ *      is empty. Its sale signature is refused once on purpose, then Launch is
+ *      pressed again and the run checks the template from the first press was
+ *      reused, not remade.
  *
  * `--second-only` runs launch 2 alone.
  *
  * Neither sale is added to packages/scripts/sales.json.
  */
 
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
   Connection,
@@ -36,7 +42,7 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
-import { ACCESS_MODE, PANGU_PROGRAM_ID, getSale } from "pangu-sdk";
+import { ACCESS_MODE, PANGU_PROGRAM_ID, getSale, saleTokenInfo } from "pangu-sdk";
 import { capFromShare, loadPool } from "pangu-sdk/dbc";
 
 import { builtCurve } from "../lib/launch-curve.ts";
@@ -44,6 +50,8 @@ import { payerKeypair, rpcUrl } from "../../scripts/src/environment.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.APPDATA + "/npm/node_modules/playwright");
+const nacl = require("tweetnacl");
+const LOGO_PATH = "lab-evidence/metadata-logo.png";
 
 const base = process.argv[2] ?? "http://127.0.0.1:3460";
 // Runs launch 2 alone, for when launch 1 already passed and a later step was
@@ -191,6 +199,13 @@ async function signInNode(encoded) {
   return signed;
 }
 
+/** Irys has each stored file signed as a message; the signature goes back as a string of byte values. */
+let messageRequests = 0;
+async function signMessageInNode(encoded) {
+  messageRequests += 1;
+  return nacl.sign.detached(Buffer.from(encoded, "base64"), throwaway.secretKey).reduce((text, byte) => text + String.fromCharCode(byte), "");
+}
+
 /**
  * Runs inside the page before any of its scripts. It registers a Wallet
  * Standard wallet the adapter lists beside the injected ones, and every
@@ -209,7 +224,7 @@ function injectWallet([name, address, keyBytes]) {
     address,
     publicKey: new Uint8Array(keyBytes),
     chains: ["solana:devnet"],
-    features: ["solana:signTransaction"],
+    features: ["solana:signTransaction", "solana:signMessage"],
   });
   const wallet = {
     version: "1.0.0",
@@ -229,6 +244,16 @@ function injectWallet([name, address, keyBytes]) {
           return signed.map((text) => ({ signedTransaction: fromBase64(text) }));
         },
       },
+      "solana:signMessage": {
+        version: "1.0.0",
+        signMessage: async (...inputs) =>
+          Promise.all(
+            inputs.map(async (input) => {
+              const raw = await window.__panguTestSignMessage(toBase64(input.message));
+              return { signedMessage: input.message, signature: Uint8Array.from(raw, (character) => character.charCodeAt(0)) };
+            })
+          ),
+      },
     },
   };
   const register = ({ register: add }) => add(wallet);
@@ -240,6 +265,7 @@ function injectWallet([name, address, keyBytes]) {
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "light" });
 await context.exposeFunction("__panguTestSign", signInNode);
+await context.exposeFunction("__panguTestSignMessage", signMessageInNode);
 await context.addInitScript(injectWallet, [WALLET_NAME, owner, Array.from(throwaway.publicKey.toBytes())]);
 const page = await context.newPage();
 const pageErrors = [];
@@ -355,7 +381,11 @@ await fill({
   "launch-cap": "10",
   "launch-days": "14",
   "launch-band-percent": "5",
+  "launch-description": "A devnet test sale launched from the Pangu launch page, with a logo stored on Irys.",
 });
+await page.getByTestId("launch-logo").setInputFiles(LOGO_PATH);
+await page.getByTestId("launch-logo-facts").waitFor({ timeout: 20_000 });
+check("launch 1: the storage step is listed", (await page.getByTestId("launch-step-metadata").count()) === 1);
 await page.getByTestId("launch-stock").waitFor({ timeout: 150_000 });
 console.log("");
 console.log("launch 1 : PLAUNCH, demo dollar, open, 5 percent over AAPLx, cap 10 percent, 14 days");
@@ -385,6 +415,22 @@ if (first.mint !== undefined) {
     feedId: AAPLX_FEED,
     days: 14,
   }, clock1);
+  check("launch 1: the wallet signed the logo and the JSON as messages", messageRequests === 2, String(messageRequests));
+  const token1 = await retry("reading launch 1's metadata", () => saleTokenInfo(connection, new PublicKey(firstMint)));
+  console.log(`uri      : ${token1?.uri}`);
+  const json1 = token1 === null || token1.uri === "" ? null : await (await fetch(token1.uri)).json();
+  check("launch 1: the mint's link loads JSON naming the token", json1?.name === "Pangu Launch Page Share" && json1?.symbol === "PLAUNCH");
+  const picture = json1?.image === undefined ? null : Buffer.from(await (await fetch(json1.image)).arrayBuffer());
+  check(
+    "launch 1: the JSON's image is the logo the form was given",
+    picture !== null && picture.equals(readFileSync(LOGO_PATH)),
+    json1?.image
+  );
+  await page.waitForFunction(() => {
+    const image = document.querySelector("[data-testid=launch-done-logo] img");
+    return image !== null && image.complete && image.naturalWidth > 0;
+  }, undefined, { timeout: 30_000 });
+  check("launch 1: the done state shows the logo", true);
 
   // The done state, in both themes at both widths. The theme is switched on
   // the attribute next-themes writes, so the launch result stays on screen.
@@ -416,8 +462,9 @@ await fill({
   "launch-kept": "20",
   "launch-cap": "10",
 });
+check("launch 2: with nothing to store the storage step is left out", (await page.getByTestId("launch-step-metadata").count()) === 0);
 console.log("");
-console.log("launch 2 : PLAUNCHL, devnet SOL, approved list, no ceiling, no end");
+console.log("launch 2 : PLAUNCHL, devnet SOL, approved list, no ceiling, no end, no logo, description or link");
 const before2 = await sol(owner);
 const clock2 = await chainNow();
 rejectSale = true;
@@ -459,6 +506,12 @@ if (second.mint !== undefined) {
     bandBps: null,
     days: null,
   }, clock2);
+  const token2 = await retry("reading launch 2's metadata", () => saleTokenInfo(connection, new PublicKey(secondMint)));
+  check("launch 2: the mint's metadata link is empty", token2 !== null && token2.uri === "", JSON.stringify(token2?.uri));
+  check(
+    "launch 2: the done state says the token launched without a logo",
+    /launched without a logo/i.test(await page.getByTestId("launch-done-metadata").innerText())
+  );
   if (read !== null) {
     check(
       "launch 2: the pool was opened on the template the first press made, so it was reused",

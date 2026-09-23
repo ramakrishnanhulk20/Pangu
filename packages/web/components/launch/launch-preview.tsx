@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { PriceCurve } from "@/components/readout/price-curve";
 import { LogoFrame } from "@/components/token-logo";
-import { money, sharePrice, shares as whole, utcMoment } from "@/components/readout/format";
+import { money, perThousand, sharePrice, shares as whole, utcMoment } from "@/components/readout/format";
 import { feedWords } from "@/lib/feeds";
 import { FEED_IDS, type LaunchForm, type Preview } from "@/lib/launch";
 import type { SaleReadout } from "@/lib/readout";
@@ -103,6 +103,10 @@ export function LaunchPreview({
 
   const feed = feedWords(FEED_IDS[form.feed]);
   const bites = preview.ceilingShare;
+  // The readout's rule: a price of a few millionths reads as a row of zeros,
+  // so it is shown for 1,000 shares and the note under it says so.
+  const tiny = perThousand(preview.opening);
+  const opening = money(tiny ? preview.opening * 1_000 : preview.opening, preview.money);
   const facts: { label: string; value: string; tag?: string }[] = [
     { label: "the curve sells", value: `${whole(preview.curveShares)} shares` },
     { label: "it graduates at", value: sharePrice(preview.graduation, preview.money) },
@@ -151,22 +155,26 @@ export function LaunchPreview({
       </div>
 
       <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-3">
-        <div>
+        <div className="min-w-0 max-w-full">
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.p
               key={preview.opening.toPrecision(6)}
               data-testid="launch-opening"
-              className="font-display text-[clamp(3rem,7vw,6.25rem)] font-semibold leading-[0.9] tracking-[-0.045em] tabular-nums"
+              className={`break-words font-display font-semibold leading-[0.9] tracking-[-0.045em] tabular-nums ${
+                opening.length > 10 ? "text-[clamp(2.1rem,4.6vw,4.25rem)]" : "text-[clamp(3rem,7vw,6.25rem)]"
+              }`}
               initial={still ? false : { opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               exit={still ? undefined : { opacity: 0, y: -14 }}
               transition={still ? { duration: 0 } : { duration: 0.45, ease: EASE }}
             >
-              {money(preview.opening, preview.money)}
+              {opening}
             </motion.p>
           </AnimatePresence>
           <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-            the first share, {(preview.underGraduation * 100).toFixed(0)}% under where it graduates
+            {tiny
+              ? `what the first 1,000 shares cost: one share is under 0.0001 ${preview.money}, ${(preview.underGraduation * 100).toFixed(0)}% under where it graduates`
+              : `the first share, ${(preview.underGraduation * 100).toFixed(0)}% under where it graduates`}
           </p>
         </div>
       </div>

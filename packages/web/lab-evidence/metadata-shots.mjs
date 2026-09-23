@@ -144,6 +144,47 @@ const browser = await chromium.launch();
   await context.close();
 }
 
+// A SOL sale's tiny opening price, and a launch with nothing to store.
+{
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, colorScheme: "light" });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${base}/launch`, { waitUntil: "networkidle", timeout: 120_000 });
+  check("with no logo, description or link the storage step is left out", (await page.getByTestId("launch-step-metadata").count()) === 0);
+  check("the logo box says wallets show a blank icon without one", /blank icon/.test(await page.locator("body").innerText()));
+  await page.getByTestId("launch-paying-sol").click();
+  for (const [id, value] of Object.entries({
+    "launch-name": FORM.name,
+    "launch-symbol": FORM.symbol,
+    "launch-supply": "1000000000",
+    "launch-raise": "0.1",
+    "launch-kept": "20",
+  })) {
+    await page.getByTestId(id).fill(value);
+  }
+  await page.addStyleTag({ content: "header.sticky, nextjs-portal { display: none !important }" });
+  for (const theme of ["light", "dark"]) {
+    await settle(page, theme, 375);
+    const measured = await overflow(page);
+    const price = (await page.getByTestId("launch-opening").innerText()).trim();
+    const note = await page.getByTestId("launch-opening").locator("xpath=following-sibling::p[1]").innerText();
+    console.log(`page says: ${price} / ${note}`);
+    check(`SOL sale, ${theme} 375: the opening price is quoted per 1,000 shares`, /1,000 shares/i.test(note));
+    check(
+      `SOL sale, ${theme} 375: nothing in the launch page reaches past the window`,
+      measured.wide.length === 0,
+      measured.wide.length === 0 ? `${measured.width}px` : `reaches ${measured.right}px of ${measured.width}px: ${measured.wide.join(" | ")}`
+    );
+    await snap(page, "launch-opening", `lab-evidence/metadata-sol-price-${theme}-375.png`);
+  }
+  await page.getByTestId("launch-description").fill("Words only, no logo.");
+  await page.getByTestId("launch-step-metadata").waitFor({ timeout: 10_000 });
+  check("a description alone brings the storage step back", true);
+  check("no uncaught errors on the SOL form", errors.length === 0, errors.join(" | "));
+  await context.close();
+}
+
 // The done state, through the resume path.
 if (mint !== undefined) {
   const connection = new Connection(rpcUrl(), "confirmed");
