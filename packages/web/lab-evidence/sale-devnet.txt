@@ -1,0 +1,36 @@
+server http://localhost:3461, devnet
+issuer 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+throwaway buyer CXjebFjUNRtsFKziotZuUfmzGcVUb4oSKvvnh5fh9qAz, made in memory for this run
+funded the throwaway with 0.03 SOL: 4tHwLirG4ZbLotKkAzGXJwwYr97LdfmHq57sg6Lh5LtwKJPUMB6frGtu6abo2HLAJg7udoP8LbD5ZomDGPNfxNEA
+
+PAAPLX 8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK
+  before: You hold 0 PAAPLX, you may still buy 1.09 PAAPLX under the cap. You have $0 to spend.
+  demo dollars from the page's button: 547ZiyS9nqSHmkYtFe6ujAbLHhiFth5db6n5i4Z8ZxvExzL6NcuFkLbFha8A43wdPM5nFkx2jWEYLKEEhuXutFKC
+  after the grant: You hold 0 PAAPLX, you may still buy 1.09 PAAPLX under the cap. You have $1,756 to spend.
+  rules before signing: pass, "The rules would take this buy right now. A pass is the chain as it stands, not a promise: the buy is checked again when it lands."
+  landed: The buy landed on devnet. open the transaction
+  signature MtunmJmH1mLRu7iheZiDwdZ7EpPFtCuMpZ2yVygTY7mdGadd7FWSNEbn7ytjh5NPdSVMeekMb1kkGE2dW6H8pXZ
+  after the buy: You hold 0.05 PAAPLX, you may still buy 1.04 PAAPLX under the cap. You have $1,739 to spend.
+  quote: Selling 0.02 PAAPLX returns about $6.88.
+  landed: The sell landed on devnet. open the transaction
+  signature 2RMM4n6LPbTCZsXoeFCYsg4xpZ94QehkuDq9RZhUn66jUE7A52o5DQ4dGi4zz8jszg9heh91gRfpipNfXyNkYTfP
+  after the sell: You hold 0.03 PAAPLX.
+
+list-mode sale launched from /launch CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1, as a wallet nobody approved
+  the page says: This sale sells only to wallets the issuer approved. Yours is not on the list: ask the issuer. 2FXS7oaWKqSCSA9fNahZXnXrDTSVmyBrvAh9dNjAfSy1
+  rules before signing: refused, "The issuer has not approved this wallet to buy in this sale. Ask the issuer, 2FXS7oaWKqSCSA9fNahZXnXrDTSVmyBrvAh9dNjAfSy1, to add your wallet to the list."
+
+list-mode demo sale 4kzCbpEZxyzwXno1ZVnTJ9BAGSjD1HVgSBSwikEsxeaE, whose issuer key this run holds
+  the issuer panel shows for the issuer's wallet
+  pasted with a bad line: not-an-address is not a Solana address.
+  landed: Approved on devnet. open the transaction
+  signature hcv8L5CMdei2x1EEzyJAqzKivM8uvizzJv2bcEzYqhUkUkJpMH2eu1BxQAqj5PpCwqvLkvGkufUjHhmKAQZcx1y
+  the buyer's page: Your wallet is on the issuer's list, so the rules let it buy up to the cap.
+  issuer panel on the buyer's page: hidden
+  before: You hold 0 PLIST, you may still buy 79,999,967 PLIST under the cap. You have 0.0273 SOL to spend.
+  rules before signing: pass, "The rules would take this buy right now. A pass is the chain as it stands, not a promise: the buy is checked again when it lands."
+  landed: The buy landed on devnet. open the transaction
+  signature 4s9DrKQu4wBVonTN1XmUHVqUwsBySGL3z427u4pxtrzKy8UhU1RCUo4dNQKz3VSPt68ZqEdqxjS4FcoaDHhF3fRF
+
+result: dollars landed, buy landed, sell landed, approval landed, list buy landed
+sweep: the keyed node dropped the balance read, so the throwaway's leftover, about 0.02 devnet SOL, stayed at CXjebFjUNRtsFKziotZuUfmzGcVUb4oSKvvnh5fh9qAz. The script now retries that read before it gives up.

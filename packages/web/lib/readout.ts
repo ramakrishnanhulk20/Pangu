@@ -506,9 +506,46 @@ const held = new Map<string, { at: number; readout: SaleReadout }>();
 const missed = new Map<string, { at: number; readout: SaleReadout }>();
 const reading = new Map<string, Promise<SaleReadout>>();
 
+/**
+ * A sale the scripts did not open, found in the chain's own list of sales: one
+ * launched from /launch, or a demo sale since retired. Loaded on demand, since
+ * lib/directory reaches lib/live-sale, which reads this file.
+ *
+ * Only a mint the directory knows is ever read, so a stranger naming made-up
+ * mints costs devnet the directory's own shared read and nothing per mint (C17).
+ */
+async function fromDirectory(mint: string): Promise<OpenedSale | "unanswered" | undefined> {
+  const { findSale } = await import("./directory");
+  const found = await findSale(mint);
+  if (!found.found) {
+    return found.unanswered ? "unanswered" : undefined;
+  }
+  const { sale } = found;
+  return {
+    network: "devnet",
+    name: sale.name,
+    symbol: sale.symbol,
+    mode: String(sale.accessMode),
+    mint: sale.mint,
+    pool: sale.pool,
+    quoteMint: sale.quoteMint ?? "",
+    issuer: sale.issuer,
+    bandBps: sale.hasBand ? sale.bandBps : null,
+    feed: sale.feedId,
+    openedAt: sale.openedAt === null ? "" : new Date(sale.openedAt).toISOString(),
+  };
+}
+
 /** One sale's numbers, live off devnet, shared between the loads that land together. */
 export async function readReadout(mint: string): Promise<SaleReadout> {
-  const opened = openedSales().find((sale) => sale.mint === mint);
+  const opened = openedSales().find((sale) => sale.mint === mint) ?? (await fromDirectory(mint));
+  if (opened === "unanswered") {
+    return refused(
+      { mint, pool: "", name: "This sale", money: "dollars" },
+      "Devnet did not answer, so there is nothing true to show yet.",
+      true
+    );
+  }
   if (opened === undefined) {
     return refused(
       { mint, pool: "", name: "This sale", money: "dollars" },

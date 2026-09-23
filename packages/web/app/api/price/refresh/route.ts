@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { forgetBreakTarget } from "@/lib/break-target";
 import { Refused } from "@/lib/demo-dollars";
 import { refreshIfStale } from "@/lib/price-refresh";
-import { openedSales } from "@/lib/sales";
+import { findSale } from "@/lib/directory";
 
 // The demo key and the Hermes key are read inside lib/price-refresh, which only
 // a server route may import. Nothing in this file is ever bundled for a browser.
@@ -40,14 +40,20 @@ export async function POST(request: Request) {
     );
   }
 
-  // Only the app's own banded sales. A stranger cannot point the demo key at
-  // any other feed or any other account.
-  const known = mint.toBase58();
-  const sale = openedSales().find((entry) => entry.mint === known);
-  if (sale === undefined || sale.bandBps === null) {
+  // Only a Pangu sale with a price band, as the chain's own list of sales holds
+  // it. A stranger cannot point the demo key at an account that is not a banded
+  // sale's price, and the post limits in lib/price-refresh hold whichever sale
+  // asks (C17).
+  const lookup = await findSale(mint.toBase58());
+  if (!lookup.found || !lookup.sale.hasBand) {
     return NextResponse.json(
-      { reason: "This app only brings the price up to date for its own sales with a price band." },
-      { status: 404 }
+      {
+        reason:
+          !lookup.found && lookup.unanswered
+            ? "Devnet did not answer the read of every sale. Wait a moment and try again."
+            : "This app only brings the price up to date for a Pangu sale with a price band.",
+      },
+      { status: !lookup.found && lookup.unanswered ? 503 : 404 }
     );
   }
 

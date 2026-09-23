@@ -1,0 +1,8 @@
+lab-evidence/sale-shot-sales-light-1440.png  page width 1440px at a 1440px viewport
+lab-evidence/sale-shot-sale-paaplx-light-1440.png  page width 1440px at a 1440px viewport
+lab-evidence/sale-shot-sales-light-375.png  page width 375px at a 375px viewport
+lab-evidence/sale-shot-sale-paaplx-light-375.png  page width 375px at a 375px viewport
+lab-evidence/sale-shot-sales-dark-1440.png  page width 1440px at a 1440px viewport
+lab-evidence/sale-shot-sale-paaplx-dark-1440.png  page width 1440px at a 1440px viewport
+lab-evidence/sale-shot-sales-dark-375.png  page width 375px at a 375px viewport
+lab-evidence/sale-shot-sale-paaplx-dark-375.png  page width 375px at a 375px viewport
