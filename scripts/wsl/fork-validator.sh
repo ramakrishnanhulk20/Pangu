@@ -19,7 +19,15 @@ PIDFILE="$HOME/pangu-fork-validator.pid"
 # Test wallets and the rewritten stock-token accounts live outside the repo, so no
 # keypair can ever reach a tracked file.
 ACCOUNTS="$HOME/pangu-fork-accounts"
+# The node the validator clones Meteora's accounts from. The public node refuses
+# the clone under load, so a keyed MAINNET_RPC_URL from the root .env is used
+# when it is set. The URL carries a key and is never printed.
 MAINNET="https://api.mainnet-beta.solana.com"
+ENV_FILE="/mnt/d/Projects/Meteora/.env"
+if [ -f "$ENV_FILE" ]; then
+  KEYED="$(grep -E '^MAINNET_RPC_URL=https' "$ENV_FILE" | tail -n 1 | cut -d= -f2- | tr -d '\r')"
+  [ -n "$KEYED" ] && MAINNET="$KEYED"
+fi
 LOCAL="http://127.0.0.1:8899"
 
 PANGU_ID="4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG"
