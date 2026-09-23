@@ -27,7 +27,7 @@ cd ../scripts && npm install && npm run sdk:refresh
 ## The commands
 
 ```bash
-npm run mint-dollars                               # a dollar token to price a sale in
+npm run mint-dollars                               # a dollar-like token for an unbanded sale
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
 npm run launch -- --mode list --ends-in 72          # open a sale whose rules lift in 72 hours
@@ -91,10 +91,12 @@ entry for a mint already in the file is refused. Each write goes to a file
 beside it first and is swapped in, so a run killed mid-write leaves the old
 list.
 
-Run `mint-dollars` once before the first banded sale priced in dollars. Devnet
-has no dollar token anybody can get in quantity, and a ceiling that is a dollar
-price only means something when the paying token is one. It prints a mint
-address; pass that address to `launch --quote`.
+A price ceiling needs buyers to pay in a dollar token the program recognises.
+On devnet those are devnet USDC (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`)
+and the demo dollar (`2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5`); pass one to
+`launch --quote` for a banded sale. `mint-dollars` makes a fresh dollar-like
+token, which the program does not recognise, so a sale priced in it runs without
+a ceiling.
 
 ## What launch takes
 
@@ -106,7 +108,7 @@ address; pass that address to `launch --quote`.
 | `--cap-share-bps` | `1000` | The per wallet cap, in basis points of what the curve sells. 1000 is 10 percent. Must stay below 10000: the program refuses a cap covering the whole curve. |
 | `--band` | none | How far over the stock price the curve may go, in basis points. 500 is 5 percent. Leave it out and the sale has no band. |
 | `--feed` | `Equity.US.AAPL/USD` | The Pyth feed the band reads. The `Equity.US.*` feeds only publish in US market hours, so those sales shut overnight. The `Crypto.*X` ones publish all week. |
-| `--quote` | `wsol` | The token buyers pay in: `wsol`, or the address of a mint with 6 to 9 decimals. Use the mint from `mint-dollars` for a dollar priced sale. |
+| `--quote` | `wsol` | The token buyers pay in: `wsol`, or the address of a mint with 6 to 9 decimals. A banded sale needs a listed dollar: devnet USDC or the demo dollar. |
 | `--threshold` | `0.1` | How much of the paying token the curve takes in before the sale graduates, in whole units of it. |
 | `--base-decimals` | `6` | Decimals of the sale token. Ask for 9 when a share is priced in dollars: more raw units per share is what lets the curve carry a three figure opening price. |
 | `--migration-percent` | `20` | The share of the supply carried to DAMM v2 at graduation, 10 to 45. The more kept back, the closer the opening price sits to the graduation price, and the further up the curve a price ceiling bites. Meteora's own builder refuses 50. |

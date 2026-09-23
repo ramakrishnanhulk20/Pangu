@@ -597,7 +597,7 @@ Two caveats worth stating up front. Every fresh read of a Pyth price has needed 
 
 ## Licence
 
-MIT.
+MIT, see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
