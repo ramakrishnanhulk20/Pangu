@@ -45,7 +45,8 @@
     "issuer": "9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW",
     "priceAccount": "9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb",
     "templateSignature": "32YVAnqBt4hQeSMxUVAD5QEJgAeXADj8zEyZBhKDitT9LTnKB5f5KE8YJX7WG5MyYAPWzuvNdHAeHDgHswTLrq46",
-    "saleSignature": "jcEYEoaHoEULyms1rpyBiQm3rdxFQF2vfW3rxHwUYa65MfL4YZ3ABji4hWvAdBmiKt7skxqkLkkP2yAw6GJ6eV3"
+    "saleSignature": "jcEYEoaHoEULyms1rpyBiQm3rdxFQF2vfW3rxHwUYa65MfL4YZ3ABji4hWvAdBmiKt7skxqkLkkP2yAw6GJ6eV3",
+    "retiredAt": "2026-09-23T09:14:52.055Z"
   },
   {
     "network": "devnet",
