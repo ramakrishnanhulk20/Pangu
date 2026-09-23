@@ -44,7 +44,9 @@ ceiling may be paid in any token, including a tokenized stock such as AAPLx.
 
 `scripts/wsl/build.sh` builds the devnet binary and checks it holds both devnet
 dollars and none of mainnet USDC. The mainnet build is the same command without
-the feature, written at the top of `build.sh`; no script deploys it.
+the feature, produced reproducibly by `scripts/wsl/verify-build.sh`. Only a person
+deploys it, with `scripts/wsl/deploy-mainnet.sh` and a typed confirmation; the
+steps are in `docs/deploy/mainnet.md`.
 
 Pyth's receiver program and price feed program sit at the same addresses on both
 networks, so nothing else differs between the builds. An earlier arrangement of

@@ -5,8 +5,9 @@
 # may be set on do not, so the build turns on the program's `devnet` feature and
 # carries devnet USDC and the demo dollar instead of mainnet USDC.
 #
-# The mainnet build is the same command without the feature, run by hand from the
-# mirrored workspace, and nothing in this repo deploys it:
+# The mainnet build is the same command without the feature. scripts/wsl/verify-build.sh
+# makes it reproducibly, and only a person deploys it, with scripts/wsl/deploy-mainnet.sh
+# (see docs/deploy/mainnet.md):
 #   cd ~/pangu-build && anchor build --arch v0
 NODE_BIN="$(ls -d $HOME/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
 export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/bin:$NODE_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
