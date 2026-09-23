@@ -8,8 +8,10 @@
  * directly: Node 22.18 and later strip the types on load.
  */
 
-import { tokenAmount } from "../lib/format.ts";
-import { clock, money, percent, shares } from "../components/readout/format.ts";
+import { importApp } from "./app-imports.mjs";
+
+const { tokenAmount } = await importApp("lib/format.ts");
+const { clock, money, percent, shares } = await importApp("components/readout/format.ts");
 
 let failed = 0;
 let passed = 0;

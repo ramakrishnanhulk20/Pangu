@@ -9,7 +9,9 @@
  * file run here.
  */
 
-import { timeUntil, utcDay, utcMoment } from "../components/readout/format.ts";
+import { importApp } from "./app-imports.mjs";
+
+const { timeUntil, utcDay, utcMoment } = await importApp("components/readout/format.ts");
 
 const endsAt = Date.UTC(2026, 9, 7, 9, 12);
 const cases = [

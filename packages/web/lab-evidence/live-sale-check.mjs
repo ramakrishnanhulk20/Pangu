@@ -196,7 +196,7 @@ async function child(force) {
   const { chooseLiveSale } = await import(liveSale);
   const sdk = await import(realSdk);
   const { PublicKey } = await import("@solana/web3.js");
-  const { devnetConnection } = await import(new URL("lib/solana.ts", web).href);
+  const { chainConnection } = await import(new URL("lib/solana.ts", web).href);
 
   console.log(`case      : ${force === "none" ? "as the chain stands now" : `${force} forced stale`}`);
   const started = Date.now();
@@ -204,7 +204,7 @@ async function child(force) {
   console.log(`took      : ${((Date.now() - started) / 1000).toFixed(1)} s`);
 
   // Read after the choice, so a price the choice posted counts as it now stands.
-  const connection = devnetConnection();
+  const connection = chainConnection();
   const realUsable = {};
   for (const candidate of choice?.candidates ?? []) {
     const sale = await sdk.getSale(connection, new PublicKey(candidate.mint));

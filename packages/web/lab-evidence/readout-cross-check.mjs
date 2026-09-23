@@ -22,8 +22,33 @@ import {
 import { loadPool, saleProgress } from "pangu-sdk/dbc";
 
 const base = process.argv[2] ?? "http://localhost:3300";
-const rpc = process.env.NEXT_PUBLIC_DEVNET_RPC_URL ?? "https://api.devnet.solana.com";
-const connection = new Connection(rpc, "confirmed");
+// The public devnet node does not always answer from this machine, so the
+// keyed endpoint in the repository root .env is read first when there is one.
+try {
+  process.loadEnvFile(new URL("../../../.env", import.meta.url));
+} catch {
+  // No root .env: the endpoints below stand in.
+}
+const rpc =
+  process.env.DEVNET_RPC_URL ??
+  process.env.NEXT_PUBLIC_DEVNET_RPC_URL ??
+  "https://api.devnet.solana.com";
+// The connection from this machine to devnet drops now and then, so a call
+// that could not connect is tried again, as offering-check.mjs does.
+async function patientFetch(input, init) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      if (attempt >= 8) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+    }
+  }
+}
+
+const connection = new Connection(rpc, { commitment: "confirmed", fetch: patientFetch });
 
 const sales = JSON.parse(
   readFileSync(new URL("../../scripts/sales.json", import.meta.url), "utf8")

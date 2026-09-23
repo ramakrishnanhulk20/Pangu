@@ -59,7 +59,14 @@ const FALLBACK_LAMPORTS = 0.05 * LAMPORTS_PER_SOL;
  */
 const PAYING_TOKENS = 100_000_000_000;
 
-const connection = breakConnection();
+// The keyed devnet endpoint lives in the repository root .env. The public one
+// stands in when there is none.
+try {
+  process.loadEnvFile(join(import.meta.dirname, "..", "..", "..", ".env"));
+} catch {
+  // No root .env: the public endpoint is used.
+}
+const connection = breakConnection(process.env.DEVNET_RPC_URL ?? "https://api.devnet.solana.com");
 // The funding steps are ordinary sends and want an ordinary connection: the
 // paced one holds a blockhash long enough for the node to forget it.
 const funder = new Connection(connection.rpcEndpoint, "confirmed");

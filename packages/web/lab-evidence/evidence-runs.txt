@@ -1,0 +1,72 @@
+Every script in lab-evidence, run under plain Node 26.7 after the network switch, 23 Sep 2026.
+
+How each was run
+  node lab-evidence/<script>.mjs from packages/web, NODE_OPTIONS=--dns-result-order=ipv4first.
+  A script that sends a transaction, or that writes pictures or evidence files,
+  was only started: every endpoint and server it could reach
+  (DEVNET_RPC_URL, MAINNET_RPC_URL, NEXT_PUBLIC_*_RPC_URL, REFRESH_BASE_URL,
+  DOLLARS_BASE_URL and the base URL argument) was pointed at a closed port on
+  this machine, so it loaded, reached its first network call, was refused
+  there, and sent and wrote nothing in the repository. Throwaway keys went to
+  the session scratch folder, unfunded, and were deleted.
+
+What was fixed, start-up only, no assertion changed
+  app-imports.mjs (new)     teaches Node the app's "@/" paths, extensionless imports and bare JSON imports
+  offering-format.mjs       loads components/readout/format.ts through app-imports (it now imports lib/network)
+  readout-format-check.mjs  the same, for lib/format.ts and components/readout/format.ts
+  break-simulations.mjs     hands breakConnection the endpoint, now required, from the root .env
+  live-sale-check.mjs       lib/solana.ts now exports chainConnection, not devnetConnection
+  cross-check.mjs           reads the root .env and uses the keyed devnet endpoint
+  ux-target-read.mjs        reads the root .env and uses the keyed devnet endpoint
+  readout-cross-check.mjs   reads the root .env, uses the keyed endpoint, retries a dropped connection
+
+Run in full: pass
+  offering-format           dates and counts printed, identical to offering-format.txt
+  readout-format-check      34 passed, 0 failed
+  one-bad-sale              the good sale survived the bad one, the bad one counted as skipped
+  launch-curve-check        20 passed, 0 failed
+  offering-check            7 sales checked, 0 mismatches
+  ux-target-read            unpaced 3030 ms, 21 calls; paced 4923 ms; sale Pangu Priced Share
+  ux-console                against the dev server: runs; the errors it lists are the server's own
+                            "the chain did not answer" lines and two browser timeouts to devnet
+  ux-timing                 against the dev server: ledger facts shown, 1 console error per load
+  ux-capline-check          cap line clear of text at 1440 and 375
+
+Run in full: starts and runs, does not pass
+  cross-check               reaches devnet; its two hard-coded mints are layout version 0 sales
+                            from an old program build, which pangu-sdk now refuses by design.
+                            The check itself is out of date, not its start.
+  readout-cross-check       against the dev server and again against the production build on
+                            port 3454: sdk and page agree on every number for the first two
+                            sales. On the third, a SOL sale (4.29e-11 on the curve), the page's
+                            /api/readout answers priceNow null and an empty curve, the same on
+                            both servers, and the script stops reading curve[0]. Its assertions
+                            predate a readout that answers with no price; left as they are.
+  ux-retry                  against the dev server the failure line never shows: React runs the
+                            first read twice in development, so the aborted one is ignored.
+                            Against the production build on port 3454 it passes: see below.
+
+Started only, reached the first network call (sends transactions)
+  break-dollars             prints route and throwaway wallet, refused at the demo dollar route
+  break-simulations         loads lib/break.ts, refused at the first devnet read
+  live-sale-check           all four child cases load lib/live-sale.ts and answer; the reads are refused
+  metadata-devnet           draws its logo (into the scratch folder), refused at the first blockhash
+  network-fork              refused at localhost:8899, no fork running
+  portfolio-devnet          throwaway made, refused at the first blockhash, nothing funded
+  price-refresh-check       refused at the first devnet read
+  sale-devnet               throwaway made, refused at the first blockhash
+  test-wallet               throwaway made, refused at the first blockhash
+  verify-devnet             keyed endpoint refused, fell back to public devnet, which did not
+                            answer; refused at the first blockhash, nothing funded
+
+Started only, reached the first network call (writes pictures)
+  cleanup-hero, launch-shots, live-sale-shots, metadata-shots, offering-shots, portfolio-shots,
+  readout-shots, readout-stale-shots, sale-shots, ux-shots, verify-shots:
+  each launched Chromium and was refused at its first page.goto (ERR_CONNECTION_REFUSED)
+
+Run in full against the production build (port 3454): pass
+  ux-retry                  failure shown with try again, facts shown 17561 ms later after 3 reads
+
+Loaded as a module
+  sale-test-wallet          exports TEST_WALLET_NAME, installTestWallet
+  app-imports               used by the two format checks above

@@ -9,6 +9,13 @@ import { Connection } from "@solana/web3.js";
 import { breakConnection, readTarget } from "../lib/break.ts";
 import sales from "../../scripts/sales.json" with { type: "json" };
 
+// The keyed devnet endpoint lives in the repository root .env. The public one
+// stands in when there is none.
+try {
+  process.loadEnvFile(new URL("../../../.env", import.meta.url));
+} catch {
+  // No root .env: the public endpoint is used.
+}
 const endpoint = process.env.DEVNET_RPC_URL ?? "https://api.devnet.solana.com";
 const candidates = sales
   .filter((sale) => sale.network === "devnet" && sale.retiredAt === undefined)
