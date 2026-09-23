@@ -168,6 +168,74 @@ flowchart TD
 
 `execute`, the transfer hook, is the only instruction that touches all three outside layouts (DBC, the attestation service, Pyth) plus Token-2022's extensions, which is why it carries almost every invariant in the threat model. The bankrun tests exercise the program directly and in isolation; the forked-mainnet tests go through the SDK against real cloned DBC and DAMM v2 programs.
 
+### 4. The app, its server routes, and the chain
+
+```mermaid
+flowchart LR
+    subgraph Pages[Pages in the browser]
+        Front["/ the live sale and Try to break it"]
+        SalesPage["/sales every sale on the chain"]
+        SalePage["/sale/mint buy, sell, issuer controls"]
+        LaunchPage["/launch open a sale"]
+        VerifyPage["/verify issue and check credentials"]
+        PortfolioPage["/portfolio one wallet's sales"]
+    end
+
+    Wallet[The visitor's wallet]
+
+    subgraph Routes[Server routes]
+        Directory["/api/sales"]
+        Readout["/api/readout/mint and /api/pulse"]
+        BreakSale["/api/break/sale"]
+        Holdings["/api/portfolio/wallet"]
+        Price["/api/price/mint"]
+        Refresh["/api/price/refresh"]
+        Dollars["/api/break/dollars, devnet only"]
+    end
+
+    subgraph Chain[Solana]
+        PanguProgram[Pangu rules program]
+        DBC[Meteora DBC pool]
+        SAS[Solana Attestation Service]
+        PythAccount[(Pyth price account)]
+        DemoDollar[(Demo dollar mint)]
+    end
+
+    Irys[Irys storage]
+    Hermes[Pyth Hermes]
+
+    Front --> Readout
+    Front --> BreakSale
+    Front --> Dollars
+    SalesPage --> Directory
+    SalePage --> Readout
+    SalePage --> Refresh
+    PortfolioPage --> Holdings
+    LaunchPage --> Price
+    LaunchPage -->|logo and description| Irys
+    VerifyPage -->|reads credentials| SAS
+
+    Front --> Wallet
+    SalePage --> Wallet
+    LaunchPage --> Wallet
+    VerifyPage --> Wallet
+    Wallet -->|signs every transaction| DBC
+    Wallet --> PanguProgram
+    Wallet --> SAS
+
+    Directory --> PanguProgram
+    Readout --> DBC
+    Readout --> PanguProgram
+    BreakSale --> PanguProgram
+    Holdings --> PanguProgram
+    Price --> PythAccount
+    Refresh -->|asks for a signed price| Hermes
+    Refresh -->|posts it| PythAccount
+    Dollars -->|one grant a wallet an hour| DemoDollar
+```
+
+The pages build every transaction in the browser with `pangu-sdk` and the visitor's wallet signs it; no route ever signs for a visitor. The routes read the chain once for every visitor and share the reading, and they hold what a browser must never see: the keyed network endpoint, the Pyth key, and one signing key that pays for price refreshes and, on devnet only, mints demo dollars. The section "The app" below lists each route and its limits.
+
 ## Fixed facts from DBC (verified on mainnet, 21 Sep 2026)
 
 | Fact | Value |
@@ -279,3 +347,40 @@ The program is built twice from the same source: the devnet build (`scripts/wsl/
 - Fees collected in the paying token only, so no fee claim or referral payout ever moves the sale token while the hook is live.
 - Token authority option `CreatorUpdateAuthority` (metadata stays editable, minting power revoked at launch). `create_sale` refuses a mint whose mint authority is still set (threat model C14, the founder's decision 22 Sep 2026). An issuer with more shares later runs a new sale.
 - Fees collected in the paying token is checked on chain too: `create_sale` reads the template's collect fee mode in every mode and refuses anything else (C11, code review 22 Sep 2026).
+
+## The app
+
+`packages/web`, one Next.js app. It holds no database: every number on every page is read off the chain as the page loads. One build setting, `NEXT_PUBLIC_PANGU_NETWORK`, picks devnet or mainnet, and every per-network fact lives in `lib/network.ts`.
+
+### Pages
+
+| Route | Who it is for | What it reads | What the visitor's wallet signs |
+|---|---|---|---|
+| `/` | everyone | the live banded demo sale through `/api/pulse`, `/api/readout/[mint]` and `/api/break/sale` | the nine "Try to break it" rows, simulated by default; on mainnet, simulate only |
+| `/sales` | buyers | every Pangu sale, through `/api/sales` | nothing |
+| `/sale/[mint]` | buyers and the sale's issuer | the sale through `/api/readout/[mint]`; the wallet's own standing, the quote and the preflight straight from the browser's endpoint | a buy or a sell (`pangu-sdk/dbc`); for the issuer, approving wallets, claiming fees and migrating to DAMM v2 |
+| `/launch` | issuers | the stock price through `/api/price/[mint]` for a sale on the chosen feed | the Irys top-up and one message per file when there is a logo, description or link; the launch template; the pool and the sale's rules in one transaction |
+| `/verify` | verifiers, and anyone checking a wallet | the Solana Attestation Service, straight from the browser's endpoint | the credential and schema, one credential per buyer, a revocation |
+| `/portfolio` | holders and issuers | one wallet's place in every sale, through `/api/portfolio/[wallet]` | nothing |
+| `/docs` | everyone | `content/docs`, built with the app | nothing |
+
+A launch that stops after its template keeps the template's address, never a key, in the browser's session storage, so a second press reuses it and sends only the pool and the rules.
+
+### Server routes
+
+| Route | What it answers | Limit |
+|---|---|---|
+| `GET /api/sales` | every Pangu sale on the chain, found by scanning the program; `packages/scripts/sales.json` only marks which are the demo sales and which of those are retired | one shared read every 30 seconds; a mint the list does not know reads it again at most every 5 seconds (C17) |
+| `GET /api/pulse` | the hero's numbers | one shared read every 10 seconds |
+| `GET /api/readout/[mint]` | one sale's curve, price, raise and buyers | only for a mint on the chain's list of sales; one shared read every 10 seconds (C17) |
+| `GET /api/break/sale` | the sale the attack ledger runs against | one shared read every 10 seconds |
+| `GET /api/portfolio/[wallet]` | one wallet's holdings and issued sales | public data only; one shared read per wallet every 15 seconds |
+| `GET /api/price/[mint]` | a sale's stock price, decoded from the Pyth account | only for the app's own sales, from a 10 second cache (C17) |
+| `POST /api/price/refresh` | posts a fresh Pyth price for a banded sale | only when the stored price is over ten minutes old, one post at a time, at most one a minute across the process; paid by the demo key on devnet and by its own key on mainnet (C15) |
+| `POST /api/break/dollars` | mints demo dollars to a wallet | devnet only, answers 404 on mainnet; one grant per wallet per hour and ten a minute, both reserved before any await (C15) |
+
+The server checks the network it reads, by the genesis hash of its endpoint, once per process before its first read, and refuses every read on the wrong one; the browser runs the same check and says so at the foot of every page.
+
+### Proof
+
+Each door of the app has a recorded run in `packages/web/lab-evidence`: a script that drives the real page with a throwaway wallet and checks every line against the chain. `launch-devnet.txt` and `metadata-devnet.txt` for `/launch`, `sale-devnet.txt` for the sale page, `verify-devnet.txt` for `/verify`, `portfolio-devnet.txt` for `/portfolio`, `break-simulations.txt` and `break-dollars.txt` for the attack ledger, and `network-fork.txt` for the mainnet build's launch, sale and portfolio pages against a forked copy of mainnet.

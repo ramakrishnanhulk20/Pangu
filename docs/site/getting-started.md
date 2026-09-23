@@ -1,13 +1,25 @@
 ---
 title: Getting started
-description: Opening a sale as an issuer, what preflight tells a buyer, and installing the SDK as a developer.
+description: The pages to open first, then running a sale from the terminal as an issuer, what preflight tells a buyer, and installing the SDK as a developer.
 ---
 
-## For a judge: the browser first
+## Start in the browser
 
-The front page of the app runs the whole thing without a terminal. Connect a devnet wallet, press "Get demo dollars" on the "Try to break it" screen (the sale is priced in a demo dollar token, and that button mints your wallet enough of it), then run the nine rows: one honest buy, seven attacks the program refuses by name with a link to each transaction, and one sell back that goes through. Everything below is the same work from a terminal.
+The whole product runs in the browser, on Solana devnet, with no terminal. You need a devnet wallet (Phantom and Solflare are listed first on the connect button), set to devnet, and a little devnet SOL, which the faucet link on the page hands out. Sales priced in the demo dollar have a "Get demo dollars" button that hands your wallet enough to buy with, once an hour.
 
-## For an issuer: open a sale
+| Route | What you do there |
+| --- | --- |
+| `/` | Watch the live demo sale read off devnet, then scroll to "Try to break it": nine rows, one honest buy, seven attacks the program refuses by name with a link to each transaction, and one sell back that goes through. "Simulate" is the default, so your wallet is never asked to sign something meant to fail; "Send for real" lands every refusal on the explorer. |
+| `/sales` | Every Pangu sale on the chain, found by scanning the program itself. |
+| `/sale/` plus a sale token's address | One sale: its rules, its curve, a buy and a sell checked against the rules before you sign, and the issuer's controls when the issuer's wallet is connected. See Buy and sell. |
+| `/launch` | Open your own sale from one form, logo included. See Launch a sale. |
+| `/verify` | Set up as a verifier, issue and revoke credentials, or check any wallet. See Verify buyers. |
+| `/portfolio` | Everything one wallet holds across every sale, and every sale it issued. See Your portfolio. |
+| `/docs` | These pages. |
+
+Everything below is the same work from a terminal, for an issuer running sales from scripts or a developer building on the SDK.
+
+## For an issuer: open a sale from the terminal
 
 Everything below runs from `packages/scripts` in the Pangu repository, against Solana devnet. Fill in `.env` first (see the addresses page for the two values it needs), then:
 
@@ -19,18 +31,18 @@ cd ../scripts && npm install && npm run sdk:refresh
 Then the commands that run a sale, in the order you would actually use them:
 
 ```bash
-npm run mint-dollars                               # a dollar token to price a sale in
+npm run mint-dollars                               # a fresh dollar-like token, for a sale with no ceiling
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
 npm run launch -- --mode list --cap-share-bps 1000 --ends-in 336   # open a sale for two weeks
-npm run launch -- --mode open --band 500 --quote <dollar mint> --no-end  # a price band, no end
+npm run launch -- --mode open --band 500 --quote 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 --no-end  # a price band in the demo dollar, no end
 npm run seed                                       # a few real buyers
 npm run prove                                      # attack it, print every refusal
 npm run graduate                                   # fill the curve and migrate
 npm run status                                     # is the whole devnet demo still up
 ```
 
-`launch` takes several flags to shape the sale: `--ends-in` or `--no-end`, one of which is required (`--ends-in 336` lifts every rule 336 hours after launch; `--no-end` keeps the rules until the curve graduates), `--mode` (`open`, `list`, or `credential`), `--cap-share-bps` (the per-wallet limit, in basis points of what the curve sells; 1000 is 10 percent), `--band` (how far over the real stock price the curve may go, in basis points; leave it out for no ceiling), `--feed` (which Pyth price the ceiling checks against), and `--quote` (what token buyers pay in: `wsol`, or a dollar mint from `mint-dollars`; a sale with `--band` must be paid in a dollar mint). The full flag table is in `packages/scripts/README.md`.
+`launch` takes several flags to shape the sale: `--ends-in` or `--no-end`, one of which is required (`--ends-in 336` lifts every rule 336 hours after launch; `--no-end` keeps the rules until the curve graduates), `--mode` (`open`, `list`, or `credential`), `--cap-share-bps` (the per-wallet limit, in basis points of what the curve sells; 1000 is 10 percent), `--band` (how far over the real stock price the curve may go, in basis points; leave it out for no ceiling), `--feed` (which Pyth price the ceiling checks against), and `--quote` (what token buyers pay in: `wsol`, or a mint address). A sale with `--band` must be paid in a dollar the program lists: on devnet that is the demo dollar `2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5` or devnet USDC. A token from `mint-dollars` looks like a dollar but is not on the list, so the program refuses a ceiling on it with `BandNeedsDollarQuote`; it can still pay for a sale with no ceiling. The full flag table is in `packages/scripts/README.md`.
 
 ## For a buyer: what preflight tells you before you sign anything
 

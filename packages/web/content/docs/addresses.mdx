@@ -1,6 +1,6 @@
 ---
 title: Contracts and addresses
-description: Everything Pangu depends on, where it lives on chain, and how to check the demo is still live.
+description: Where Pangu lives on chain, every sale on devnet, what it depends on, and how to check the demo is still live.
 ---
 
 ## The Pangu program, on Solana devnet
@@ -8,12 +8,13 @@ description: Everything Pangu depends on, where it lives on chain, and how to ch
 | Fact | Value |
 | --- | --- |
 | Program address | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
-| Running since | 23 September 2026, 10:21:01 UTC, slot 502899538 |
+| Running since | 23 September 2026, 14:08:42 UTC, slot 502981972, the sixth deploy |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 | Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by the team and stated openly |
-| sha256 of the deployed build | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` |
+| sha256 of the deployed build | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f`, 363,800 bytes |
+| Program data account | `58UAoZWuoMpnV4HzydaVUai9U7DFzapFtN5KtAzkzDpY` |
 
-The program was deployed once and upgraded four times on devnet, always at this same address, each build checked byte for byte against the code that was tested before it went live.
+The program was deployed once and upgraded five times on devnet, always at this same address, each build checked byte for byte against the code that was tested before it went live.
 
 | Deploy | Slot | When (UTC) | What went on chain |
 | --- | --- | --- | --- |
@@ -22,6 +23,7 @@ The program was deployed once and upgraded four times on devnet, always at this 
 | 3 | 502436678 | 22 September 2026, 13:02:53 | The price ceiling moved to Pyth |
 | 4 | 502476730 | 22 September 2026, 14:53:26 | The rules layout version, so a reader refuses rules written by another layout |
 | 5 | 502899538 | 23 September 2026, 10:21:01 | Rules v2, an upgrade in place: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, every sale carries an offering period, and every event names its sale's mint. Signature `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
+| 6 | 502981972 | 23 September 2026, 14:08:42 | A price ceiling only when buyers pay in a dollar the program lists for its network: devnet USDC and the demo dollar on this build, USDC alone on the mainnet build. Signature `4ep1rYGmZJXns7Efu22HmR1fHfKZQrnhznoMj3vjA7ZYxQi27yqkPPvix6fqv72ZHyrSVmFNiU6Kf4a4btauEPZ6` |
 
 The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
 
@@ -34,20 +36,34 @@ The full history, including what each upgrade cost, is in `docs/deployments.md` 
 | Pyth price feed program | `pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT` | Derives the account address a banded sale reads the real stock price from. |
 | Pyth receiver program | `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` | The only program allowed to write a price feed account, and only after checking the signatures behind it. |
 
-## The demo sales on devnet now
+## Every sale on devnet now
 
-The app opens on the newest open sale, PBAND2. The first two below were opened in the sixth run on the rules v2 build. The two after them were opened under version 1 rules, which the new build still reads: they have no offering period and read as never ending.
+`/sales` in the app reads this list off the program itself, so it is always current. The front page leads with the banded demo sale that can take a buy right now: PBAND2 while Pyth is publishing Apple's exchange price, and PAAPLX, banded on AAPLx which trades all week, when it is not.
 
-| Sale | Mint | Mode | Price ceiling | Offering ends | Headline transactions |
+The demo sales, opened from the command line:
+
+| Sale | Mint | Who may buy | Paid in | Ceiling follows | Offering ends | Headline transactions |
+| --- | --- | --- | --- | --- | --- | --- |
+| PBAND2, Pangu Priced Share, second offering | `5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo` | anyone, 10 percent cap | the demo dollar | Apple's exchange price (`Equity.US.AAPL/USD`), 5 percent over | 7 October 2026, 10:38 UTC | opened https://explorer.solana.com/tx/5Biy9QvCFgYNEPWFNzEA31aYF5c7vLFBu48jmSUkXa2ocb2akDLjmF6ARQQaZkTY21ZgARMVERpYWqLAocES1KYD?cluster=devnet; a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet |
+| PAAPLX, Pangu Priced Share, round the clock | `8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK` | anyone, 10 percent cap | the demo dollar | AAPLx, the tokenized Apple that trades all week (`Crypto.AAPLX/USD`), 5 percent over | 7 October 2026, 13:05 UTC | opened https://explorer.solana.com/tx/4HN35oFemvfijyrNMwiS6vSeNU4BEvTd56NBGdScK9wzCTQ1vcgHJ4Gpj9Ze9eTXRbMjUEHJkYgPuy8yCbpVkSjZ?cluster=devnet; a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/5TbBnGrVHCkEj2GkdpRR7cR5p5TMUFrwubhqub5GVYQrTK3QsSTmhoLGYTZ1fEQ5diUm4C6M6acVAu6aUNTUGm8v?cluster=devnet |
+| PVRFD, Pangu Verified Share | `7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn` | wallets the demo verifier attested, 10 percent cap | SOL | no ceiling | no end, holds until graduation | opened https://explorer.solana.com/tx/3NGu6WxguinVc8VyQSqA79kL3jkCXWhC5kAoaK2kdesSyP8ZHgcCwM8BhZgvLfVoAuZ9okAUbuwB8hwL7PEyVw5D?cluster=devnet; a buy with no attestation refused with `CredentialInvalid` https://explorer.solana.com/tx/2dvaB2gcFvwmdmQbYHV2wuuGKtQfTdPUk6yZNWXTMyrFHE9XVkeWZM2N7tGiwysNDx8jHUTrGxMkBFWDK3G3iPGi?cluster=devnet |
+| PBAND, Pangu Priced Share | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | anyone, 10 percent cap | the demo dollar | Apple's exchange price, 5 percent over | none: opened under version 1 rules, which the current build reads as never ending | a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet |
+| PLIST, Pangu Listed Share | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | the issuer's approved list, 10 percent cap | SOL | no ceiling | graduated into DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | migration https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet |
+
+Against PBAND2, 9 attacks were run in the sixth run, 8 refused and 1 allowed as expected, the cap and the ceiling both refused on the same sale. Against PAAPLX, in the seventh run, the same 9 with the same result, against a price that publishes all week. Against PVRFD, 10 attacks, 8 refused and 2 allowed as expected: the first time credential mode was attacked on the live program.
+
+The sales opened from the launch page, each by a throwaway issuer wallet in a recorded run (`packages/web/lab-evidence/launch-devnet.txt`, `metadata-devnet.txt` and `metadata-test-wallet.txt` in the repository):
+
+| Sale | Mint | Who may buy | Paid in | Ceiling follows | Offering ends |
 | --- | --- | --- | --- | --- | --- |
-| PBAND2, the demo sale a judge sees first | `5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo` | Open access, 10 percent cap, priced in the demo dollar | 5 percent over Apple | 7 October 2026, 10:38 UTC | opened https://explorer.solana.com/tx/5Biy9QvCFgYNEPWFNzEA31aYF5c7vLFBu48jmSUkXa2ocb2akDLjmF6ARQQaZkTY21ZgARMVERpYWqLAocES1KYD?cluster=devnet; a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/4LXby4FwaytfNkRtj6TwyMWsm92iZFbyTEG6mvf8iwMxMdbwgKFaczDWMuexBgiqmK58UDFJ6iusQQt51vaEAYRc?cluster=devnet |
-| PVRFD, the credential sale | `7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn` | Verifier credential, 10 percent cap, priced in SOL | none | no end, holds until graduation | opened https://explorer.solana.com/tx/3NGu6WxguinVc8VyQSqA79kL3jkCXWhC5kAoaK2kdesSyP8ZHgcCwM8BhZgvLfVoAuZ9okAUbuwB8hwL7PEyVw5D?cluster=devnet; a buy with no attestation refused with `CredentialInvalid` https://explorer.solana.com/tx/2dvaB2gcFvwmdmQbYHV2wuuGKtQfTdPUk6yZNWXTMyrFHE9XVkeWZM2N7tGiwysNDx8jHUTrGxMkBFWDK3G3iPGi?cluster=devnet |
-| PBAND, the fifth run's demo sale | `2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y` | Open access, 10 percent cap, priced in the demo dollar | 5 percent over Apple | none, version 1 rules | a buy refused at the ceiling with `PriceOutsideBand` https://explorer.solana.com/tx/3FMhcSoCkFCp3PBMBjaejwEiXVmdDAREJCDaP2bYw2u2hGxanesdx5vi2cEU2ZMK1obRZhcUgWFKQ1tqMUy8sXDU?cluster=devnet |
-| PLIST, the fourth run's list sale | `2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR` | Issuer's approved list, 10 percent cap, priced in SOL | none | graduated to DAMM v2 pool `2cEAoE9zi53y736DsaPBzgfdrUqJnVgqwutZTGsmsSLc` | migration https://explorer.solana.com/tx/5CpV8KReoYeRqXzeLDvfxuGM2yp99Mex6bTKRjutccd9HcmzZ2b1X36fVsPeuVHb7sQA3PuCkLRE8RJHbogiEPVT?cluster=devnet |
+| PLAUNCH, Pangu Launch Page Share | `4HFYeRrCmPER6T1LcKWaThF4MNejzzRfLFsRdv5GDt1d` | anyone, 10 percent cap | the demo dollar | AAPLx, 5 percent over | 7 October 2026, 14:12 UTC |
+| PLAUNCH, with a logo | `DKDhn1ZypcNtb1h4Y9kKmrzh9LthZcx5NCoeRPTREiPh` | anyone, 10 percent cap | the demo dollar | AAPLx, 5 percent over | 7 October 2026, 15:29 UTC |
+| PLAUNCHL, Pangu Launch Page List | `CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1` | the issuer's approved list, 10 percent cap | SOL | no ceiling | no end |
+| PLAUNCHL, second run | `GTVaKD5rS59enGmAGLe3JPNFLx6s5xKB6tcnAufdnYMx` | the issuer's approved list, 10 percent cap | SOL | no ceiling | no end |
+| PLOGO, Pangu Logo Proof Share | `DHg1rV6WUNYahX31jvXioTMSDrkd2eKJtK7JBppBoucK` | anyone, 10 percent cap | SOL | no ceiling | 30 September 2026, 7 days after launch |
+| PLOGO, earlier run | `34d5bc9FeuE6wQK867W2zv9kiuoFzAvfLGAo8pZeBtN4` | anyone, 10 percent cap | SOL | no ceiling | 30 September 2026, 7 days after launch |
 
-Against PBAND2, 9 attacks were run in the sixth run, 8 refused and 1 allowed as expected, the cap and the ceiling both refused on the same sale. Against PVRFD, 10 attacks, 8 refused and 2 allowed as expected: the first time credential mode was attacked on the live program.
-
-History: POPEN (`CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7`, opened at 400 dollars a share so every buy was refused at the ceiling) and a second list sale (`4kzCbpEZxyzwXno1ZVnTJ9BAGSjD1HVgSBSwikEsxeaE`) were retired on 23 September 2026. Four sales from the first three runs, among them the list sale `FToBcoyaCZtLpbaGFV8wdomngjwuQp5XShj6fHdzLyGv` that graduated into DAMM v2 pool `DLK2xF5i18rgXui9RN6urpAYg3bJxKNtkxiMYS5KECv`, were retired after the layout-version build, because its reader refuses rules another layout wrote.
+History, kept for the record. POPEN (`CBckMjBpHHQtcqxbTu5dUd3nQjyV8oVA4nfBZiTwYXo7`, opened at 400 dollars a share so every buy was refused at the ceiling) and a second list sale (`4kzCbpEZxyzwXno1ZVnTJ9BAGSjD1HVgSBSwikEsxeaE`) were retired on 23 September 2026; `/sales` hides them behind a switch. Four sales from the first three runs, among them the list sale `FToBcoyaCZtLpbaGFV8wdomngjwuQp5XShj6fHdzLyGv` that graduated into DAMM v2 pool `DLK2xF5i18rgXui9RN6urpAYg3bJxKNtkxiMYS5KECv`, were retired after the layout-version build, because its reader refuses rules another layout wrote. The eighth run opened no sale at all: its banded pool and rules, on a token that is not a listed dollar, were refused with `BandNeedsDollarQuote` in one transaction, https://explorer.solana.com/tx/M9GmvWbFTHCPBJnPbX1k2hmHUzqdBgAQnf7LevymftEjcjTbfM6wy3YXrUieCg2NWsfNdoP9qXESgQP4C9wcYCG?cluster=devnet, leaving only the token and its launch template behind.
 
 Full transaction-by-transaction detail, including every attack and its signature, is in `docs/measurements/devnet-run.md` and `docs/measurements/sdk-pyth.md` in the repository.
 
@@ -76,7 +92,9 @@ cost     : 0.011317 SOL, after 0.033344 SOL came back from the attacking wallets
 9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
 ```
 
-On the credential sale, `npm run prove -- --mint 7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn`, the same run ended `10 attacks run, 8 refused as expected, 2 allowed as expected, 1 not applicable, 0 off the standard`.
+On the credential sale, `npm run prove -- --mint 7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn`, the same run ended `10 attacks run, 8 refused as expected, 2 allowed as expected, 1 not applicable, 0 off the standard`. On the round-the-clock sale, `npm run prove -- --mint 8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK`, the seventh run ended `9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard`.
+
+The four doors of the app have their own recorded runs on devnet, each a script that drives the real page with a throwaway wallet and checks every line against the chain: `launch-devnet.txt`, `metadata-devnet.txt`, `sale-devnet.txt`, `verify-devnet.txt` and `portfolio-devnet.txt` in `packages/web/lab-evidence`. The signatures from each are at the foot of the Launch a sale, Buy and sell, Verify buyers and Your portfolio pages.
 
 ## The status command
 
@@ -84,4 +102,4 @@ On the credential sale, `npm run prove -- --mint 7ixMAMUmysN4qsCpthdznhq7aRbiCNB
 
 ## Mainnet
 
-Not deployed for this submission. The team's decision, 22 September 2026: a mainnet deploy costs about 4 SOL, most of it recoverable rent, and it was not the right call to spend it for this submission. The devnet program above is where the whole sale life, every rule, and every attack are proven on a live network with real transactions. The mainnet deploy script is written and ready; running it needs one command and a funded mainnet wallet, and nothing about the program or the SDK changes.
+Not deployed. Ready: the mainnet build is made reproducibly and its hash recorded in `docs/deployments.md`, the deploy is one guarded command a person runs with their own key, and every step was rehearsed on a forked copy of mainnet on 23 September 2026. The program keypair fixes the address, so on mainnet it will sit at the same `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`. What changes on mainnet, the costs and the upgrade key plan are on the mainnet page; the runbook is `docs/deploy/mainnet.md` in the repository.

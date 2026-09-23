@@ -1,6 +1,6 @@
 ---
 title: How it works
-description: The four rules, what a sale must get right to open, when the rules switch off, and why Pangu has to sit inside a transfer hook.
+description: The four rules, what a sale must get right to open, when the rules switch off, where each rule shows up in the app, and why Pangu has to sit inside a transfer hook.
 ---
 
 Meteora's Dynamic Bonding Curve can attach a small program, called a transfer hook, to a new token. From the moment the token is created, every single movement of it (every buy, every sell, every wallet-to-wallet send) has to pass through that hook before Solana lets it happen. Pangu is that hook. It has no other job.
@@ -11,7 +11,7 @@ While the sale is open, Pangu checks every movement of the token against four ru
 
 1. **A wallet cannot buy past its cap.** Each sale sets a limit on how many tokens one wallet can hold, counted net of anything it sells back. The limit is tracked per wallet, not per token account, so opening a second account to dodge it does not work.
 2. **A wallet must be allowed to buy, if the sale requires that.** An issuer can run the sale wide open, or require buyers to be on an approved list the issuer manages, or require buyers to hold a credential from a verifier (a Solana attestation, the same kind of technology used for on-chain identity checks).
-3. **A buy cannot push the price too far above the real stock's price, if the sale has a ceiling.** This only applies to sales that turn it on, and it compares the curve's price in dollars per token against a live price feed for the real stock, sourced from Pyth (a widely used price oracle). It only ever blocks a buy that would go too high. It never blocks a sell, and it never blocks a buy at or below the real price.
+3. **A buy cannot push the price too far above the real stock's price, if the sale has a ceiling.** This only applies to sales that turn it on, and it compares the curve's price in dollars per token against a live price feed for the real stock, sourced from Pyth (a widely used price oracle). An issuer picks the feed: Apple's exchange price, which Pyth publishes only while the market trades, or AAPLx, the tokenized Apple share, which it publishes all week. It only ever blocks a buy that would go too high. It never blocks a sell, and it never blocks a buy at or below the real price.
 4. **Tokens can only move between a wallet and the sale's own pool, never wallet to wallet, while the sale is running.** This closes the obvious way around the first three rules: pool tokens with a friend, or hand a full account to someone who was not approved.
 
 Selling back to the pool is always allowed, no matter what. Nothing about the cap, the approval list, or the price ceiling can ever block an exit.
@@ -20,7 +20,7 @@ Selling back to the pool is always allowed, no matter what. Nothing about the ca
 
 Before any of that, the program checks how the sale was set up, and refuses to open one that would hurt its buyers. Each refusal comes back by name.
 
-- **A sale with a price ceiling must be priced in a dollar token.** The ceiling compares the curve's price with a stock price in dollars. If buyers paid in SOL the two numbers would be in different units and the ceiling would mean nothing.
+- **A sale with a price ceiling must be priced in a dollar the program lists.** The ceiling compares the curve's price with a stock price in dollars. If buyers paid in SOL the two numbers would be in different units and the ceiling would mean nothing. The list is USDC on mainnet, and devnet USDC and the demo dollar on devnet; a token that only looks like a dollar is refused with `BandNeedsDollarQuote`.
 - **The issuer cannot pick a paying token they are able to freeze.** Whoever can freeze the paying token can freeze the pool's account or a seller's, and a frozen account cannot be paid. That would put the exit in the issuer's hands.
 - **The per-wallet cap must sit below what the curve sells.** A cap as large as the whole sale would let one wallet buy all of it, the one thing a cap exists to stop.
 - **Every sale names an offering period, or says plainly it has none.** The end is fixed when the sale opens and nobody can move it afterwards. An end that has already passed is refused.
@@ -31,7 +31,16 @@ The rules switch off at graduation, or when the offering period ends, whichever 
 
 When the curve fills (enough buyers have bought that the sale reaches its threshold) Meteora's own code removes Pangu from the token, permanently, inside that very last trade. After that moment Pangu is never called again for that token, the four rules above stop applying, and the token trades freely like any other. The remaining liquidity moves automatically into a new Meteora pool (DAMM v2) so trading can continue with real depth behind it.
 
-If the offering period ends first, Pangu stays attached to the token but lets every transfer through untouched from that moment, cap and approvals included, exactly as it would after graduation, and a buyer can close their record and take back its rent. This is what stops a curve that never fills from locking its buyers in for good. A sale opened with no end keeps its rules until graduation. The demo sale on devnet, PBAND2, ends on 7 October 2026.
+If the offering period ends first, Pangu stays attached to the token but lets every transfer through untouched from that moment, cap and approvals included, exactly as it would after graduation, and a buyer can close their record and take back its rent. This is what stops a curve that never fills from locking its buyers in for good. A sale opened with no end keeps its rules until graduation. The two banded demo sales on devnet, PBAND2 and PAAPLX, end on 7 October 2026.
+
+## The same rules, from four pages
+
+The app puts each rule in front of the person it matters to.
+
+- Launch (`/launch`) is where an issuer sets them: the cap as a share of what the curve sells, who may buy, the price ceiling and the feed it follows, the paying token, and the offering period. Each field carries the name of the refusal it becomes, and the program refuses a sale set up against its buyers before it opens.
+- Buy (`/sales` and each sale's page) is where a buyer meets them. Before the wallet is asked to sign, the page puts the buy to the same checks the program will run and answers with a pass or the refusal by name, the room left under the cap, or the issuer or verifier to ask.
+- Verify (`/verify`) is where a verifier issues the credentials that a sale in credential mode reads on every buy, and revokes them.
+- Portfolio (`/portfolio`) is where a wallet sees its standing in each sale: what it holds, the room left under the cap, and whether it may still buy.
 
 ## Why this has to be a transfer hook, and why that is the load-bearing choice
 
@@ -200,3 +209,71 @@ flowchart TD
 ```
 
 `execute`, the transfer hook, is the only instruction that touches every outside system Pangu depends on: Meteora's pool, the attestation service, and Pyth's price feed, plus the token program's own extensions. That is why almost every safety rule in the security page traces back to this one function.
+
+## Diagram 4: the app, its server routes, and the chain
+
+```mermaid
+flowchart LR
+    subgraph Pages[Pages in the browser]
+        Front["/ the live sale and Try to break it"]
+        SalesPage["/sales every sale on the chain"]
+        SalePage["/sale/mint buy, sell, issuer controls"]
+        LaunchPage["/launch open a sale"]
+        VerifyPage["/verify issue and check credentials"]
+        PortfolioPage["/portfolio one wallet's sales"]
+    end
+
+    Wallet[The visitor's wallet]
+
+    subgraph Routes[Server routes]
+        Directory["/api/sales"]
+        Readout["/api/readout/mint and /api/pulse"]
+        BreakSale["/api/break/sale"]
+        Holdings["/api/portfolio/wallet"]
+        Price["/api/price/mint"]
+        Refresh["/api/price/refresh"]
+        Dollars["/api/break/dollars, devnet only"]
+    end
+
+    subgraph Chain[Solana]
+        PanguProgram[Pangu rules program]
+        DBC[Meteora DBC pool]
+        SAS[Solana Attestation Service]
+        PythAccount[(Pyth price account)]
+        DemoDollar[(Demo dollar mint)]
+    end
+
+    Irys[Irys storage]
+    Hermes[Pyth Hermes]
+
+    Front --> Readout
+    Front --> BreakSale
+    Front --> Dollars
+    SalesPage --> Directory
+    SalePage --> Readout
+    SalePage --> Refresh
+    PortfolioPage --> Holdings
+    LaunchPage --> Price
+    LaunchPage -->|logo and description| Irys
+    VerifyPage -->|reads credentials| SAS
+
+    Front --> Wallet
+    SalePage --> Wallet
+    LaunchPage --> Wallet
+    VerifyPage --> Wallet
+    Wallet -->|signs every transaction| DBC
+    Wallet --> PanguProgram
+    Wallet --> SAS
+
+    Directory --> PanguProgram
+    Readout --> DBC
+    Readout --> PanguProgram
+    BreakSale --> PanguProgram
+    Holdings --> PanguProgram
+    Price --> PythAccount
+    Refresh -->|asks for a signed price| Hermes
+    Refresh -->|posts it| PythAccount
+    Dollars -->|one grant a wallet an hour| DemoDollar
+```
+
+The pages build every transaction in the browser with `pangu-sdk`, and only the visitor's wallet signs them. The server routes read the chain for everyone at once and share each reading for a few seconds, so a crowd of visitors costs the chain one read. They also hold what a browser must never see: the keyed network endpoint, the Pyth key, and one signing key that pays for price refreshes and, on devnet only, mints demo dollars. The limits on those routes are rules C15 and C17 on the security page.
