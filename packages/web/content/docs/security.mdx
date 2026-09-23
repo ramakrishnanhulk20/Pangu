@@ -11,7 +11,7 @@ Attackers in this model can create unlimited wallets for free, choose which acco
 
 ## The rules the code must always uphold
 
-Each rule below is proven by a named test, and most are also proven by a real, refused transaction on Solana devnet.
+Each rule on the program (C1 to C14) is proven by a named test, and most are also proven by a real, refused transaction on Solana devnet. The three rules on the app (C15 to C17) are proven by recorded devnet runs or, for C17, by inspection of the code.
 
 | Rule | In plain words | Proven by |
 | --- | --- | --- |
@@ -29,6 +29,9 @@ Each rule below is proven by a named test, and most are also proven by a real, r
 | C12 | The scripts never hold or print a private key, and every address paid is shown before signing and read back after. | script test suite |
 | C13 | Tokens can only leave the pool into a token account whose owner can never change. | devnet transaction, `ReceivingAccountOwnerCanChange` |
 | C14 | No sale token can be created outside the pool; a sale refuses to open on a token whose minting power is still live. | devnet transaction, `MintAuthorityStillSet`, found and fixed in a code review before this submission |
+| C15 | The demo dollars button is the only server code that holds a key. It mints only the demo dollar, at most once a wallet an hour and ten times a minute, and the key never leaves the server. | a race of 12 wallets on devnet: 10 let through the reservation, the other 2 refused |
+| C16 | A transaction the app builds for a visitor moves value only between that visitor and the pool, or to an account the visitor owns, and every row states its cost before the wallet signs. | a devnet run of every row, each row's promise equal to the chain's answer |
+| C17 | No public route lets an outsider spend the app's network budget: the price route answers only for the app's own sales, from a ten second cache. | by inspection of the code |
 
 ## An attack that was actually tried
 
