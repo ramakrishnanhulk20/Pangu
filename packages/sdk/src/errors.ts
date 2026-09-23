@@ -168,7 +168,7 @@ const EXPLANATIONS = {
   NotTransferring:
     "This token only moves through a real transfer, and this was not one.",
   ReceivingAccountOwnerCanChange:
-    "The account you are buying into could be handed to someone else later, so the sale will not send tokens to it. Use your normal token account for this token.",
+    "The account you are buying into could be handed to someone else later, so the sale will not send tokens to it. Use the wallet's ordinary holding account for this token, the one your wallet app makes by itself.",
   WrongMint: "That account belongs to a different token than this sale.",
   WrongBuyerRecord:
     "The buyer record sent with this transfer belongs to another wallet.",
