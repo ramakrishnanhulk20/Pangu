@@ -18,8 +18,10 @@ with a module that really calls `QuoteVerifier`, built for SBPF v0:
 | B | no defaults, `["anchor-lang", "solana-v3"]` | `getrandom v0.2.17`, pulled in by the Solana 3.x crates, refuses the SBF target. |
 | C | no defaults, `["solana-v3"]` | Same `getrandom` failure. |
 
-So the account is parsed from the layout in `docs/RD-SWITCHBOARD-SPIKE.md` Q4,
-with a bounds check on every slice.
+So the account is parsed from the layout in the `switchboard-on-demand` 0.13.0
+crate source (`quote_account.rs`, `feed_info.rs`, `sysvar/ed25519_sysvar.rs`),
+confirmed byte for byte against a real mainnet quote account, with a bounds
+check on every slice.
 
 **What the hook proves.** The quote account is at the one address the queue and
 this sale's two feed ids can produce under Switchboard's quote program, and it is

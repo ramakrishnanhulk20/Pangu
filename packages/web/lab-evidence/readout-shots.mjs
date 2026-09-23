@@ -11,7 +11,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(
-  "C:/Users/Ram/AppData/Roaming/npm/node_modules/playwright"
+  process.env.APPDATA + "/npm/node_modules/playwright"
 );
 
 const base = process.argv[2] ?? "http://localhost:3300";

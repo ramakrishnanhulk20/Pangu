@@ -4,7 +4,7 @@
  * A feed id is public and fixed, and the price account's address comes from it
  * and the shard id, so an issuer can write the address into a sale's rules
  * before anybody has ever refreshed it. The ids were read from Pyth's own
- * keyless feed search endpoint and are recorded in docs/RD-PYTH.md Q7 and in
+ * keyless feed search endpoint and are recorded in
  * packages/program/feeds/pyth-feeds.ts.
  */
 

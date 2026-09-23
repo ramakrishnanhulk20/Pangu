@@ -17,7 +17,7 @@ if [ ! -d node_modules ] || [ package.json -nt node_modules ]; then
 fi
 
 # The Rust tests run first and their summary line is printed, because the price
-# maths and the quote parser are proven there and nowhere else. Before WO-3b they
+# maths and the quote parser are proven there and nowhere else. Before the forged-quote hardening they
 # had no script entry at all, so an independent runner never saw them.
 RUST_LOG_FILE="$(mktemp)"
 if cargo test -p pangu --lib 2>&1 | tee "$RUST_LOG_FILE"; then

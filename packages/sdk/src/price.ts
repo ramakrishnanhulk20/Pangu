@@ -5,7 +5,8 @@
  * an API key, and it pulls in `@pythnetwork/pyth-solana-receiver`, so the web
  * app calls it from a server route and never from the browser. The key would be
  * in every browser bundle otherwise, and every Hermes read has needed one since
- * 26 August 2026 (docs/RD-PYTH.md section 5). Reading a price back is
+ * 26 August 2026
+ * (https://docs.pyth.network/price-feeds/core/upgrade/preparing). Reading a price back is
  * `readPrice` in the core entry point, which is browser safe.
  */
 

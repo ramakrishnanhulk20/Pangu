@@ -65,7 +65,7 @@ export interface DeployedBuild {
 
 const DEPLOYMENTS_FILE = join(repositoryRoot, "docs", "deployments.md");
 
-/** Ram's Pyth access is a granted trial. A sale after this date needs its own key. */
+/** The team's Pyth access is a granted trial. A sale after this date needs its own key. */
 const PYTH_ACCESS_END = "2026-10-05";
 
 const HERMES_URL = "https://hermes.pyth.network";

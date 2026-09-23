@@ -3,12 +3,12 @@ use anchor_lang::prelude::*;
 use crate::errors::PanguError;
 
 /// The Solana Attestation Service. The same address on mainnet and devnet.
-/// Source: docs/RD-SAS.md Q1, confirmed against both networks by RPC on 21 Sep 2026.
+/// Source: `program/src/lib.rs` in their repo, confirmed against both networks by RPC on 21 Sep 2026.
 pub const SAS_PROGRAM_ID: Pubkey =
     Pubkey::from_str_const("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
 
 /// One byte in front of every account the service owns says which kind it is.
-/// Source: docs/RD-SAS.md Q3; `program/src/state/discriminator.rs` in their repo.
+/// Source: `program/src/state/discriminator.rs` in their repo.
 pub const CREDENTIAL_DISCRIMINATOR: u8 = 0;
 pub const SCHEMA_DISCRIMINATOR: u8 = 1;
 pub const ATTESTATION_DISCRIMINATOR: u8 = 2;
@@ -18,7 +18,8 @@ pub const ATTESTATION_SEED: &[u8] = b"attestation";
 
 /// An expiry of exactly zero means the attestation never expires. Their own
 /// example code gets this wrong by comparing straight against the clock, which
-/// reads zero as "expired in 1970". Source: docs/RD-SAS.md Q5.
+/// reads zero as "expired in 1970". Source: the `expiry` field comment in their
+/// `program/src/state/attestation.rs`, "0 means never expired".
 pub const NEVER_EXPIRES: i64 = 0;
 
 /// Most authorized signers Pangu will read out of one Credential.

@@ -23,7 +23,7 @@ pub const HOOK_CONFIG_LEN: usize = 1128;
 
 /// Offsets of the fields Pangu reads out of a `TransferHookPool`.
 /// Source: ARCHITECTURE.md, "Offsets inside the pool account", and the field order
-/// of `PoolState` in reference/dynamic-bonding-curve state/virtual_pool.rs.
+/// of `PoolState` in Meteora's dynamic-bonding-curve source (github.com/MeteoraAg/dynamic-bonding-curve), state/virtual_pool.rs.
 const CONFIG_OFFSET: usize = 72;
 const CREATOR_OFFSET: usize = 104;
 const BASE_MINT_OFFSET: usize = 136;
@@ -31,23 +31,24 @@ const BASE_VAULT_OFFSET: usize = 168;
 const SQRT_PRICE_OFFSET: usize = 280;
 
 /// `quote_mint` is the first field of `PoolConfig`, so it sits right behind the
-/// account discriminator. Source: reference/dynamic-bonding-curve state/config.rs.
+/// account discriminator. Source: Meteora's dynamic-bonding-curve source, state/config.rs.
 const CONFIG_QUOTE_MINT_OFFSET: usize = 8;
 
 /// `collect_fee_mode` sits 224 bytes into `PoolConfig`, behind the three mints and
 /// vesting blocks and the two paddings, which is byte 232 of the account. The
 /// arithmetic is written out in docs/measurements/review-fixes.md and checked
 /// against a real mainnet template in the test at the bottom of this file.
-/// Source: reference/dynamic-bonding-curve state/config.rs, `PoolConfig`.
+/// Source: Meteora's dynamic-bonding-curve source, state/config.rs, `PoolConfig`.
 const CONFIG_COLLECT_FEE_MODE_OFFSET: usize = 232;
 
 /// The only fee mode Pangu will open a sale on. Fees and referral payouts then move
 /// the paying token, never the sale token, so no fee ever travels through the hook.
-/// Source: reference/dynamic-bonding-curve state/virtual_pool.rs, `CollectFeeMode`.
+/// Source: Meteora's dynamic-bonding-curve source, state/virtual_pool.rs, `CollectFeeMode`.
 pub const COLLECT_FEE_MODE_QUOTE_TOKEN: u8 = 0;
 
 /// Seed prefix DBC uses for a pool's token vault.
-/// Source: ARCHITECTURE.md, "Base vault address"; docs/RD-HOOK.md Q2c.
+/// Source: ARCHITECTURE.md, "Base vault address"; Meteora's dynamic-bonding-curve
+/// source, `TOKEN_VAULT_PREFIX` in `ix_initialize_virtual_pool_with_token2022_transfer_hook.rs`.
 pub const TOKEN_VAULT_SEED: &[u8] = b"token_vault";
 
 /// The facts Pangu needs from a DBC hook pool.

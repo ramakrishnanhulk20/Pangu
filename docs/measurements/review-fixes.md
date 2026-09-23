@@ -17,7 +17,7 @@ sale token, which moves the sale token through the hook on a path nobody checked
 against the cap.
 
 **Where `collect_fee_mode` sits.** From
-`reference/dynamic-bonding-curve/programs/dynamic-bonding-curve/src/state/config.rs`,
+Meteora's dynamic-bonding-curve source, `programs/dynamic-bonding-curve/src/state/config.rs`,
 `pub struct PoolConfig` at line 500 and `collect_fee_mode` at line 518:
 
 | Field | Size | Offset in `PoolConfig` |
@@ -70,7 +70,7 @@ Two changes in `price.rs`:
 
 - The queue account must carry the `QueueAccountData` Anchor discriminator
   `[217, 194, 55, 127, 184, 83, 138, 1]`. Source:
-  `spikes/switchboard/ref/crate/switchboard-on-demand-0.13.0/src/on_demand/accounts/queue.rs`
+  the `switchboard-on-demand` 0.13.0 crate, `src/on_demand/accounts/queue.rs`
   line 115, `QUEUE_ACCOUNT_DISCRIMINATOR`. The first eight bytes of the real
   devnet queue in `feeds/live-queue.bin` are `d9 c2 37 7f b8 53 8a 01`, the same
   numbers. A length check alone let any 6280 byte account owned by the On-Demand
@@ -115,7 +115,7 @@ issuer holding the mint authority could mint past the cap, past the approved
 list, straight into any wallet, and sell it into the pool.
 
 DBC decides this at pool creation from the template's token authority option. In
-`reference/dynamic-bonding-curve/programs/dynamic-bonding-curve/src/instructions/initialize_pool/process_initialize_virtual_pool_with_token2022.rs`
+Meteora's dynamic-bonding-curve source, `programs/dynamic-bonding-curve/src/instructions/initialize_pool/process_initialize_virtual_pool_with_token2022.rs`
 the initial supply is minted into the vault at line 132 (`mint_to` with the pool
 authority signing), and then at lines 145 to 167 the mint authority is set to
 `token_authority.get_mint_authority(creator, fee_claimer)`. That function

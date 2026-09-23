@@ -6,13 +6,13 @@ Every number below came out of a transaction that ran.
 
 ## Why the source changed
 
-Switchboard shuts down on 25 Sep 2026. Pyth granted Ram's key access to every
+Switchboard shuts down on 25 Sep 2026. Pyth granted the team's key access to every
 feed until 5 Oct 2026, tested on 22 Sep 2026 with fresh AAPL, TSLA, SPY, AAPLX
 and TSLAX prices. The band rule has not changed: it is still a ceiling on the
 curve price measured against the live stock price, and it still never touches a
 sell. Only the account the ceiling is read from is different.
 
-**Caveat, stated up front.** Ram's Pyth access runs to 5 Oct 2026. After that
+**Caveat, stated up front.** The team's Pyth access runs to 5 Oct 2026. After that
 `feeds/refresh.ts` cannot fetch a fresh update from Hermes without a new key, and
 with nothing fresh being written the band would refuse every buy and allow every
 sell, which is the safe way round but is still a sale nobody can join. The

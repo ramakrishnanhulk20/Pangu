@@ -89,7 +89,7 @@ async function latestUpdate(feedIdHex: string): Promise<string[]> {
     headers: { Authorization: `Bearer ${apiKey()}` },
   });
   if (!response.ok) {
-    // The body, not the key: a 401 here means the key has run out, and Ram's
+    // The body, not the key: a 401 here means the key has run out, and the team's
     // access runs to 5 Oct 2026.
     throw new Error(
       `Hermes answered ${response.status}: ${(await response.text()).slice(0, 200)}`

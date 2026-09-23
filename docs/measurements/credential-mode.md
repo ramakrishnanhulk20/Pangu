@@ -78,7 +78,9 @@ One thing, and it is not optional.
 An attestation's address is derived from the credential, the schema and the
 nonce. The attestation service does not require the nonce to be the wallet the
 attestation is about: it can be a random value, and the reference tooling only
-uses the wallet by convention (`docs/RD-SAS.md`, Q2). But a transfer hook has no
+uses the wallet by convention (`program/src/processor/create_attestation.rs` and
+`examples/rust/attestation-flow-guide/standard-demo` in the Solana Attestation
+Service repo). But a transfer hook has no
 index to search. It has one shot at deriving the address of the account it needs
 from what it already knows, which is this sale's credential, this sale's schema,
 and the wallet that is receiving the tokens. If the nonce is anything else,

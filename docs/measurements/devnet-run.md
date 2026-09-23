@@ -290,9 +290,9 @@ So a signed quote can still be fetched today, but only by pointing the client
 straight at that one box, and `refresh-price` has no way to be told to do that.
 Nothing in `@switchboard-xyz/on-demand` 3.10.6 takes a gateway URL on the price
 path: the only route that works is pre-seeding the Crossbar client's gateway
-cache, an undocumented field inside a third-party package. The background, the
-measurements and Switchboard's announced shutdown on 25 September 2026 are in
-`docs/RD-SWITCHBOARD-GATEWAYS.md`. **A live price refresh cannot be promised at
+cache, an undocumented field inside a third-party package. Switchboard's announced
+shutdown on 25 September 2026 was reported by [Crypto
+Briefing](https://cryptobriefing.com/switchboard-oracle-shuts-down-migration/). **A live price refresh cannot be promised at
 demo time from the shipped command.** The band behaves correctly without one:
 no usable price, no buy.
 

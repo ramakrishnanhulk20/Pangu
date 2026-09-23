@@ -89,7 +89,7 @@ price.
 
 ## Notes for Part B (the two checks)
 
-Queue layout, from `spikes/switchboard/ref/crate/.../on_demand/accounts/queue.rs`,
+Queue layout, from the `switchboard-on-demand` 0.13.0 crate, `on_demand/accounts/queue.rs`,
 confirmed against the real devnet queue bytes in a Rust test:
 - The account is 6280 bytes: an 8 byte anchor discriminator then a 6272 byte
   `QueueAccountData`.
@@ -114,7 +114,9 @@ real Switchboard quote program.
 
 ## Progress log
 
-- Read the spike write-up Q4 and Q8, the crate source
+- Read the quote account layout in the crate (`quote_account.rs`, `feed_info.rs`),
+  the trap in Switchboard's own SDK where its default Ed25519 instruction index
+  panics the deployed quote program, the crate source
   (`quote_verifier.rs`, `queue.rs`, `sysvar/ed25519_sysvar.rs`), `price.rs`,
   `execute.rs`, `create_sale.rs`, `tests/band.ts`, `tests/quote.ts`,
   `fork-tests/band-accounts.ts` and the fork scripts.

@@ -18,7 +18,7 @@ WORK="$HOME/pangu-build"
 
 # Read .env line by line rather than sourcing it. Sourcing would treat the
 # backslashes in a Windows path as escape characters and quietly hand the script
-# "C:UsersRam..." instead of the path Ram wrote. `read -r` keeps them.
+# "C:Usersyou..." instead of the path the operator wrote. `read -r` keeps them.
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"

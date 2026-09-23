@@ -6,8 +6,8 @@
 // rules before anybody has ever refreshed it.
 //
 // The feed ids were read from Pyth's own keyless feed search endpoint,
-// https://hermes.pyth.network/v2/price_feeds?query=<ticker>, and are recorded in
-// docs/RD-PYTH.md Q7.
+// https://hermes.pyth.network/v2/price_feeds?query=<ticker>, so anyone can
+// check them against the source without a key.
 
 import { PublicKey } from "@solana/web3.js";
 

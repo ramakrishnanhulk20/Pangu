@@ -11,7 +11,7 @@ case "$CLUSTER" in
   devnet) URL="https://api.devnet.solana.com" ;;
   *)
     echo "DEPLOY-REFUSED: this script deploys to devnet only. You asked for '${CLUSTER:-nothing}'."
-    echo "Mainnet is Ram's decision and gets its own work order and its own script."
+    echo "Mainnet is the team's decision and gets its own script."
     echo "usage: deploy.sh devnet"
     exit 2 ;;
 esac
