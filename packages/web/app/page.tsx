@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { BreakSection } from "@/components/break/break-section";
+import { Doors } from "@/components/doors/doors";
 import { Hero } from "@/components/hero/hero";
 import { Readout } from "@/components/readout/readout";
 import { ReadoutSkeleton } from "@/components/readout/readout-skeleton";
@@ -28,6 +29,7 @@ export default function HomePage() {
       <BreakSection />
       <WhyNot />
       <Proof />
+      <Doors />
     </div>
   );
 }

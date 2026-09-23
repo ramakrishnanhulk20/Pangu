@@ -217,9 +217,6 @@ export function Proof() {
           </Reveal>
         </div>
       </div>
-
-      {/* The site footer, components/site-footer.tsx, mounts here on the front
-          page. Nothing else goes below this section. */}
     </section>
   );
 }
