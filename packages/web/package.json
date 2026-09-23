@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.0",
+    "@irys/web-upload": "0.0.15",
+    "@irys/web-upload-solana": "0.1.8",
     "@meteora-ag/dynamic-bonding-curve-sdk": "1.5.12",
     "@solana/spl-token": "0.4.15",
     "@solana/wallet-adapter-base": "0.9.28",

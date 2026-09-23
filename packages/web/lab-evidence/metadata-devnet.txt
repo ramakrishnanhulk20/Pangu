@@ -1,0 +1,74 @@
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+network  : devnet
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
+site     : http://127.0.0.1:3480/launch
+storage  : https://devnet.irys.xyz, Irys's devnet node, keeps files about 60 days
+issuer   : G9hrNsmuC8Souu3uTxbB2FrEPVJkNiDTFSa572AuYmqR, a throwaway made for this run
+logo     : lab-evidence/metadata-logo.png, 256 x 256 PNG, 1693 bytes, sha256 f99391d88948c5f7dab748e016e093d2a44054ba5b766f4157273b78f1cea0ce
+funded   : 0.1 SOL from the demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+           https://explorer.solana.com/tx/3nuoZum4UtLG8Cep5dziDYAJB1uo5JvLFF3g6zWVuczv6ik4JYxD7hQvv1Dugv3XtiaG3AaeZGb6Y8tvz7QPmMCY?cluster=devnet
+page says: PNG · 256 × 256 · 2 KB
+ok    the preview shows the logo beside the name
+page says: Storing the logo and this description costs 0.000077 SOL, priced by Irys just now.
+page says: . About 0.000077 SOL, less whatever your Irys balance already holds.
+
+launch   : PLOGO, devnet SOL, open, cap 10 percent, 7 days, logo, description, website and X
+ok    the launch reached the done state
+mint     : DHg1rV6WUNYahX31jvXioTMSDrkd2eKJtK7JBppBoucK
+           https://explorer.solana.com/address/DHg1rV6WUNYahX31jvXioTMSDrkd2eKJtK7JBppBoucK?cluster=devnet
+cost     : 0.019141 SOL for the whole launch, storage included, read off devnet before and after
+asked    : 3 transaction signatures, 2 message signatures
+ok    the wallet signed two files as messages: 2
+link     : the metadata JSON: https://devnet.irys.xyz/4sfyPvf3YF4S7Jg4iimx9diZ5DQLh222FZe7HuMwNETL
+link     : payment to Irys: https://explorer.solana.com/tx/2gH2dQu4NerNzDVB4DYqEKbvjyrxL8CFAqDwL2mcuW6GvVxDoadue6EZSiWr1pXiah4XN55fi3thV4NUra5bQfb8?cluster=devnet
+link     : template transaction: https://explorer.solana.com/tx/5gvhKyFWZ9QF79fEM5ZcAG2RpNsHACNAukYzzmSTZ88bxE42EZJFy1kZ9zau8LoFhVr1iHjUMudzCa56YT1NALtM?cluster=devnet
+link     : sale transaction: https://explorer.solana.com/tx/uFCKqofpci4x5AbHW41ZetSfFTsMRpeqykFtZg62DdZ3PeGnquriFQT9yYGndvSQLoQLaZ5aBD4Fi972tnTJpts?cluster=devnet
+irys     : 76602 lamports to Irys's devnet address 4a7s9iC5NwfUtf8fXpKWxYXcekfqiN6mRqipYXMtcrUS, fee 5001 lamports
+ok    the payment went to the Irys devnet node's own address
+irys     : 76602 lamports left in the throwaway's Irys balance after both uploads
+ok    the sale's rules read back from devnet
+ok    the mint carries a metadata link: https://devnet.irys.xyz/4sfyPvf3YF4S7Jg4iimx9diZ5DQLh222FZe7HuMwNETL
+uri      : https://devnet.irys.xyz/4sfyPvf3YF4S7Jg4iimx9diZ5DQLh222FZe7HuMwNETL
+ok    the mint's name is the form's: Pangu Logo Proof Share
+ok    the mint's symbol is the form's: PLOGO
+ok    the link is on Irys's devnet node
+ok    the link loads as JSON: 200 application/json
+json     : {"name":"Pangu Logo Proof Share","symbol":"PLOGO","description":"A devnet test sale launched from the Pangu launch page to prove the logo, this description and the links are stored on Irys and read back through the mint.","image":"https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx","external_url":"https://www.meteora.ag/","properties":{"files":[{"uri":"https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx","type":"image/png"}],"category":"image"},"extensions":{"website":"https://www.meteora.ag/","twitter":"https://x.com/MeteoraAG"}}
+ok    json name
+ok    json symbol
+ok    json description
+ok    json external_url is the website: https://www.meteora.ag/
+ok    json extensions carry the website and the X profile: {"website":"https://www.meteora.ag/","twitter":"https://x.com/MeteoraAG"}
+ok    json image is on Irys: https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx
+ok    json properties.files names the image as a PNG
+ok    json properties.category is image
+image    : https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx, 200 image/png, 1693 bytes
+ok    the stored logo is the exact PNG the form was given
+ok    the stored logo is served as image/png
+ok    the done state shows the logo from the mint's link: https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx 256px
+ok    the done state's logo carries the token name as alt text
+ok    the done state says the logo came back through the mint
+ok    the done state shows the description from the JSON
+ok    sessionStorage is cleared after the launch
+ok    no uncaught errors on the page: 
+
+returned : 0.080854 SOL to the demo wallet
+
+every check passed; mint DHg1rV6WUNYahX31jvXioTMSDrkd2eKJtK7JBppBoucK; not in sales.json
+
+Notes
+- Irys did not take the 76602 lamports out of either throwaway's Irys balance for the two uploads (1693 byte PNG, about 600 byte JSON), read again minutes later. Irys's devnet node appears to store small files without charging, while /price still quotes them. Each throwaway's 0.000077 SOL stays in its Irys balance; the on-chain SOL was swept back both times.
+- The page funds only the shortfall, so a wallet that launches again finds this balance and pays Irys nothing.
+
+Earlier run, same script before its preview check waited for the logo to swap in
+The launch passed every chain and metadata check; only the preview check failed, because it read the preview on the first frame, while the site's mark was still leaving. The run above passes that check, and lab-evidence/metadata-preview-*.png, taken by metadata-shots.mjs, show the logo beside the name.
+issuer   : xSwKMa7paGs94tgfrkiTKAz818WVfAe4ed67sYiJJYq, a throwaway made for this run
+FAIL  the preview shows the logo beside the name
+mint     : 34d5bc9FeuE6wQK867W2zv9kiuoFzAvfLGAo8pZeBtN4
+cost     : 0.019141 SOL for the whole launch, storage included, read off devnet before and after
+irys     : 76602 lamports to Irys's devnet address 4a7s9iC5NwfUtf8fXpKWxYXcekfqiN6mRqipYXMtcrUS, fee 5000 lamports
+irys     : 76602 lamports left in the throwaway's Irys balance after both uploads
+uri      : https://devnet.irys.xyz/8xEk1ZZSJjTf3Sbe3a2sndVnkvQkNU7MypNF4yUhhQHM
+image    : https://devnet.irys.xyz/5qrguVyENbM7hi2C5DXcWDYpCkcceXRctz17B4pzruWh, 200 image/png, 1693 bytes
+ok    the stored logo is the exact PNG the form was given
+returned : 0.080854 SOL to the demo wallet

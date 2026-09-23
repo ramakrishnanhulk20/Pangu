@@ -3,9 +3,11 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { utcMoment } from "@/components/readout/format";
+import { TokenLogo, readMetadataOnce } from "@/components/token-logo";
+import type { TokenMetadata } from "@/lib/token-metadata";
 import { feedWords } from "@/lib/feeds";
 import { accessModeLabel, shortAddress, tokenAmount } from "@/lib/format";
 import { explorerAddress, explorerTx, type LaunchResult } from "@/lib/launch";
@@ -14,13 +16,34 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 
 /**
  * The launch landed: the new sale as the chain holds it, read back after both
- * transactions confirmed, and the way to it.
+ * transactions confirmed, and the way to it. The logo and description are
+ * fetched through the metadata link the mint itself carries, not the one the
+ * page uploaded, so what shows here is what a wallet will find.
  */
 export function LaunchDone({ result, name, symbol }: { result: LaunchResult; name: string; symbol: string }) {
   const still = useReducedMotion() === true;
   const [shared, setShared] = useState<"idle" | "copied" | "shown">("idle");
   const salePath = `/sale/${result.mint}`;
   const { sale } = result;
+  const onChainUri = result.token?.uri ?? null;
+  const [metadata, setMetadata] = useState<{ uri: string; value: TokenMetadata | null } | null>(null);
+  useEffect(() => {
+    if (onChainUri === null) {
+      return;
+    }
+    let alive = true;
+    readMetadataOnce(onChainUri).then((value) => {
+      if (alive) {
+        setMetadata({ uri: onChainUri, value });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [onChainUri]);
+  const fetched = metadata !== null && metadata.uri === onChainUri;
+  const read = fetched ? metadata.value : null;
+  const matches = onChainUri !== null && result.storedUri !== null && onChainUri === result.storedUri;
 
   const share = async () => {
     const url = `${window.location.origin}${salePath}`;
@@ -47,12 +70,28 @@ export function LaunchDone({ result, name, symbol }: { result: LaunchResult; nam
       value: `${(result.spentLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL`,
     });
   }
+  if (result.storage !== null) {
+    facts.push({
+      label: "storing the logo",
+      value:
+        result.storage.fundLamports > 0
+          ? `${(result.storage.fundLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL to Irys`
+          : "covered by your Irys balance",
+    });
+  }
 
-  const links: { label: string; href: string }[] = [
+  const links: { label: string; href: string }[] = [];
+  if (onChainUri !== null && /^https:\/\//.test(onChainUri)) {
+    links.push({ label: "the metadata JSON", href: onChainUri });
+  }
+  if (result.storage?.fundSignature != null) {
+    links.push({ label: "payment to Irys", href: explorerTx(result.storage.fundSignature) });
+  }
+  links.push(
     { label: "the token", href: explorerAddress(result.mint) },
     { label: "the pool", href: explorerAddress(result.pool) },
-    { label: "the sale's rules", href: explorerAddress(result.rules) },
-  ];
+    { label: "the sale's rules", href: explorerAddress(result.rules) }
+  );
   if (result.templateSignature !== null) {
     links.push({ label: "template transaction", href: explorerTx(result.templateSignature) });
   }
@@ -70,10 +109,38 @@ export function LaunchDone({ result, name, symbol }: { result: LaunchResult; nam
       className="relative"
     >
       <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">live on devnet</p>
-      <h2 className="-ml-[0.02em] mt-4 font-display text-[clamp(2.8rem,7vw,5.5rem)] font-semibold leading-[0.9] tracking-[-0.045em]">
-        {name}
-        <span className="ml-3 align-top font-mono text-[0.22em] font-normal tracking-[0.14em] text-muted">{symbol}</span>
-      </h2>
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <motion.span
+          data-testid="launch-done-logo"
+          data-uri={onChainUri ?? ""}
+          className="shrink-0"
+          initial={still ? false : { opacity: 0, scale: 0.8, rotate: -10 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={still ? { duration: 0 } : { duration: 0.9, delay: 0.15, ease: EASE }}
+        >
+          <TokenLogo uri={onChainUri} name={name} size={96} />
+        </motion.span>
+        <h2 className="-ml-[0.02em] min-w-0 font-display text-[clamp(2.8rem,7vw,5.5rem)] font-semibold leading-[0.9] tracking-[-0.045em]">
+          {name}
+          <span className="ml-3 align-top font-mono text-[0.22em] font-normal tracking-[0.14em] text-muted">{symbol}</span>
+        </h2>
+      </div>
+      {read?.description != null && (
+        <p data-testid="launch-done-description" className="mt-6 max-w-[60ch] text-[16px] leading-[1.55] text-muted">
+          {read.description}
+        </p>
+      )}
+      <p data-testid="launch-done-metadata" className="mt-4 max-w-[60ch] font-mono text-[10px] uppercase leading-relaxed tracking-[0.16em] text-muted">
+        {onChainUri === null
+          ? "the mint's metadata did not read back yet; open the token on the explorer in a moment"
+          : result.storedUri !== null && !matches
+            ? "the mint carries a metadata link other than the one this launch stored"
+            : !fetched
+              ? "fetching the logo and description through the link the mint carries"
+              : read === null
+                ? "the link the mint carries did not load just now; the site's mark stands in for the logo"
+                : "logo and description read back through the link the mint carries"}
+      </p>
       <p className="mt-5 text-[17px] leading-[1.45]">
         Your sale is open. Token{" "}
         <span

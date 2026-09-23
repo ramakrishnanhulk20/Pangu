@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { PriceCurve } from "@/components/readout/price-curve";
+import { LogoFrame } from "@/components/token-logo";
 import { money, sharePrice, shares as whole, utcMoment } from "@/components/readout/format";
 import { feedWords } from "@/lib/feeds";
 import { FEED_IDS, type LaunchForm, type Preview } from "@/lib/launch";
@@ -70,7 +71,15 @@ function useSettled<T>(value: T, ms: number): T {
  * first share sells at, where the ceiling bites, the cap, the end, and what a
  * buyer will meet. Every number is the plan's.
  */
-export function LaunchPreview({ preview, form }: { preview: Preview | null; form: LaunchForm }) {
+export function LaunchPreview({
+  preview,
+  form,
+  logoUrl,
+}: {
+  preview: Preview | null;
+  form: LaunchForm;
+  logoUrl: string | null;
+}) {
   const still = useReducedMotion() === true;
   const shapeKey =
     preview === null
@@ -80,11 +89,14 @@ export function LaunchPreview({ preview, form }: { preview: Preview | null; form
 
   if (preview === null) {
     return (
-      <div data-testid="launch-preview" className="rounded-lg border border-dashed border-line p-8">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">the sale, as it will open</p>
-        <p className="mt-4 max-w-[36ch] text-[15px] leading-relaxed text-muted">
-          The curve draws itself here once the shares, the raise and the share kept back add up to one Meteora can build.
-        </p>
+      <div>
+        <Identity form={form} logoUrl={logoUrl} still={still} />
+        <div data-testid="launch-preview" className="rounded-lg border border-dashed border-line p-8">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">the sale, as it will open</p>
+          <p className="mt-4 max-w-[36ch] text-[15px] leading-relaxed text-muted">
+            The curve draws itself here once the shares, the raise and the share kept back add up to one Meteora can build.
+          </p>
+        </div>
       </div>
     );
   }
@@ -126,6 +138,7 @@ export function LaunchPreview({ preview, form }: { preview: Preview | null; form
 
   return (
     <div data-testid="launch-preview" className="relative">
+      <Identity form={form} logoUrl={logoUrl} still={still} />
       <div className="flex items-center justify-between gap-4">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">the sale, as it will open</p>
         <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
@@ -197,6 +210,47 @@ export function LaunchPreview({ preview, form }: { preview: Preview | null; form
             </motion.li>
           ))}
         </ol>
+      </div>
+    </div>
+  );
+}
+
+/** The token as a wallet will list it: the logo in its circle beside the name, the symbol, and the first lines of the description. */
+function Identity({ form, logoUrl, still }: { form: LaunchForm; logoUrl: string | null; still: boolean }) {
+  const name = form.name.trim();
+  const symbol = form.symbol.trim().toUpperCase();
+  const description = form.description.trim();
+
+  return (
+    <div data-testid="launch-identity" className="mb-10 flex items-center gap-5 border-b border-line pb-7">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={logoUrl ?? "mark"}
+          className="shrink-0"
+          initial={still ? false : { opacity: 0, scale: 0.85, rotate: -8 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          exit={still ? undefined : { opacity: 0, scale: 0.9 }}
+          transition={still ? { duration: 0 } : { duration: 0.55, ease: EASE }}
+        >
+          <LogoFrame image={logoUrl} name={name === "" ? "This token" : name} size={76} />
+        </motion.span>
+      </AnimatePresence>
+      <div className="min-w-0">
+        <p
+          className={`line-clamp-2 break-words font-display text-[clamp(1.7rem,2.8vw,2.4rem)] font-semibold leading-[0.95] tracking-[-0.04em] ${
+            name === "" ? "text-muted/60" : ""
+          }`}
+        >
+          {name === "" ? "Your token" : name}
+        </p>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+          <span className={symbol === "" ? "text-muted/60" : "text-ink"}>{symbol === "" ? "symbol" : symbol}</span>
+          <span className="mx-2 text-accent">/</span>
+          as a wallet lists it
+        </p>
+        {description !== "" && (
+          <p className="mt-2.5 line-clamp-2 max-w-[54ch] text-[13px] leading-relaxed text-muted">{description}</p>
+        )}
       </div>
     </div>
   );

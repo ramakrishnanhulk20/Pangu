@@ -10,6 +10,11 @@ import { Tag } from "./fields";
 const WORDS: Record<StepStatus, string> = {
   waiting: "next",
   checking: "checking what is already on chain",
+  pricing: "asking Irys the price",
+  funding: "waiting for your wallet to pay Irys",
+  crediting: "paid, waiting for Irys to credit it",
+  "uploading-logo": "your wallet signs the logo, then it uploads",
+  "uploading-json": "your wallet signs the description, then it uploads",
   building: "putting it together",
   simulating: "asking devnet what would happen",
   signing: "waiting for your wallet",
@@ -19,14 +24,31 @@ const WORDS: Record<StepStatus, string> = {
   failed: "stopped",
 };
 
-const BUSY: readonly StepStatus[] = ["checking", "building", "simulating", "signing", "sending"];
+const BUSY: readonly StepStatus[] = [
+  "checking",
+  "pricing",
+  "funding",
+  "crediting",
+  "uploading-logo",
+  "uploading-json",
+  "building",
+  "simulating",
+  "signing",
+  "sending",
+];
 
 /**
- * The launch's transactions in the order they go out, each with where it has
- * got to, a link once it has a signature, and when one stops, what is on chain
- * and what pressing Launch again will do.
+ * The launch's steps in the order they run, each with where it has got to, a
+ * link once it has a signature, and when one stops, what is on chain and what
+ * pressing Launch again will do. The storage step shows what Irys priced it at.
  */
-export function LaunchSteps({ steps }: { steps: Record<StepId, StepState> }) {
+export function LaunchSteps({
+  steps,
+  storageLamports,
+}: {
+  steps: Record<StepId, StepState>;
+  storageLamports: number | null;
+}) {
   const still = useReducedMotion() === true;
 
   return (
@@ -61,10 +83,19 @@ export function LaunchSteps({ steps }: { steps: Record<StepId, StepState> }) {
                     }`}
                   >
                     {busy && <Spinner />}
-                    {WORDS[state.status]}
+                    {step.id === "metadata" && landed ? (state.status === "reused" ? "stored by your last try, reused" : "stored on Irys") : WORDS[state.status]}
                   </p>
                 </div>
-                <p className="mt-1 text-[13px] text-muted">{step.detail}</p>
+                <p className="mt-1 text-[13px] text-muted">
+                  {step.detail}
+                  {step.id === "metadata" && (
+                    <span data-testid="launch-step-metadata-cost">
+                      {storageLamports === null
+                        ? ". Irys prices it once a logo is picked."
+                        : `. About ${(storageLamports / 1e9).toFixed(6)} SOL, less whatever your Irys balance already holds.`}
+                    </span>
+                  )}
+                </p>
                 {state.signature !== null && (
                   <a
                     href={explorerTx(state.signature)}
@@ -72,7 +103,7 @@ export function LaunchSteps({ steps }: { steps: Record<StepId, StepState> }) {
                     rel="noreferrer"
                     className="mt-2 inline-block border-b border-line pb-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors hover:border-accent hover:text-accent"
                   >
-                    open the transaction
+                    {step.id === "metadata" ? "open the payment to Irys" : "open the transaction"}
                   </a>
                 )}
                 <AnimatePresence>

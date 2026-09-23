@@ -119,6 +119,55 @@ export function TextInput({
   );
 }
 
+/** A few lines of text with a running count against the limit. */
+export function TextArea({
+  id,
+  value,
+  onChange,
+  placeholder,
+  limit,
+  invalid,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  limit: number;
+  invalid: boolean;
+}) {
+  const used = value.trim().length;
+  return (
+    <div
+      className={`group relative rounded-lg border bg-raised transition-colors duration-200 focus-within:border-accent hover:border-ink/40 ${
+        invalid ? "border-refused/70" : "border-line"
+      }`}
+    >
+      <textarea
+        id={id}
+        name={id}
+        data-testid={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        maxLength={limit}
+        rows={4}
+        aria-invalid={invalid}
+        aria-describedby={`${id}-count`}
+        className="block w-full resize-y bg-transparent px-4 pb-8 pt-3 text-[16px] leading-relaxed text-ink outline-none placeholder:text-muted/60"
+      />
+      <span
+        id={`${id}-count`}
+        aria-live="polite"
+        className={`pointer-events-none absolute bottom-2.5 right-4 font-mono text-[10px] uppercase tracking-[0.14em] tabular-nums ${
+          used >= limit ? "text-refused" : used >= limit * 0.9 ? "text-pending" : "text-muted"
+        }`}
+      >
+        {used} / {limit}
+      </span>
+    </div>
+  );
+}
+
 /** A small set of choices where exactly one is on, as a row of buttons. */
 export function Choice<T extends string>({
   id,

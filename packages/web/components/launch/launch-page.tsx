@@ -17,6 +17,7 @@ import {
   StepError,
   explorerTx,
   loadProgress,
+  loadUpload,
   planLaunch,
   resumeState,
   runLaunch,
@@ -27,13 +28,16 @@ import {
   type StepId,
   type StepState,
   type StockReading,
+  type UploadRecord,
 } from "@/lib/launch";
+import { LogoRefused, prepareLogo, storagePrice } from "@/lib/token-metadata";
 
 import { RefusalLine } from "./fields";
 import { LaunchDone } from "./launch-done";
 import { LaunchForm } from "./launch-form";
 import { LaunchPreview } from "./launch-preview";
 import { LaunchSteps } from "./launch-steps";
+import type { LogoPick } from "./logo-drop";
 
 // The wallet button reads the browser's injected wallets, so rendering it on
 // the server would only produce markup the client replaces at once.
@@ -47,6 +51,12 @@ export type StockState =
   | { state: "ready"; reading: StockReading }
   | { state: "missing"; reason: string };
 
+export type StorageState =
+  | { state: "idle" }
+  | { state: "pricing" }
+  | { state: "ready"; lamports: number }
+  | { state: "missing" };
+
 interface StockAnswer {
   feed: FeedChoice;
   reading: StockReading | null;
@@ -54,6 +64,7 @@ interface StockAnswer {
 }
 
 const IDLE_STEPS: Record<StepId, StepState> = {
+  metadata: { status: "waiting", signature: null, failure: null },
   template: { status: "waiting", signature: null, failure: null },
   sale: { status: "waiting", signature: null, failure: null },
 };
@@ -62,6 +73,10 @@ const BALANCE_POLL_MS = 20_000;
 const BALANCE_RETRY_MS = 5_000;
 const STOCK_POLL_MS = 60_000;
 const STOCK_RETRY_MS = 8_000;
+/** Irys is asked the price once the typing pauses, not on every key. */
+const PRICE_SETTLE_MS = 600;
+/** An object URL outlives its logo long enough for the swap animation to finish drawing it. */
+const URL_LINGER_MS = 2_000;
 
 const FACTS = ["Meteora's Dynamic Bonding Curve", "Pangu's rules on every transfer", "Pyth for the stock price"];
 
@@ -77,7 +92,7 @@ const FACTS = ["Meteora's Dynamic Bonding Curve", "Pangu's rules on every transf
 export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string | null> }) {
   const still = useReducedMotion() === true;
   const connection = useMemo(() => breakConnection(), []);
-  const { publicKey, signTransaction, signAllTransactions } = useWallet();
+  const { publicKey, signTransaction, signAllTransactions, signMessage, sendTransaction } = useWallet();
   const wallet = publicKey === null ? null : publicKey.toBase58();
 
   const [form, setForm] = useState<Form>(DEFAULT_FORM);
@@ -88,6 +103,9 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<LaunchResult | null>(null);
   const [launchedAs, setLaunchedAs] = useState<{ name: string; symbol: string } | null>(null);
+  const [logo, setLogo] = useState<LogoPick>({ state: "empty" });
+  const [storage, setStorage] = useState<{ key: string; lamports: number | null } | null>(null);
+  const [upload, setUpload] = useState<UploadRecord | null>(null);
   const now = useSyncExternalStore(neverChanges, pageOpenedAt, () => null);
 
   // A wallet that comes back to this tab finds the form and the half finished
@@ -97,6 +115,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
     setProgressFor(wallet);
     const saved = wallet === null ? null : loadProgress(wallet);
     setProgress(saved);
+    setUpload(wallet === null ? null : loadUpload(wallet));
     if (saved !== null) {
       setForm(saved.form);
     }
@@ -107,6 +126,124 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const set = useCallback(<K extends keyof Form>(key: K, value: Form[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   }, []);
+
+  const pickTurn = useRef(0);
+  const pickLogo = useCallback((file: File, restored = false) => {
+    pickTurn.current += 1;
+    const mine = pickTurn.current;
+    setLogo({ state: "preparing" });
+    prepareLogo(file).then(
+      (prepared) => {
+        if (pickTurn.current === mine) {
+          setLogo({ state: "ready", logo: prepared, url: URL.createObjectURL(prepared.file), restored });
+        }
+      },
+      (error: unknown) => {
+        if (pickTurn.current === mine) {
+          setLogo({
+            state: "refused",
+            sentence: error instanceof LogoRefused ? error.message : "That file could not be read. Pick it again.",
+          });
+        }
+      }
+    );
+  }, []);
+  const clearLogo = useCallback(() => {
+    pickTurn.current += 1;
+    setLogo({ state: "empty" });
+  }, []);
+
+  const logoUrl = logo.state === "ready" ? logo.url : null;
+  useEffect(() => {
+    if (logoUrl === null) {
+      return;
+    }
+    return () => {
+      window.setTimeout(() => URL.revokeObjectURL(logoUrl), URL_LINGER_MS);
+    };
+  }, [logoUrl]);
+
+  // A launch that stopped after its logo was stored gets that logo back after
+  // a reload, fetched from Irys, so the next press uses it again unpaid.
+  const storedImage = upload?.stored?.imageUri ?? null;
+  const storedType = upload?.stored?.imageType ?? null;
+  const logoEmpty = logo.state === "empty";
+  useEffect(() => {
+    if (storedImage === null || storedType === null || !logoEmpty) {
+      return;
+    }
+    let alive = true;
+    fetch(storedImage)
+      .then((answer) => (answer.ok ? answer.blob() : null))
+      .then((blob) => {
+        if (alive && blob !== null) {
+          const ending = storedType === "image/svg+xml" ? "svg" : storedType.slice("image/".length);
+          pickLogo(new File([blob], `stored-logo.${ending}`, { type: storedType }), true);
+        }
+      })
+      .catch(() => {
+        // With Irys out of reach the issuer picks the logo again, and the
+        // same bytes are still recognised and not paid for twice.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [storedImage, storedType, logoEmpty, pickLogo]);
+
+  const storageKey =
+    logo.state === "ready"
+      ? JSON.stringify([
+          logo.logo.bytes,
+          form.name.trim(),
+          form.symbol.trim().toUpperCase(),
+          form.description.trim(),
+          form.website.trim(),
+          form.x.trim(),
+        ])
+      : null;
+  useEffect(() => {
+    if (storageKey === null) {
+      return;
+    }
+    const [bytes, name, symbol, description, website, x] = JSON.parse(storageKey) as [
+      number,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      storagePrice(bytes, { name, symbol, description, links: { website: website || null, x: x || null } }).then(
+        (lamports) => {
+          if (alive) {
+            setStorage({ key: storageKey, lamports });
+          }
+        },
+        () => {
+          if (alive) {
+            setStorage({ key: storageKey, lamports: null });
+          }
+        }
+      );
+    }, PRICE_SETTLE_MS);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [storageKey]);
+  const storageState: StorageState =
+    storageKey === null
+      ? { state: "idle" }
+      : storage === null
+        ? { state: "pricing" }
+        : storage.lamports !== null
+          ? { state: "ready", lamports: storage.lamports }
+          : storage.key === storageKey
+            ? { state: "missing" }
+            : { state: "pricing" };
+  const storageLamports = storageState.state === "ready" ? storageState.lamports : null;
 
   useEffect(() => {
     if (publicKey === null) {
@@ -210,8 +347,15 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
   const lamports = balance !== null && balance.wallet === wallet ? balance.lamports : null;
   const plan = useMemo(
-    () => planLaunch(form, { stock: stock.state === "ready" ? stock.reading : null, lamports, now }),
-    [form, stock, lamports, now]
+    () =>
+      planLaunch(form, {
+        stock: stock.state === "ready" ? stock.reading : null,
+        lamports,
+        now,
+        hasLogo: logo.state === "ready",
+        storageLamports,
+      }),
+    [form, stock, lamports, now, logo.state, storageLamports]
   );
   const resume = resumeState(progress, plan.terms);
 
@@ -219,17 +363,18 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const turn = useRef(0);
 
   const launch = async () => {
-    if (publicKey === null || signTransaction === undefined || plan.terms === null || running) {
+    if (publicKey === null || signTransaction === undefined || plan.terms === null || logo.state !== "ready" || running) {
       return;
     }
     turn.current += 1;
     const mine = turn.current;
     const terms = plan.terms;
     const launchedForm = form;
+    const launchedLogo = logo.logo.file;
     setRunning(true);
     setResult(null);
     setSteps(IDLE_STEPS);
-    let current: StepId = "template";
+    let current: StepId = "metadata";
     const onStep = (id: StepId, state: StepState) => {
       if (turn.current !== mine) {
         return;
@@ -241,7 +386,8 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
       const landed = await runLaunch(
         terms,
         launchedForm,
-        { publicKey, signTransaction, signAllTransactions },
+        launchedLogo,
+        { publicKey, signTransaction, signAllTransactions, signMessage, sendTransaction },
         connection,
         onStep
       );
@@ -287,6 +433,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
     } finally {
       if (turn.current === mine) {
         setProgress(loadProgress(publicKey));
+        setUpload(loadUpload(publicKey));
         setRunning(false);
       }
     }
@@ -343,12 +490,21 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
         <div className="mt-20 grid gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-x-16 lg:gap-y-20">
           <div className="lg:col-start-1 lg:row-start-1">
-            <LaunchForm form={form} set={set} plan={plan} stock={stock} />
+            <LaunchForm
+              form={form}
+              set={set}
+              plan={plan}
+              stock={stock}
+              logo={logo}
+              onLogo={pickLogo}
+              onClearLogo={clearLogo}
+              storage={storageState}
+            />
           </div>
 
           <aside className="self-start lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <Reveal delay={0.1}>
-              <LaunchPreview preview={plan.preview} form={form} />
+              <LaunchPreview preview={plan.preview} form={form} logoUrl={logoUrl} />
             </Reveal>
           </aside>
 
@@ -359,14 +515,15 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
               <Reveal>
                 <div data-testid="launch-panel">
                   <div className="flex items-baseline gap-4 border-b border-line pb-4">
-                    <span className="font-mono text-[11px] tracking-[0.18em] text-accent">03</span>
+                    <span className="font-mono text-[11px] tracking-[0.18em] text-accent">04</span>
                     <h2 className="font-display text-[clamp(1.9rem,3.6vw,2.9rem)] font-semibold leading-none tracking-[-0.035em]">
                       Sign and launch
                     </h2>
                   </div>
 
                   <p className="mt-5 max-w-[56ch] text-[14px] leading-relaxed text-muted">
-                    Two transactions, each tried against devnet first so a refusal shows before your wallet is asked, and the second needs the first on chain.
+                    First the logo and description go to Irys: your wallet pays for the storage and signs each of the two files.
+                    Then two transactions, each tried against devnet first so a refusal shows before your wallet is asked, and the second needs the first on chain.
                     About {cost} SOL in all, most of it rent: the deposit Solana holds to keep the new accounts open.
                   </p>
 
@@ -392,6 +549,14 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
                       >
                         see the template
                       </a>
+                    </p>
+                  )}
+                  {upload?.stored != null && upload.stored.uri !== "" && resume.kind !== "check-sale" && !running && (
+                    <p
+                      data-testid="launch-upload-kept"
+                      className="mt-6 max-w-[56ch] border-l-2 border-accent pl-4 text-[14px] leading-relaxed"
+                    >
+                      Your last try already stored a logo and description. Launching again uses them as they are, unpaid, unless you have changed them.
                     </p>
                   )}
                   {resume.kind === "new-curve" && !running && (
@@ -437,9 +602,9 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
 
                   <div className="mt-10">
                     <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-                      {STEPS.length} transactions, in order
+                      {STEPS.length} steps, in order
                     </p>
-                    <LaunchSteps steps={steps} />
+                    <LaunchSteps steps={steps} storageLamports={storageLamports} />
                   </div>
                 </div>
               </Reveal>

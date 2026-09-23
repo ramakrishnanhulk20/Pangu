@@ -1,0 +1,16 @@
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+ok    form, light 1440: nothing in the launch page reaches past the window: 1440px
+ok    form, light 375: nothing in the launch page reaches past the window: 375px
+ok    form, dark 1440: nothing in the launch page reaches past the window: 1440px
+ok    form, dark 375: nothing in the launch page reaches past the window: 375px
+ok    a text file is refused as a logo: The logo has to be a PNG, JPEG, WEBP or SVG.
+ok    a link that is not an X profile is refused: The X link has to be a profile, like https://x.com/yourcompany or @yourcompany. Fix the link or leave the box empty.
+ok    no uncaught errors on the form: 
+ok    the stored logo comes back from Irys into the logo box after a reload
+ok    with the sale already landed the page offers no re-upload note
+ok    the done state shows the sale read back from devnet
+ok    the done state's logo is the one the mint's link names: https://devnet.irys.xyz/5z9tpnTD7KHgMhsdnjGzHBGQBZF3h1eyhTHEvkbAdNwx
+ok    nothing was signed on the way: 0
+ok    no uncaught errors on the done state: 
+
+every check passed

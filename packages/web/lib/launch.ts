@@ -4,6 +4,7 @@ import {
   SYSVAR_CLOCK_PUBKEY,
   VersionedTransaction,
   type Connection,
+  type SendOptions,
   type Transaction,
 } from "@solana/web3.js";
 import { NATIVE_MINT, getMint } from "@solana/spl-token";
@@ -16,11 +17,22 @@ import {
   getSale,
   panguErrorFromLogs,
   saleRulesAddress,
+  saleTokenInfo,
   type PanguErrorName,
 } from "pangu-sdk";
 import { capFromShare, launchTemplateTransaction, openSaleTransaction } from "pangu-sdk/dbc";
 
 import { AAPLX_FEED, APPLE_EXCHANGE_FEED, feedWords } from "./feeds";
+import {
+  LogoRefused,
+  MAX_DESCRIPTION,
+  checkWebsite,
+  checkX,
+  unsentFundOf,
+  uploadMetadata,
+  type StoredMetadata,
+  type UploadStage,
+} from "./token-metadata";
 import {
   MAX_MIGRATION_PERCENT,
   MIN_MIGRATION_PERCENT,
@@ -40,7 +52,9 @@ import {
  *
  * Browser safe: no key, no server-only import. It follows
  * packages/scripts/src/launch.ts transaction for transaction: the launch
- * template first, then the pool and the sale's rules together in one.
+ * template first, then the pool and the sale's rules together in one. Before
+ * either, the logo and description are stored on Irys, because the pool
+ * transaction writes their address into the mint.
  */
 
 /**
@@ -88,6 +102,9 @@ export type FeedChoice = "apple" | "aaplx";
 export interface LaunchForm {
   name: string;
   symbol: string;
+  description: string;
+  website: string;
+  x: string;
   supply: string;
   paying: Paying;
   raise: string;
@@ -106,6 +123,9 @@ export interface LaunchForm {
 export const DEFAULT_FORM: LaunchForm = {
   name: "",
   symbol: "",
+  description: "",
+  website: "",
+  x: "",
   supply: "1000",
   paying: "dollar",
   raise: "200000",
@@ -129,6 +149,10 @@ export const FEED_IDS: Record<FeedChoice, string> = {
 export type FieldName =
   | "name"
   | "symbol"
+  | "logo"
+  | "description"
+  | "website"
+  | "x"
   | "supply"
   | "raise"
   | "keptBack"
@@ -161,6 +185,10 @@ export interface PlanContext {
   stock: StockReading | null;
   /** The connected wallet's devnet balance, or null when no wallet is connected or it is still being read. */
   lamports: number | null;
+  /** True once a logo has been picked and checked. */
+  hasLogo: boolean;
+  /** What Irys charges to store the logo and description, once it has been asked. */
+  storageLamports: number | null;
   /**
    * Unix seconds, to date the end of the offering in the preview, or null
    * before the browser has taken over from the prerendered page. The chain's
@@ -200,7 +228,9 @@ export interface Preview {
 export interface LaunchTerms {
   name: string;
   symbol: string;
-  uri: string;
+  description: string;
+  website: string | null;
+  x: string | null;
   quoteMint: string;
   shape: CurveShape;
   capShareBps: number;
@@ -275,6 +305,28 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
         : `"${symbol.slice(0, 16)}" is not 2 to 10 letters or digits.`,
       "Use 2 to 10 letters or digits, like AAPLS."
     );
+  }
+
+  if (!context.hasLogo) {
+    refuse("logo", "The token has no logo yet.", "Drop a square PNG, JPEG, WEBP or SVG of up to 1 MB into the logo box.");
+  }
+  const description = form.description.trim();
+  if (description === "") {
+    refuse("description", "The token has no description yet.", "Say in a sentence or two what a buyer is buying.");
+  } else if (description.length > MAX_DESCRIPTION) {
+    refuse(
+      "description",
+      `The description is ${description.length} characters and wallets are handed ${MAX_DESCRIPTION} at most.`,
+      "Shorten it."
+    );
+  }
+  const website = checkWebsite(form.website);
+  if (website.refusal !== null) {
+    refuse("website", website.refusal, "Fix the address or leave the box empty.");
+  }
+  const x = checkX(form.x);
+  if (x.refusal !== null) {
+    refuse("x", x.refusal, "Fix the link or leave the box empty.");
   }
 
   const quoteDecimals = QUOTE_DECIMALS[form.paying];
@@ -401,12 +453,13 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
     }
   }
 
-  if (context.lamports !== null && context.lamports < LAUNCH_COST_LAMPORTS) {
+  const needed = LAUNCH_COST_LAMPORTS + (context.storageLamports ?? 0);
+  if (context.lamports !== null && context.lamports < needed) {
     refuse(
       "wallet",
       `This wallet holds ${(context.lamports / LAMPORTS_PER_SOL).toFixed(4)} devnet SOL and a launch costs about ${(
-        LAUNCH_COST_LAMPORTS / LAMPORTS_PER_SOL
-      ).toFixed(4)}.`,
+        needed / LAMPORTS_PER_SOL
+      ).toFixed(4)}${context.storageLamports === null ? "" : ", storing the logo included"}.`,
       "Top it up from faucet.solana.com, then launch."
     );
   }
@@ -480,7 +533,9 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
       ? {
           name,
           symbol,
-          uri: `https://pangu.example/devnet/${symbol.toLowerCase()}.json`,
+          description,
+          website: website.url,
+          x: x.url,
           quoteMint,
           shape,
           capShareBps: capPercent * 100,
@@ -542,9 +597,14 @@ function ruleSentences(form: LaunchForm, preview: Preview, bandBps: number | nul
   return rules;
 }
 
-export type StepId = "template" | "sale";
+export type StepId = "metadata" | "template" | "sale";
 
 export const STEPS: readonly { id: StepId; title: string; detail: string }[] = [
+  {
+    id: "metadata",
+    title: "Store the logo and description",
+    detail: "On Irys, paid from your wallet; your wallet signs each of the two files",
+  },
   {
     id: "template",
     title: "The launch template",
@@ -560,6 +620,11 @@ export const STEPS: readonly { id: StepId; title: string; detail: string }[] = [
 export type StepStatus =
   | "waiting"
   | "checking"
+  | "pricing"
+  | "funding"
+  | "crediting"
+  | "uploading-logo"
+  | "uploading-json"
   | "building"
   | "simulating"
   | "signing"
@@ -607,6 +672,12 @@ export interface LaunchResult {
   templateSignature: string | null;
   saleSignature: string | null;
   sale: ReadBack;
+  /** The token's name, symbol and metadata link as the mint itself carries them, read back after launch. */
+  token: { name: string; symbol: string; uri: string } | null;
+  /** The metadata link this launch stored, to hold against the one the mint carries. */
+  storedUri: string | null;
+  /** What Irys priced the two files at, and the transfer that funded them when one was needed. */
+  storage: { priceLamports: number; fundSignature: string | null; fundLamports: number } | null;
   /** Lamports this press of Launch took from the wallet, read off the chain before and after. */
   spentLamports: number | null;
   /** True when an earlier press had already landed part of this launch. */
@@ -618,6 +689,14 @@ export interface LaunchWallet {
   publicKey: PublicKey;
   signTransaction: <T extends Transaction | VersionedTransaction>(transaction: T) => Promise<T>;
   signAllTransactions?: <T extends Transaction | VersionedTransaction>(transactions: T[]) => Promise<T[]>;
+  /** Irys has each stored file signed as a message. */
+  signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
+  /** Irys sends its own funding transfer through the wallet. */
+  sendTransaction?: (
+    transaction: Transaction | VersionedTransaction,
+    connection: Connection,
+    options?: SendOptions
+  ) => Promise<string>;
 }
 
 /**
@@ -665,8 +744,46 @@ function saveProgress(wallet: PublicKey, progress: Progress): void {
 export function clearProgress(wallet: PublicKey | string): void {
   try {
     window.sessionStorage.removeItem(storeKey(wallet));
+    window.sessionStorage.removeItem(uploadKey(wallet));
   } catch {
     // Nothing to clear.
+  }
+}
+
+/**
+ * What this launch already stored on Irys, kept apart from the progress
+ * because it is written before the first transaction and outlives a changed
+ * curve. `stored.uri` is empty while only the logo has landed. `unsentFund` is
+ * a funding transfer that went out but never reached the Irys node's books.
+ */
+export interface UploadRecord {
+  stored: StoredMetadata | null;
+  unsentFund: string | null;
+}
+
+const UPLOAD_PREFIX = "pangu-launch-upload:";
+
+function uploadKey(wallet: PublicKey | string): string {
+  return `${UPLOAD_PREFIX}${typeof wallet === "string" ? wallet : wallet.toBase58()}`;
+}
+
+export function loadUpload(wallet: PublicKey | string): UploadRecord | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(uploadKey(wallet));
+    return raw === null ? null : (JSON.parse(raw) as UploadRecord);
+  } catch {
+    return null;
+  }
+}
+
+function saveUpload(wallet: PublicKey, record: UploadRecord): void {
+  try {
+    window.sessionStorage.setItem(uploadKey(wallet), JSON.stringify(record));
+  } catch {
+    // Without storage a failed launch stores its logo again on the next press.
   }
 }
 
@@ -731,6 +848,7 @@ type Say = (sentence: string, tag?: PanguErrorName | null) => StepFailure;
 export async function runLaunch(
   terms: LaunchTerms,
   form: LaunchForm,
+  logo: File,
   wallet: LaunchWallet,
   connection: Connection,
   onStep: (id: StepId, state: StepState) => void
@@ -739,11 +857,13 @@ export async function runLaunch(
   const quoteMint = new PublicKey(terms.quoteMint);
   let progress = loadProgress(owner);
 
-  onStep("template", { status: "checking", signature: null, failure: null });
+  onStep("metadata", { status: "checking", signature: null, failure: null });
 
   if (progress !== null && progress.mint !== null) {
     const opened = await getSale(connection, new PublicKey(progress.mint));
     if (opened !== null) {
+      const upload = loadUpload(owner)?.stored ?? null;
+      onStep("metadata", { status: "done", signature: upload?.fundSignature ?? null, failure: null });
       onStep("template", { status: "done", signature: progress.templateSignature, failure: null });
       onStep("sale", { status: "done", signature: progress.saleSignature, failure: null });
       const result = await readBack(
@@ -753,7 +873,8 @@ export async function runLaunch(
         progress.templateSignature,
         progress.saleSignature,
         null,
-        true
+        true,
+        upload !== null && upload.uri !== "" ? upload : null
       );
       clearProgress(owner);
       return result;
@@ -764,8 +885,15 @@ export async function runLaunch(
     progress = { ...progress, mint: null, pool: null, saleSignature: null };
   }
 
-  await preSendChecks(connection, terms, owner, quoteMint);
+  try {
+    await preSendChecks(connection, terms, owner, quoteMint);
+  } catch (error) {
+    onStep("metadata", { status: "waiting", signature: null, failure: null });
+    throw error;
+  }
   const startedWith = await connection.getBalance(owner, "confirmed");
+
+  const stored = await storeMetadata(terms, logo, wallet, onStep);
 
   let config: PublicKey | null = null;
   let templateSignature: string | null = null;
@@ -851,7 +979,7 @@ export async function runLaunch(
       config,
       name: terms.name,
       symbol: terms.symbol,
-      uri: terms.uri,
+      uri: stored.uri,
       sale: {
         capShareBps: terms.capShareBps,
         accessMode: terms.accessMode,
@@ -900,9 +1028,120 @@ export async function runLaunch(
   onStep("sale", { status: "done", signature: saleSignature, failure: null });
 
   const spent = startedWith - (await connection.getBalance(owner, "confirmed"));
-  const result = await readBack(connection, mint, config.toBase58(), templateSignature, saleSignature, spent, resumed);
+  const result = await readBack(connection, mint, config.toBase58(), templateSignature, saleSignature, spent, resumed, stored);
   clearProgress(owner);
   return result;
+}
+
+/** A wallet without a way Irys needs: message signing for the files, or sending for the funding transfer. */
+class WalletCannot extends Error {
+  constructor(what: "sign messages" | "send transactions") {
+    super(`This wallet cannot ${what}`);
+    this.name = "WalletCannot";
+  }
+}
+
+/**
+ * The first step: the logo and the metadata JSON on Irys, or the ones an
+ * earlier press of this launch already stored when nothing about them has
+ * changed. Each file that lands is written to sessionStorage at once, so a
+ * press that stops halfway never pays to store the same logo twice.
+ */
+async function storeMetadata(
+  terms: LaunchTerms,
+  logo: File,
+  wallet: LaunchWallet,
+  onStep: (id: StepId, state: StepState) => void
+): Promise<StoredMetadata> {
+  const owner = wallet.publicKey;
+  const record: UploadRecord = loadUpload(owner) ?? { stored: null, unsentFund: null };
+  let fundSignature: string | null = null;
+  const show = (status: StepStatus) => onStep("metadata", { status, signature: fundSignature, failure: null });
+
+  const onStage = (stage: UploadStage) => {
+    if (stage.stage === "pricing") {
+      show("pricing");
+    } else if (stage.stage === "funding") {
+      show("funding");
+    } else if (stage.stage === "crediting") {
+      fundSignature = stage.signature;
+      record.unsentFund = null;
+      saveUpload(owner, record);
+      show("crediting");
+    } else if (stage.stage === "uploading") {
+      show(stage.file === "logo" ? "uploading-logo" : "uploading-json");
+    } else if (stage.stage === "logo-stored" && record.stored?.imageSha !== stage.imageSha) {
+      record.stored = {
+        uri: "",
+        imageUri: stage.imageUri,
+        imageType: stage.imageType,
+        imageSha: stage.imageSha,
+        textKey: "",
+        priceLamports: 0,
+        fundSignature,
+        fundLamports: 0,
+      };
+      saveUpload(owner, record);
+    }
+  };
+
+  const previous = record.stored;
+  try {
+    const stored = await uploadMetadata(
+      {
+        publicKey: owner,
+        signMessage: wallet.signMessage ?? (() => Promise.reject(new WalletCannot("sign messages"))),
+        sendTransaction: wallet.sendTransaction ?? (() => Promise.reject(new WalletCannot("send transactions"))),
+      },
+      {
+        name: terms.name,
+        symbol: terms.symbol,
+        description: terms.description,
+        image: logo,
+        links: { website: terms.website, x: terms.x },
+      },
+      { previous, unsentFund: record.unsentFund, onStage }
+    );
+    saveUpload(owner, { stored, unsentFund: null });
+    onStep("metadata", {
+      status: stored === previous ? "reused" : "done",
+      signature: stored.fundSignature,
+      failure: null,
+    });
+    return stored;
+  } catch (error) {
+    const unsent = unsentFundOf(error);
+    if (unsent !== null) {
+      record.unsentFund = unsent;
+      saveUpload(owner, record);
+    }
+    const paid = fundSignature ?? unsent;
+    const text = messageOf(error);
+    return fail(
+      onStep,
+      "metadata",
+      {
+        sentence:
+          error instanceof LogoRefused
+            ? error.message
+            : error instanceof WalletCannot
+              ? `${error.message}, and Irys needs it to store the logo. Connect Phantom, Solflare or Backpack.`
+              : /reject|declin|denied|cancel/i.test(text)
+                ? "You turned this down in your wallet, so nothing more was stored."
+                : /\b402\b/.test(text)
+                  ? "Irys says this wallet's balance there does not cover the files yet."
+                  : `Irys did not store the files: ${text}`,
+        tag: null,
+        onChain:
+          paid === null
+            ? NOTHING_YET
+            : "Your wallet paid Irys for the files. The payment stays in your Irys balance and covers the next try; nothing for the sale is on chain yet.",
+        onChainLink: paid === null ? null : explorerTx(paid),
+        next: "Press Launch again; anything already stored is used again rather than paid for twice.",
+      },
+      paid
+    );
+  }
 }
 
 function fail(
@@ -1140,10 +1379,16 @@ async function readBack(
   templateSignature: string | null,
   saleSignature: string | null,
   spentLamports: number | null,
-  resumed: boolean
+  resumed: boolean,
+  stored: StoredMetadata | null
 ): Promise<LaunchResult> {
   const key = new PublicKey(mint);
-  const sale = await getSale(connection, key);
+  const [sale, token] = await Promise.all([
+    getSale(connection, key),
+    // The mint's own copy of the name, symbol and link. A missed read shows
+    // the logo as unconfirmed on the done state; it never stops the result.
+    saleTokenInfo(connection, key).catch(() => null),
+  ]);
   if (sale === null) {
     throw new StepError("sale", {
       sentence: "The sale's transaction landed but its rules do not read back yet.",
@@ -1172,6 +1417,12 @@ async function readBack(
       issuer: sale.issuer.toBase58(),
       baseDecimals: sale.baseDecimals,
     },
+    token,
+    storedUri: stored?.uri ?? null,
+    storage:
+      stored === null
+        ? null
+        : { priceLamports: stored.priceLamports, fundSignature: stored.fundSignature, fundLamports: stored.fundLamports },
     spentLamports,
     resumed,
   };

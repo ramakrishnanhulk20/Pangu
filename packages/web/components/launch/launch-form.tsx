@@ -10,9 +10,11 @@ import {
   type Refusal,
 } from "@/lib/launch";
 import { Reveal } from "@/components/break/strike";
+import { MAX_DESCRIPTION, STORAGE_WORDS } from "@/lib/token-metadata";
 
-import { Choice, Field, Tag, TextInput } from "./fields";
-import type { StockState } from "./launch-page";
+import { Choice, Field, Tag, TextArea, TextInput } from "./fields";
+import type { StockState, StorageState } from "./launch-page";
+import { LogoDrop, type LogoPick } from "./logo-drop";
 
 type Set = <K extends keyof Form>(key: K, value: Form[K]) => void;
 
@@ -22,7 +24,7 @@ function refusalsFor(plan: LaunchPlan, ...fields: FieldName[]): Refusal[] {
 
 
 /**
- * The issuer's side of the page: the offering, then the rules, each in plain
+ * The issuer's side of the page: the offering, how it looks, then the rules, in plain
  * words. Every number it shows beside a field is computed by the plan, never
  * typed.
  */
@@ -31,11 +33,19 @@ export function LaunchForm({
   set,
   plan,
   stock,
+  logo,
+  onLogo,
+  onClearLogo,
+  storage,
 }: {
   form: Form;
   set: Set;
   plan: LaunchPlan;
   stock: StockState;
+  logo: LogoPick;
+  onLogo: (file: File) => void;
+  onClearLogo: () => void;
+  storage: StorageState;
 }) {
   const preview = plan.preview;
   const money = form.paying === "dollar" ? "dollars" : "SOL";
@@ -177,7 +187,88 @@ export function LaunchForm({
       </Reveal>
 
       <Reveal>
-        <Section index="02" title="The rules" note="Enforced by the Pangu program on every transfer, named in its own words beside each one.">
+        <Section
+          index="02"
+          title="How it looks"
+          note="What wallets, explorers and every Pangu screen show for this token. The mint carries the address of these, written at launch."
+        >
+          <Field id="launch-logo" label="Logo" refusals={logo.state === "refused" ? [] : refusalsFor(plan, "logo")}>
+            <LogoDrop
+              pick={logo}
+              name={form.name}
+              onFile={onLogo}
+              onClear={onClearLogo}
+              invalid={logo.state === "refused"}
+            />
+          </Field>
+
+          <Field
+            id="launch-description"
+            label="Description"
+            refusals={refusalsFor(plan, "description")}
+            helper="One paragraph a buyer reads in their wallet: what the token is and who stands behind it."
+          >
+            <TextArea
+              id="launch-description"
+              value={form.description}
+              onChange={(value) => set("description", value)}
+              placeholder="Series A preferred shares in Apple, offered to verified buyers at a discount to the listed price."
+              limit={MAX_DESCRIPTION}
+              invalid={refusalsFor(plan, "description").length > 0 && form.description !== ""}
+            />
+          </Field>
+
+          <div className="grid gap-8 sm:grid-cols-2">
+            <Field id="launch-website" label="Website, optional" refusals={refusalsFor(plan, "website")}>
+              <TextInput
+                id="launch-website"
+                value={form.website}
+                onChange={(value) => set("website", value)}
+                placeholder="https://yourcompany.com"
+                maxLength={200}
+                invalid={refusalsFor(plan, "website").length > 0}
+              />
+            </Field>
+            <Field id="launch-x" label="X profile, optional" refusals={refusalsFor(plan, "x")}>
+              <TextInput
+                id="launch-x"
+                value={form.x}
+                onChange={(value) => set("x", value)}
+                placeholder="@yourcompany"
+                maxLength={200}
+                invalid={refusalsFor(plan, "x").length > 0}
+              />
+            </Field>
+          </div>
+
+          <div data-testid="launch-storage" className="border-t border-line pt-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">where it is kept</p>
+            <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.5]">
+              {storage.state === "ready" ? (
+                <>
+                  Storing the logo and this description costs{" "}
+                  <span className="font-display text-[1.35em] font-semibold tracking-[-0.03em] text-accent">
+                    {(storage.lamports / 1e9).toFixed(6)} SOL
+                  </span>
+                  , priced by Irys just now.
+                </>
+              ) : storage.state === "pricing" ? (
+                "Asking Irys what storing these costs."
+              ) : storage.state === "missing" ? (
+                "Irys did not give a price just now. It is asked again when you launch, before anything is paid."
+              ) : (
+                "Add a logo and Irys prices storing it with the description, before anything is paid."
+              )}
+            </p>
+            <p className="mt-2 max-w-[56ch] text-[13px] leading-relaxed text-muted">
+              {STORAGE_WORDS} Your wallet tops up its Irys balance only by what it lacks, then signs each file.
+            </p>
+          </div>
+        </Section>
+      </Reveal>
+
+      <Reveal>
+        <Section index="03" title="The rules" note="Enforced by the Pangu program on every transfer, named in its own words beside each one.">
           <Field
             id="launch-cap"
             label="Most one wallet can hold"
