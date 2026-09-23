@@ -410,7 +410,7 @@ The most recent counts, from the runs of 23 September 2026, recorded in `docs/me
 109 devnet-script tests
 ```
 
-The 37 steps are the program's own fork suite. The SDK has a fork suite of its own, which could not copy its accounts from the public mainnet node on 23 September 2026, so it is not counted above.
+The 37 steps are the program's own fork suite. The SDK has a fork suite of its own, 15 steps on the same forked validator, which passed on 23 September 2026 once the validator cloned its accounts through a keyed mainnet node; both runs are in docs/measurements.
 
 Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (21 September 2026: 27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
 

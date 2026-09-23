@@ -139,3 +139,44 @@ repository.
    Liquidity", so the last buyer of every sale needs a partial fill. That is why
    `buyTransaction` takes `fill: "partial"`. Without it a sale can stop one
    lamport short of graduation and stay there.
+
+## Run of 23 September 2026: the v2 rules
+
+Same command, against the build whose rules store the paying token and the end
+of the offering period. Binary SHA256
+`191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731`, IDL SHA256
+`48836ab193d10b8a58321a9f6777640bc43873f207a6210f2de18c1a47032772`.
+
+Result: all 15 steps pass, a to o, `SDK-FORK-OK`. Nothing was sent to mainnet.
+
+What changed since the run above:
+
+- The package builds the v2 instructions. The sale's rules carry the paying
+  token's mint and an optional end of the offering period, and closing a buyer
+  record passes the sale's rules.
+- A banded sale's cap was the whole curve, which the program now refuses. It is
+  half the curve, and the walk up to the ceiling is spread over three wallets,
+  each kept under the cap. The preflight predicted `PriceOutsideBand` on the
+  fourth buy and the chain refused it with the same error.
+- The validator cloned Meteora's accounts through a keyed mainnet node read from
+  `MAINNET_RPC_URL` in the root `.env`. The public node had refused the clone
+  earlier the same day, which is why this suite had not yet run on the v2
+  interface. The URL carries a key and appears in no log.
+
+The proof numbers hold: the curve raised 5,000,000,001 of 5,000,000,000
+lamports, 15 buyers, the largest holding 10.00 percent against a cap share of
+10.00 percent. `PriceStale` was predicted and then refused on the shut market.
+
+| Action | Bytes | Compute units |
+|---|---|---|
+| Pool plus the sale's rules, one transaction | 943 | 93,264 |
+| First buy | 910 | 114,341 |
+| A later buy | 910 | 112,831 to 126,343 |
+| Sell back to the pool | 878 | 84,033 |
+| Migrate to DAMM v2 | 1,139 | 152,120 |
+| Close a buyer record, now with the rules | 277 | 6,320 |
+| Banded pool plus rules | 940 | 99,530 |
+| A buy in a banded sale | 912 to 922 | 103,426 to 125,465 |
+
+Migration still asks for no compute limit of its own: 152,120 units against the
+200,000 a single instruction gets by default.
