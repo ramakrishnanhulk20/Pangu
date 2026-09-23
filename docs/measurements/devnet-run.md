@@ -1353,3 +1353,197 @@ wallet project Fwi8ejZ8...  PASS    Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L 
 app                         SKIP    APP_URL is not set in .env, so there is no site to check
 14 passed, 0 warned, 0 failed, 2 not checked, at 2026-09-23T10:51:04Z
 ```
+
+# The seventh run: a demo sale banded on the round-the-clock AAPLx price
+
+PBAND and PBAND2 are banded on `Equity.US.AAPL/USD`, Apple's exchange price.
+Pyth only publishes that during US market sessions, so from an hour after the
+close until the next pre-market every buy on them is refused with `PriceStale`.
+Judging runs across a weekend. This run opens a third demo sale, PAAPLX, with
+the same curve as PBAND2 but banded on `Crypto.AAPLX/USD`, the tokenised Apple
+share, which Pyth publishes all week. A judge can then run every buy row at any
+hour. It is a different instrument from the stock and carries its own basis
+risk, which `feeds.ts` says. Decided by Ram on 23 September 2026. Every command
+below ran from a Windows shell in `packages/scripts` on the keyed devnet node,
+with no 429s, so nothing needed a second pass.
+
+## The price
+
+`npm run refresh-price -- --feed Crypto.AAPLX/USD`, 13:05 UTC, exit 0:
+
+```
+feed      : Crypto.AAPLX/USD (Apple, tokenised)
+account   : 6TzXgoujavi3TRF8MchvtWdqaApXc2RXiF7m31eSkW4a
+price     : 344.2560 dollars, confidence 7 basis points
+published : 2026-09-23T13:05:14.000Z, 8 seconds ago, of an allowed 3600
+verified  : Full, two thirds of the Wormhole guardians
+cost      : 1366140 lamports (0.001366 SOL), 137831 compute units, 1606 bytes
+```
+
+Signatures
+`5WWZwBPEhrUfFi8UE99LYzneUjDjvexch7AhPfmmXHwBpyD9usGyUGjP69T5kCsd2MN1a3v1DZPf2XJrG7anqoag`
+and
+`2kssxNYpHUviwneukDbALwXBCBEUtFi21xmQGUEf2vWUnFYncgVwzCBSxPagkXGsfxr3K9ZyQVZe8qmRTgsSB7h4`.
+It cost more than the sixth run's Apple refresh (0.000035 SOL) because this was
+the first write of the AAPLx feed on Pangu's shard: 1,330,960 lamports of it is
+the rent that created the price account, read off the second transaction's
+balances. The first transaction's 2,367,280 lamport account was closed in the
+second and came back.
+
+## The demo sale, PAAPLX
+
+`npm run launch -- --mode open --band 500 --feed Crypto.AAPLX/USD --quote 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5 --supply 20 --threshold 3710 --migration-percent 45 --base-decimals 9 --ends-in 336 --name "Pangu Priced Share, round the clock" --symbol PAAPLX`,
+13:05 UTC, exit 0:
+
+```
+price    : opens at 275.95041322314046 of the paying token a share, ends at 412.22222222222223
+offering : 2026-10-07T13:05:32.000Z, 336 hours after the chain clock at launch; every rule lifts then, cap and access included
+band     : 5 percent over Apple, tokenised, price at most 3600 seconds old and no wider than 1 percent
+           Crypto.AAPLX/USD at 344.3079 dollars, published 8 seconds ago, confidence 5 basis points
+           ceiling 361.5232 dollars, reached once 69.5 percent of the curve's shares have sold
+```
+
+It opens 19.9 percent under the AAPLx price, and its rules hold until 7
+October, five days past the end of judging. The curve is PBAND2's to the digit,
+since the flags are the same. The ceiling is higher because AAPLx was trading
+at 344.31 against Apple's 340.80 on the exchange in the same half hour.
+
+| What | Address or signature |
+| --- | --- |
+| Mint | [`8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK`](https://explorer.solana.com/address/8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK?cluster=devnet) |
+| Pool | `6T66LbaHCDGoB48TmhEUEYuNm59NcqGVTJABvsGxAo2i` |
+| Config | `HprPCqAneB8YphVPz2gNkzgNinuvGxBA7oqwer9PQyTJ` |
+| Rules | `9EnpQJobHkTTGebJGQFBEx3UQSsvQaKrXLVV5EeAYV15` |
+| Extra account list | `Aam3YwCN7MFrJURZqGQkJnqYAEJ4mZoVvr219EspFtHc` |
+| Paying token | `2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5`, the fourth run's dollar token, as PBAND2 |
+| Pyth price account | `6TzXgoujavi3TRF8MchvtWdqaApXc2RXiF7m31eSkW4a`, `Crypto.AAPLX/USD` on shard 7700 |
+| Price refresh, by launch | `3cqLyytNkfPqK2TzAVVmKn1NBbmenDgqKYwKmMDppKW1tWuoed8SJxuJdo1fQTCnKaYkWQ43vgofJ5EyRf7ZAzs3` and `2J4PssbjXTatQzGd6SQPjaVbCm5xpEDwtimVKbB2mWnobdRTmDZB7JwX8pbG57qVVy14SqWAGKc8G7QJjmLAJr9z`, AAPLx at 344.3079 |
+| Template | `3an3aoDfVLS9FmHdrxCQzPGYB18aR2PETf5HhkiiBFrcrhFsoB2pSdXp7Hj84BAXD9yvAH4JvY5BxzAtBUdiBiDi` |
+| Sale | [`4HN35oFemvfijyrNMwiS6vSeNU4BEvTd56NBGdScK9wzCTQ1vcgHJ4Gpj9Ze9eTXRbMjUEHJkYgPuy8yCbpVkSjZ`](https://explorer.solana.com/tx/4HN35oFemvfijyrNMwiS6vSeNU4BEvTd56NBGdScK9wzCTQ1vcgHJ4Gpj9Ze9eTXRbMjUEHJkYgPuy8yCbpVkSjZ?cluster=devnet) |
+
+The cap read back is 1,099,999,999 raw units, and `sales.json` holds the entry
+with the cap and the end date. The template was 662 bytes and the pool and
+rules 974, against the 1232 byte limit.
+
+### Seeding it
+
+`npm run seed -- --mint 8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK --seed-to-share 50`,
+13:06 to 13:08 UTC, exit 0, one pass. It funded the eight wallets with 0.096005
+SOL and handed each the dollars its buy spent.
+
+| What | Raw units | Share of the curve | Signature |
+| --- | --- | --- | --- |
+| buy 1 | 426,333,076 | 3.88 | `4LQvvt5qNbiiZNMTqgH9mtxgpAcx4c3YLoEKc6yh2GZgiVDXT9MYJxpqw753vN3cqxyBxT2H4oVLVd65kFHpSHJK` |
+| buy 2 | 893,662,309 | 8.12 | `54tvAFq9P2ZKydT4h7J63sUbzjTYkqGhVq42vjJerwVkJwQk2Nny9aNrb8QqtR9fhhDgLttCKsLnZCEphupXENNG` |
+| buy 3 | 522,530,273 | 4.75 | `QGHcoHFa2CDu67fuyiX3LufBZaRTG6jYtPTCvtWDyqZuuz8AWyUEeBJF8FgQDstdPUdGdDRRe5xTfdM3pG44LCK` |
+| buy 4 | 851,534,425 | 7.74 | `2NSQEgJK3Edz5nozKG7DVyi7B4DrtA1TaYAcsAcMNzMGgpXa32KQoohqVvAbas65aUuX26eP3TexkojBy54DzPe4` |
+| buy 5 | 573,344,297 | 5.21 | `5YkBV9E5XDU7YxrE2qMBbJW24U3dUU15C7MNtbTPtsn1HWrsqTUJMqwgvhVR2HXQQMzexYW7VM7zGJ3NJdu3mVr4` |
+| buy 6 | 811,359,291 | 7.38 | `3DtUM7JsEnudhGMfMGcjxXe39yrQudiu4XPiXKK9WHmgpPDzhgsdWM4X88BGhWSyegBcSZrKbjFciWzyDfVKCfSo` |
+| buy 7 | 628,434,658 | 5.71 | `3JjGdneckFBS7JB9qCJbc8tfBUyiveYVUejB4KW8uVbRzrfqSV5hNrdUssydJrt42CKngAC9kaVKnUh5aE4P2JeS` |
+| buy 8 | 779,767,065 | 7.09 | `4GMSu3hg3cNMWFsieametZH1RAVscrpRiGtiVcFcf6Ss3ffDsTgKttQnDfaDxUumqRG7GxeswmfvH9SU7icMRiAV` |
+| sell 1 | 157,108,664 back | | `5pneFKGFjfrvputHQ6tmy8LzJ7byYdzSUMmEJkmtAzm8Ew2xrMknj3uB1V9PX6n2fr8BTLZhCDocpejbUjkxLz4K` |
+| sell 2 | 194,941,766 back | | `4UUE3iRqZYaEjHdUSfZo8Cp4p9UxkMU2mhYwHSEujghPx2rgiULP18fRfuxwMJbVXuHb4MvxYQzzS8aKZ1czyjuj` |
+
+```
+price   : 329.5110 dollars a share against a ceiling of 361.5232, 8.85 percent under it
+buyers  : 8 wallets holding something
+sold    : 5134914964 raw units, net of what came back
+largest : CaXDoyEvKSMrj58RXgKxTXzNRcct3ndQtaX5UDn1dRvx with 17.40 percent of it
+cap     : 21.42 percent of what has sold
+spent   : 0.107953 SOL from the issuer
+```
+
+5,134,914,964 of 10,999,999,990 raw units is 46.68 percent of the curve.
+
+### Attacking it
+
+`npm run prove -- --mint 8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK`, 13:09
+to 13:12 UTC, exit 0. The AAPLx price was 206 seconds old, so the last row is
+the ceiling itself (`PriceOutsideBand`), not `PriceStale`.
+
+```
+band     : 5 percent over Crypto.AAPLX/USD at 344.3079 dollars, from Pyth shard 7700
+price    : usable, published 206 seconds ago of an allowed 3600, confidence 5 of an allowed 100 basis points
+account  : 6TzXgoujavi3TRF8MchvtWdqaApXc2RXiF7m31eSkW4a, fully verified by the Wormhole guardians
+curve    : 329.5110 dollars a share against a ceiling of 361.5232, so there is room under the band
+filled   : one wallet holds 1054818232 of its 1099999999 raw unit cap
+ceiling  : the smallest buy over it is 1344531670 raw units, landing the curve at 361.5232 against 361.5232; sending 1344531670
+preflight: PriceOutsideBand
+```
+
+| Attack | Invariant | Expected | Actual | Result | Signature |
+| --- | --- | --- | --- | --- | --- |
+| buy with no buyer record | C2 | BuyerRecordMissing | BuyerRecordMissing | ok | `37NmkHhCSPaWvuoQVxP4M1scr2Uho6JdpZZYDEoDHG1X6uYEh6XLnSAhqjCPpnabWb7VhKgW51dNJej59subZSs9` |
+| buy while not on the approved list | C6 | NotApproved | this sale has open access, so there is no list to be left off | skipped | not run |
+| buy past the cap in one go | C3 | OverCap | OverCap | ok | `3FqJJi3ocCT13oLaPA7pBchGF9c4LrqVoZFKdfiNxsmMLHDzKdz8ny7G8TrLr6bAcCJwP2Mbcwvikyf2C9Anp5d8` |
+| a second buy that crosses the cap | C3 | OverCap | OverCap | ok | `iRcEGauyt5MQzsgthaLEapmP6zbr4PeQuz2VAPwnqxdtkAj2bDWFdQPWqQ2Vbin3bmks3BHtfQ5aQzAztzR8Zh8` |
+| buy into a second token account of the same wallet | C3 | OverCap | OverCap | ok | `3qvm9zseC8nxnQeKruhaiWXUnRaC2X2W9NgGDLxUcmEECydLyV6gshmvdK4DCexhHrvQDjE75mh6tLD3kU3wd3FM` |
+| buy into an account whose owner can still change | C13 | ReceivingAccountOwnerCanChange | ReceivingAccountOwnerCanChange | ok | `4pSxSuDz1k6jQAj2B4pcAizduFyd7RJn3931PYwNSqQKW5HdRYZyLRQsGgWssn1xfDY3KkfhibBXTbcCPfJYX8Fe` |
+| send tokens straight to another wallet | C4 | WalletToWalletDuringSale | WalletToWalletDuringSale | ok | `n5w2RNRdNzu3TdhaNiRvMMPqjd1vP5qykkNDjVCgDS5Rvgu11Sd1KSJ4zD3MUY1uKgfxLz2TmyHr3dF33ax6hK3` |
+| call the hook on its own, with no transfer | C1 | NotTransferring | NotTransferring | ok | `v3a7Z9oqZHUEkeJzEUhEdSfi8aqmAzepfWsRxaa2L61TkPXCfgZ7fz94FLffqyadNrxabsZ2qmnPFK7MDoxUsRp` |
+| a seeded buyer sells part of it back to the pool | C5 | it goes through | it goes through | ok | `2R6YEahbtnBfKu5ec2qH8QAfH9tRqePtejtzSgnDGYyNBtUH4mtTs62WTxN2eJb8xAn8RYaiKdpzg2Hj5P6G6YB9` |
+| buy that would push the price past the ceiling | C9 | PriceOutsideBand | PriceOutsideBand | ok | `5TbBnGrVHCkEj2GkdpRR7cR5p5TMUFrwubhqub5GVYQrTK3QsSTmhoLGYTZ1fEQ5diUm4C6M6acVAu6aUNTUGm8v` |
+
+```
+proof    : the largest wallet holds 16.75 percent of the 6298435003 raw units sold, against a cap worth 17.46 percent of them
+cost     : 0.011317 SOL, after 0.033344 SOL came back from the attacking wallets
+
+9 attacks run, 8 refused as expected, 1 allowed as expected, 1 not applicable, 0 off the standard
+```
+
+This is the band proven against a feed that publishes all week: the program
+read the AAPLx account, found it fresh and fully verified, and refused the one
+buy that would have taken the curve past 5 percent over it.
+
+### Where it stands
+
+After that prove: 10 holders, the 8 seeded wallets and 2 of prove's, and
+6,298,435,003 raw units sold, 57.26 percent of the curve. The largest wallet
+holds 16.75 percent of what has sold against a cap worth 17.46 percent of it.
+The curve is under the 361.52 ceiling, and a buy of one cap's size from here is
+refused with `PriceOutsideBand`.
+
+## What the seventh run cost
+
+Every command printed its own total, and the total checks against the demo
+keypair's balance: 0.733421715 SOL before the first refresh, read off that
+transaction, and 0.5934 SOL in the status row at the end.
+
+| Command | Cost |
+| --- | --- |
+| `refresh-price --feed Crypto.AAPLX/USD` | 0.001366 SOL, 0.001331 of it the rent that created the AAPLx price account |
+| `launch` PAAPLX, its own refresh included | 0.019380 SOL |
+| `seed`, one pass | 0.107953 SOL, 0.096005 of it held by the eight seed wallets so they can sell |
+| `prove` on PAAPLX, exit 0 | 0.011317 SOL |
+
+0.140016 SOL for the whole run. The project wallet paid nothing.
+
+## The demo, checked at the end
+
+`npm run status`, 13:12:43 UTC, exit 0:
+
+```
+program 4Nd46mDi...         PASS    executable, 363720 bytes, sha256 191e9cf1ab6f as recorded, slot 502899538
+sale PLIST 2ARD1Kwv...      PASS    2ARD1KwvxyjLPwe46rivjxPRyMzvxSEPGvwKTqcNXpFR, list, 15 buyers, graduated
+record PLIST 2ARD1Kwv...    PASS    pool, cap 79999967072171 and list access match the chain
+sale PBAND 2dp5caL9...      PASS    2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y, open, band 500 bps, 16 buyers, running
+record PBAND 2dp5caL9...    PASS    pool, cap 1099999999 and open access match the chain
+band PBAND 2dp5caL9...      PASS    Equity.US.AAPL/USD published 2026-09-23T12:37:56Z, 2092 seconds ago of an allowed 3600, at 340.80 dollars
+sale PVRFD 7ixMAMUm...      PASS    7ixMAMUmysN4qsCpthdznhq7aRbiCNB5Xeg3X9vBSLWn, credential, 3 buyers, running
+record PVRFD 7ixMAMUm...    PASS    pool, cap 79999967072171 and credential access match the chain
+sale PBAND2 5VrNEfV1...     PASS    5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo, open, band 500 bps, 11 buyers, running
+record PBAND2 5VrNEfV1...   PASS    pool, cap 1099999999 and open access match the chain
+band PBAND2 5VrNEfV1...     PASS    Equity.US.AAPL/USD published 2026-09-23T12:37:56Z, 2097 seconds ago of an allowed 3600, at 340.80 dollars
+sale PAAPLX 8FaBUEjM...     PASS    8FaBUEjMfkpYAzZLmLKwYHxd15BNC1ZBFkgTgN2WCQvK, open, band 500 bps, 10 buyers, running
+record PAAPLX 8FaBUEjM...   PASS    pool, cap 1099999999 and open access match the chain
+band PAAPLX 8FaBUEjM...     PASS    Crypto.AAPLX/USD published 2026-09-23T13:05:35Z, 440 seconds ago of an allowed 3600, at 344.31 dollars
+retired sales               SKIP    2 entries in sales.json are marked retired and not checked
+pyth key                    PASS    HTTP 200, Apple published 0 seconds ago of an allowed 3600
+wallet demo 9QTJCGx2...     PASS    9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW holds 0.5934 SOL
+wallet project Fwi8ejZ8...  PASS    Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L holds 9.3361 SOL
+app                         SKIP    APP_URL is not set in .env, so there is no site to check
+17 passed, 0 warned, 0 failed, 2 not checked, at 2026-09-23T13:12:43Z
+```
+
+PBAND2 shows 11 buyers against the 10 the sixth run left: one wallet bought on
+it between the two runs, not from these commands.
