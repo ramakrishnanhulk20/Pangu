@@ -42,6 +42,14 @@ export interface SaleRecord {
   priceAccount: string | null;
   templateSignature: string;
   saleSignature: string;
+  /**
+   * When the offering period ends and every rule lifts, as an ISO time, or null
+   * for no end. Missing on sales opened before launch asked.
+   */
+  endsAt?: string | null;
+  /** Credential mode only: the verifier's credential and the schema the sale checks. */
+  credential?: string | null;
+  schema?: string | null;
   /** When `npm run retire` took this sale out of the demo. No command picks it after that. */
   retiredAt?: string;
 }

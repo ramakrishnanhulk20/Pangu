@@ -200,7 +200,7 @@ describe("a Pangu sale priced in a real stock token", () => {
         baseMint,
         cap,
         ACCESS_ISSUER_LIST,
-        { dbcConfig: config.publicKey }
+        { dbcConfig: config.publicKey, quoteMint: AAPLX_MINT }
       )
     );
     await send("create pool plus create_sale, stock quote", poolTx, creator, [

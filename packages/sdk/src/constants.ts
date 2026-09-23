@@ -73,13 +73,15 @@ export type AccessMode = (typeof ACCESS_MODE)[keyof typeof ACCESS_MODE];
 /**
  * The seed prefixes the program and its neighbours derive addresses from.
  * Source: state.rs (sale, buyer, extra-account-metas), sas.rs (attestation),
- * dbc.rs (token_vault).
+ * the attestation service source (credential, schema), dbc.rs (token_vault).
  */
 export const SEEDS = {
   sale: "sale",
   buyer: "buyer",
   extraAccountMetas: "extra-account-metas",
   attestation: "attestation",
+  credential: "credential",
+  schema: "schema",
   dbcTokenVault: "token_vault",
 } as const;
 

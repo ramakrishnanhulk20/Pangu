@@ -1,7 +1,8 @@
 /**
  * Command line flags for the devnet scripts.
  *
- * Every flag carries a value: `--mode list` or `--mode=list`. A name the script
+ * A flag carries a value, `--mode list` or `--mode=list`, unless the command
+ * names it as a switch, such as `--no-end`, which takes none. A name the script
  * does not know is refused rather than ignored, so a typo in a flag that spends
  * devnet SOL stops the run instead of quietly changing nothing.
  */
@@ -18,11 +19,18 @@ export type Flags = ReadonlyMap<string, string>;
 /**
  * Reads the flags out of an argument list.
  *
- * Throws ArgumentError for a name that is not in `known`, for a repeated flag,
- * for a flag with no value, and for a bare word that is not attached to a flag.
+ * `switches` are names that take no value; a switch that is present reads as
+ * "true". Throws ArgumentError for a name that is in neither list, for a
+ * repeated flag, for a flag with no value, for a switch given one, and for a
+ * bare word that is not attached to a flag.
  */
-export function readFlags(argv: readonly string[], known: readonly string[]): Flags {
-  const allowed = new Set(known);
+export function readFlags(
+  argv: readonly string[],
+  known: readonly string[],
+  switches: readonly string[] = []
+): Flags {
+  const allowed = new Set([...known, ...switches]);
+  const isSwitch = new Set(switches);
   const flags = new Map<string, string>();
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -39,6 +47,13 @@ export function readFlags(argv: readonly string[], known: readonly string[]): Fl
     }
     if (flags.has(name)) {
       throw new ArgumentError(`--${name} was given twice, and the two would disagree`);
+    }
+    if (isSwitch.has(name)) {
+      if (equals !== -1) {
+        throw new ArgumentError(`--${name} takes no value`);
+      }
+      flags.set(name, "true");
+      continue;
     }
     let value: string;
     if (equals === -1) {

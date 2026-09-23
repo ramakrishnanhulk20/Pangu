@@ -81,6 +81,13 @@ import {
 } from "./fork-price.js";
 
 const RPC_URL = "http://127.0.0.1:8899";
+/**
+ * The banded sales cap each wallet at half the curve. The program refuses a cap
+ * at or above the whole curve, so walking the price to the ceiling takes more
+ * than one wallet, each held under the cap.
+ */
+const BANDED_CAP_BPS = 5_000;
+const BANDED_BUYERS = 3;
 const connection = new Connection(RPC_URL, "confirmed");
 
 const measurements: { action: string; bytes: number; units: number }[] = [];
@@ -604,33 +611,41 @@ async function bandedSale(
     [partner, quoteMintKeypair]
   );
 
-  const buyerQuote = getAssociatedTokenAddressSync(
-    quoteMint,
-    buyer.publicKey,
-    false,
-    TOKEN_PROGRAM_ID
-  );
-  await send(
-    "fund the buyer with dollars",
-    new Transaction().add(
-      createAssociatedTokenAccountIdempotentInstruction(
-        partner.publicKey,
-        buyerQuote,
-        buyer.publicKey,
-        quoteMint,
-        TOKEN_PROGRAM_ID
+  const wallets = [buyer];
+  for (let extra = 1; extra < BANDED_BUYERS; extra += 1) {
+    const wallet = Keypair.generate();
+    await airdrop(wallet.publicKey, 200);
+    wallets.push(wallet);
+  }
+  for (const [index, wallet] of wallets.entries()) {
+    const walletQuote = getAssociatedTokenAddressSync(
+      quoteMint,
+      wallet.publicKey,
+      false,
+      TOKEN_PROGRAM_ID
+    );
+    await send(
+      `fund banded buyer ${index + 1} with dollars`,
+      new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          partner.publicKey,
+          walletQuote,
+          wallet.publicKey,
+          quoteMint,
+          TOKEN_PROGRAM_ID
+        ),
+        createMintToInstruction(
+          quoteMint,
+          walletQuote,
+          partner.publicKey,
+          10_000_000n * 10n ** BigInt(quoteDecimals),
+          [],
+          TOKEN_PROGRAM_ID
+        )
       ),
-      createMintToInstruction(
-        quoteMint,
-        buyerQuote,
-        partner.publicKey,
-        10_000_000n * 10n ** BigInt(quoteDecimals),
-        [],
-        TOKEN_PROGRAM_ID
-      )
-    ),
-    [partner]
-  );
+      [partner]
+    );
+  }
 
   const template = await launchTemplateTransaction({
     connection,
@@ -662,7 +677,7 @@ async function bandedSale(
     name: "Pangu Banded",
     symbol: "PBD",
     uri: "https://example.invalid/pbd.json",
-    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("low") },
+    sale: { capShareBps: BANDED_CAP_BPS, accessMode: 0, band: bandOf("low") },
   });
   await send("banded pool plus rules", opened.transaction, [
     creator,
@@ -676,13 +691,15 @@ async function bandedSale(
   assert.equal(sale.maxPriceAgeSecs, manifest.low.maxPriceAgeSecs);
   assert.equal(sale.maxConfBps, MAX_CONF_BPS);
 
-  await send(
-    "open the buyer's record",
-    new Transaction().add(
-      openBuyerRecordInstruction({ wallet: buyer.publicKey, mint })
-    ),
-    [buyer]
-  );
+  for (const [index, wallet] of wallets.entries()) {
+    await send(
+      `open banded buyer ${index + 1}'s record`,
+      new Transaction().add(
+        openBuyerRecordInstruction({ wallet: wallet.publicKey, mint })
+      ),
+      [wallet]
+    );
+  }
 
   const price = await readPrice(connection, sale);
   assert.equal(price.usable, true, `the price is not usable: ${price.reason}`);
@@ -694,11 +711,46 @@ async function bandedSale(
   step("n. buying until the preflight says the next buy leaves the band");
   const stepIn = 20_000n * 10n ** BigInt(quoteDecimals);
   let predicted = false;
+  // Each round goes to the first wallet with room under the cap for the whole
+  // step, so the only refusal that can end the walk is the band's.
+  const roomOf = async (wallet: Keypair): Promise<bigint> =>
+    sale.cap - ((await getBuyerRecord(connection, mint, wallet.publicKey))?.netBought ?? 0n);
+  const nextBandedBuy = async () => {
+    for (const wallet of wallets) {
+      const room = await roomOf(wallet);
+      if (room <= 0n) {
+        continue;
+      }
+      try {
+        const built = await buyTransaction({
+          connection,
+          buyer: wallet.publicKey,
+          mint,
+          amountIn: stepIn,
+        });
+        if (built.expectedAmountOut <= room) {
+          return { wallet, built };
+        }
+      } catch {
+        // The curve cannot fill the whole step; buildBuy below shrinks it.
+      }
+    }
+    let widest = wallets[0]!;
+    for (const wallet of wallets) {
+      if ((await roomOf(wallet)) > (await roomOf(widest))) {
+        widest = wallet;
+      }
+    }
+    return {
+      wallet: widest,
+      built: await buildBuy(widest.publicKey, mint, stepIn, await roomOf(widest)),
+    };
+  };
   for (let round = 0; round < 40 && !predicted; round += 1) {
-    const next = await buildBuy(buyer.publicKey, mint, stepIn, sale.cap);
+    const { wallet, built: next } = await nextBandedBuy();
     const check = await preflightBuy({
       connection,
-      buyer: buyer.publicKey,
+      buyer: wallet.publicKey,
       mint,
       amountOut: next.expectedAmountOut,
     });
@@ -708,15 +760,18 @@ async function bandedSale(
         `   round ${round + 1}: predicted PriceOutsideBand, curve would land at ${dollars(check.curvePrice!).toFixed(4)} against a ceiling of ${dollars(check.ceiling!).toFixed(4)}`
       );
       assert.equal(
-        await refusal("the buy past the ceiling", next.transaction, [buyer]),
+        await refusal("the buy past the ceiling", next.transaction, [wallet]),
         "PriceOutsideBand"
       );
       break;
     }
     assert.equal(check.ok, true, `the preflight refused for ${check.error}`);
-    await send(`banded buy ${round + 1}`, next.transaction, [buyer]);
+    await send(`banded buy ${round + 1}`, next.transaction, [wallet]);
   }
   assert.equal(predicted, true, "the curve never reached the ceiling");
+  for (const wallet of wallets) {
+    assert.ok((await roomOf(wallet)) >= 0n, "a banded buyer passed the cap");
+  }
 
   const view = await getSale(connection, mint);
   const pool = await connection.getAccountInfo(view!.pool);
@@ -737,7 +792,7 @@ async function bandedSale(
     name: "Pangu Shut",
     symbol: "PSH",
     uri: "https://example.invalid/psh.json",
-    sale: { capShareBps: 10_000, accessMode: 0, band: bandOf("aging") },
+    sale: { capShareBps: BANDED_CAP_BPS, accessMode: 0, band: bandOf("aging") },
   });
   await send("shut market pool plus rules", shut.transaction, [
     creator,

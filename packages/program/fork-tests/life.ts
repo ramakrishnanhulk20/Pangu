@@ -3,7 +3,8 @@
 //
 // Covers: the launch template, pool and rules in one transaction, the cap, the
 // approved-buyer list, the fixed-owner rule on the receiving account, the exit,
-// fee claims, graduation, migration and free trading afterwards.
+// fee claims, graduation, migration and free trading afterwards, and a second
+// sale on the same template whose offering period ends before its curve fills.
 //
 // Does NOT cover: the price band and the credential access mode, which are not
 // built; DAMM v2's own behaviour after migration; anything about the price a
@@ -59,6 +60,7 @@ import {
   buildSwapTx,
   buildTransferTx,
   buyerRecordPda,
+  chainTime,
   closeBuyerRecordIx,
   connection,
   createSaleIx,
@@ -83,6 +85,11 @@ const BASE_DECIMALS = 6;
 const GRADUATION_SOL = 5;
 /** Generous ceiling on what a buy may spend, in lamports. */
 const MAX_SPEND = new BN(20 * 1_000_000_000);
+/**
+ * How far ahead of the chain clock the short sale's offering period ends. Long
+ * enough to open the sale and see one refusal first, short enough to wait out.
+ */
+const OFFERING_SECS = 25;
 
 describe("a Pangu sale inside a real DBC transfer-hook pool", () => {
   const dbcClient = new DynamicBondingCurveClient(connection, "confirmed");
@@ -220,7 +227,7 @@ describe("a Pangu sale inside a real DBC transfer-hook pool", () => {
         baseMint,
         cap,
         ACCESS_ISSUER_LIST,
-        { dbcConfig: config.publicKey }
+        { dbcConfig: config.publicKey, quoteMint: NATIVE_MINT }
       )
     );
 
@@ -622,6 +629,130 @@ describe("a Pangu sale inside a real DBC transfer-hook pool", () => {
     );
     assert.isAtMost(Number(largestShare), Number(capShare));
     assert.isAtMost(Number(largest), Number(BigInt(cap.toString())));
+  });
+
+  it("p. once the offering period ends, every rule lifts before graduation", async () => {
+    const endedMintKeypair = Keypair.generate();
+    const endedMint = endedMintKeypair.publicKey;
+    const pool = deriveDbcPoolAddress(NATIVE_MINT, endedMint, config.publicKey);
+    const endsAt = (await chainTime()) + OFFERING_SECS;
+
+    const poolTx = await dbcClient.creator.createPoolWithTransferHook({
+      baseMint: endedMint,
+      config: config.publicKey,
+      name: "Pangu Short Offering",
+      symbol: "PSO",
+      uri: TOKEN_URI,
+      payer: creator.publicKey,
+      poolCreator: creator.publicKey,
+      transferHookProgram: PANGU_PROGRAM_ID,
+    });
+    poolTx.add(
+      await createSaleIx(creator.publicKey, pool, endedMint, cap, ACCESS_ISSUER_LIST, {
+        dbcConfig: config.publicKey,
+        quoteMint: NATIVE_MINT,
+        endsAt,
+      })
+    );
+    await send("create pool plus create_sale with an end", poolTx, creator, [
+      creator,
+      endedMintKeypair,
+    ]);
+    assert.equal((await readRules(endedMint)).endsAt.toString(), String(endsAt));
+
+    const ended: Sale = {
+      config: config.publicKey,
+      pool,
+      baseMint: endedMint,
+      quoteMint: NATIVE_MINT,
+      baseVault: deriveDbcTokenVaultAddress(pool, endedMint),
+      quoteVault: deriveDbcTokenVaultAddress(pool, NATIVE_MINT),
+      quoteProgram: TOKEN_PROGRAM_ID,
+    };
+    // Half again over the cap, from a wallet with no record and no approval.
+    const overCap = cap.muln(3).divn(2);
+    const late = Keypair.generate();
+    await airdrop(late.publicKey, 100);
+    const lateBuy = () =>
+      buildSwapTx({
+        sale: ended,
+        owner: late,
+        swapBaseForQuote: false,
+        swapMode: SWAP_EXACT_OUT,
+        amount0: overCap,
+        amount1: MAX_SPEND,
+      });
+
+    // While the offering runs the rules hold, so the same buy is refused.
+    assert.isBelow(await chainTime(), endsAt, "the offering ended before the first check");
+    await expectPanguError(await lateBuy(), late, [late], "BuyerRecordMissing");
+
+    while ((await chainTime()) <= endsAt) {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+
+    await send("over-cap buy after the offering ends", await lateBuy(), late, [late]);
+    const lateAta = getAssociatedTokenAddressSync(
+      endedMint,
+      late.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID
+    );
+    assert.equal((await tokenBalance(lateAta)).toString(), overCap.toString());
+    assert.isNull(
+      await readRecord(endedMint, late.publicKey),
+      "a record was written after the offering ended"
+    );
+
+    const receiverAta = getAssociatedTokenAddressSync(
+      endedMint,
+      stranger.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID
+    );
+    // The hook's account list is resolved by reading the receiving account, so
+    // it has to exist before the transfer is built.
+    const openReceiver = new Transaction().add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        late.publicKey,
+        receiverAta,
+        stranger.publicKey,
+        endedMint,
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+    await send("open the receiver's token account", openReceiver, late, [late]);
+    const transfer = await buildTransferTx(
+      endedMint,
+      lateAta,
+      receiverAta,
+      late.publicKey,
+      1_000n,
+      BASE_DECIMALS
+    );
+    await send("wallet to wallet after the offering ends", transfer, late, [late]);
+    assert.equal(await tokenBalance(receiverAta), 1_000n);
+
+    const sellAmount = cap.divn(4);
+    const sell = await buildSwapTx({
+      sale: ended,
+      owner: late,
+      swapBaseForQuote: true,
+      amount0: sellAmount,
+      amount1: new BN(0),
+    });
+    await send("sell after the offering ends", sell, late, [late]);
+    assert.equal(
+      (await tokenBalance(lateAta)).toString(),
+      overCap.subn(1_000).sub(sellAmount).toString()
+    );
+
+    const hook = await transferHookOnMint(endedMint);
+    assert.equal(
+      hook!.program.toBase58(),
+      PANGU_PROGRAM_ID.toBase58(),
+      "the curve graduated, so this proved graduation and not the offering period"
+    );
   });
 
   async function claimFeesTx(

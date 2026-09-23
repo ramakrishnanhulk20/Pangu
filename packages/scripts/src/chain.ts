@@ -10,6 +10,7 @@
 
 import {
   Connection,
+  SYSVAR_CLOCK_PUBKEY,
   Transaction,
   VersionedTransaction,
   type PublicKey,
@@ -194,4 +195,22 @@ export async function payingDecimals(
     );
   }
   return unpackMint(quoteMint, info, info.owner).decimals;
+}
+
+/** Where the clock sysvar keeps its unix time: after slot, epoch start, epoch and leader epoch. */
+const CLOCK_UNIX_TIME_OFFSET = 32;
+
+/**
+ * The chain's own unix time, read off the clock sysvar.
+ *
+ * Anything the program compares against the clock, such as a sale's offering
+ * end, is worked out from this rather than from this machine, whose clock can
+ * sit minutes away from the chain's. Throws when the node returns no clock.
+ */
+export async function chainTime(connection: Pick<Connection, "getAccountInfo">): Promise<number> {
+  const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, "confirmed");
+  if (info === null || info.data.length < CLOCK_UNIX_TIME_OFFSET + 8) {
+    throw new Error("the node returned no clock, so the chain's time is unknown");
+  }
+  return Number(Buffer.from(info.data).readBigInt64LE(CLOCK_UNIX_TIME_OFFSET));
 }

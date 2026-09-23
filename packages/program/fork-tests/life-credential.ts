@@ -279,7 +279,11 @@ describe("a credential-gated Pangu sale against the real attestation service", (
         baseMint,
         cap,
         ACCESS_VERIFIER_CREDENTIAL,
-        { dbcConfig: config.publicKey, verifier: { credential, schema } }
+        {
+          dbcConfig: config.publicKey,
+          quoteMint: NATIVE_MINT,
+          verifier: { credential, schema },
+        }
       )
     );
     await send("create pool plus create_sale, credential mode", poolTx, creator, [

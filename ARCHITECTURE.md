@@ -242,11 +242,11 @@ A record account that does not exist yet is still passed. The program treats an 
 
 | Instruction | Who | What |
 |---|---|---|
-| `create_sale(cap, access_mode, credential, schema, band...)` | the pool creator, after the pool exists, in the same transaction | Reads the DBC pool account and proves: owned by DBC, hook pool discriminator, `creator` equals the signer, `base_mint` equals the mint. Reads the pool's launch template (required in every mode) and proves fees are collected in the paying token. Proves the mint's transfer-hook program is Pangu and that its minting power is already gone. Stores the rules. Creates the extra-accounts list. Can run once per mint. |
+| `create_sale(cap, access_mode, credential, schema, band, ends_at)` | the pool creator, after the pool exists, in the same transaction | Accounts: issuer, pool, mint, credential and schema (mode 2 only, the program's own id in their place otherwise), the pool's launch template, the paying token's mint (every sale), the rules and the extra-accounts list (both created here), the system program. Reads the DBC pool account and proves: owned by DBC, hook pool discriminator, `creator` equals the signer, `base_mint` equals the mint. Reads the pool's launch template (required in every mode) and proves fees are collected in the paying token. Proves the paying token is the one the template names and that the issuer cannot freeze it, and stores it. Proves the mint's transfer-hook program is Pangu and that its minting power is already gone. Refuses a cap of zero or at or above the curve's supply, and an `ends_at` that is neither zero (no end) nor later than the chain clock. Stores the rules. Creates the extra-accounts list. Can run once per mint. |
 | `open_buyer_record()` | any wallet, for itself | Creates the wallet's record, not approved, zero bought. Needed before a first buy because a hook cannot create accounts. Safe to call twice. |
 | `approve_buyer(wallet)` | issuer | Mode 1. Creates the record if missing and marks it approved. Never resets `net_bought`. |
 | `revoke_buyer(wallet)` | issuer | Mode 1. Marks the record not approved. The wallet can still sell. |
-| `close_buyer_record()` | the wallet | After graduation (the mint no longer names Pangu as its hook), or at any time while the record's net bought is zero. Returns the rent to the wallet. A closed zero record can be reopened, unapproved. |
+| `close_buyer_record()` | the wallet | Accounts: wallet, mint, the record, and the sale's rules, read only to learn whether the offering period has ended. After graduation (the mint no longer names Pangu as its hook), after the offering period in the rules has ended, or at any time while the record's net bought is zero. Returns the rent to the wallet. A closed zero record can be reopened, unapproved. |
 | `execute(amount)` | Token-2022 only | The transfer hook. Logic below. |
 
 ## The hook decision
@@ -269,7 +269,7 @@ A record account that does not exist yet is still passed. The program treats an 
 
 ## Events
 
-`SaleCreated`, `BuyerApproved`, `BuyerRevoked`, `BuyerRecordOpened`, `BuyerRecordClosed`, `Bought { wallet, amount, net_bought }`, `SoldBack { wallet, amount, net_bought }`.
+`SaleCreated { mint, pool, issuer, base_vault, cap, access_mode, band_bps, quote_mint, ends_at }`, `BuyerApproved`, `BuyerRevoked`, `BuyerRecordOpened`, `BuyerRecordClosed`, `Bought { mint, wallet, amount, net_bought }`, `SoldBack { mint, wallet, amount, net_bought }`. Every event names the mint, so one sale's events can be told from another's in a shared log.
 
 ## Launch template rules (DBC config)
 

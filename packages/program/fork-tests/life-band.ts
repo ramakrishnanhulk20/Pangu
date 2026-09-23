@@ -8,7 +8,8 @@
 // layout Pyth's receiver program really uses.
 //
 // Covers: a buy inside the band, buying until the next buy would cross the
-// ceiling, the refusal, a smaller buy still passing, the same buy passing when
+// ceiling, spread over three wallets each held under a cap of half the curve,
+// the refusal, a smaller buy still passing, the same buy passing when
 // the stock price is higher, the price going stale and shutting buys, and the
 // exit staying open through all of it.
 //
@@ -81,6 +82,13 @@ const MAX_SPEND = new BN(400_000 * 10 ** QUOTE_DECIMALS);
 const QUOTE_SUPPLY = BigInt(10_000_000) * 10n ** BigInt(QUOTE_DECIMALS);
 /** How many rounds of buying the crossing test may take before it gives up. */
 const MAX_ROUNDS = 40;
+/**
+ * Half the curve per wallet. The program refuses a cap at or above the whole
+ * curve, so walking the price up to the ceiling takes more than one wallet,
+ * each held under the cap, which is the rule a real sale runs on.
+ */
+const CAP_BPS = 5_000;
+const BUYER_COUNT = 3;
 
 const manifest: PriceManifest = JSON.parse(
   fs.readFileSync(path.join(FORK_ACCOUNTS_DIR, MANIFEST_FILE), "utf8")
@@ -91,7 +99,7 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
 
   const partner = Keypair.generate();
   const creator = Keypair.generate();
-  const buyer = Keypair.generate();
+  const buyers = Array.from({ length: BUYER_COUNT }, () => Keypair.generate());
   const config = Keypair.generate();
   const quoteMintKeypair = Keypair.generate();
   const baseMints: Record<SaleName, Keypair> = {
@@ -102,14 +110,18 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
 
   let quoteMint: PublicKey;
   let cap: BN;
+  /** Everything the curve sells before graduation. Buy sizes are written against it. */
+  let curveSupply: BN;
+  /** Tokens each buyer has taken from each sale, so no buy is sent past the cap. */
+  const bought = {} as Record<SaleName, bigint[]>;
   const sales = {} as Record<SaleName, Sale>;
   /** The buy size that crossed the low sale's ceiling. */
   let crossingBuy: BN;
-  /** What the buyer holds of the ageing sale, bought while its market was open. */
+  /** What the first buyer holds of the ageing sale, bought while its market was open. */
   let agingHeld: bigint;
 
   before(async () => {
-    for (const wallet of [partner, creator, buyer]) {
+    for (const wallet of [partner, creator, ...buyers]) {
       await airdrop(wallet.publicKey, 500);
     }
 
@@ -154,30 +166,32 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
       quoteMintKeypair,
     ]);
 
-    const buyerQuote = getAssociatedTokenAddressSync(
-      quoteMint,
-      buyer.publicKey,
-      false,
-      TOKEN_PROGRAM_ID
-    );
-    const fundTx = new Transaction().add(
-      createAssociatedTokenAccountIdempotentInstruction(
-        partner.publicKey,
-        buyerQuote,
+    for (const [index, buyer] of buyers.entries()) {
+      const buyerQuote = getAssociatedTokenAddressSync(
+        quoteMint,
         buyer.publicKey,
-        quoteMint,
+        false,
         TOKEN_PROGRAM_ID
-      ),
-      createMintToInstruction(
-        quoteMint,
-        buyerQuote,
-        partner.publicKey,
-        QUOTE_SUPPLY,
-        [],
-        TOKEN_PROGRAM_ID
-      )
-    );
-    await send("fund the buyer with dollars", fundTx, partner, [partner]);
+      );
+      const fundTx = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          partner.publicKey,
+          buyerQuote,
+          buyer.publicKey,
+          quoteMint,
+          TOKEN_PROGRAM_ID
+        ),
+        createMintToInstruction(
+          quoteMint,
+          buyerQuote,
+          partner.publicKey,
+          QUOTE_SUPPLY,
+          [],
+          TOKEN_PROGRAM_ID
+        )
+      );
+      await send(`fund buyer ${index + 1} with dollars`, fundTx, partner, [partner]);
+    }
 
     const tx = await dbcClient.partner.createConfigWithTransferHook({
       config: config.publicKey,
@@ -193,13 +207,13 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
     const state = await dbcClient.state.getPoolConfig(config.publicKey);
     assert.isNotNull(state, "the config was not written");
     assert.equal(state!.quoteMint.toBase58(), quoteMint.toBase58());
-    // One buyer walks the whole curve, so the cap must not be what stops them.
-    cap = state!.swapBaseAmount;
+    curveSupply = state!.swapBaseAmount;
+    cap = curveSupply.muln(CAP_BPS).divn(10_000);
   });
 
   it("b. the creator opens three banded sales, one per stock price", async () => {
     // The ageing sale is opened and seeded first: its price goes stale on its
-    // own, and the buyer needs tokens before it does.
+    // own, and the first buyer needs tokens before it does.
     for (const name of ["aging", "low", "high"] as SaleName[]) {
       const entry = manifest[name];
       const baseMint = baseMints[name].publicKey;
@@ -253,23 +267,21 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
       assert.equal(rules.baseDecimals, BASE_DECIMALS);
       assert.equal(rules.quoteDecimals, QUOTE_DECIMALS);
 
-      await send(
-        `open the buyer's record, ${name}`,
-        new Transaction().add(
-          await openBuyerRecordIx(buyer.publicKey, baseMint)
-        ),
-        buyer,
-        [buyer]
-      );
-
-      if (name === "aging") {
+      bought[name] = buyers.map(() => 0n);
+      for (const [index, buyer] of buyers.entries()) {
         await send(
-          "buy before the market shuts",
-          await buyTx("aging", cap.divn(200)),
+          `open buyer ${index + 1}'s record, ${name}`,
+          new Transaction().add(
+            await openBuyerRecordIx(buyer.publicKey, baseMint)
+          ),
           buyer,
           [buyer]
         );
-        agingHeld = await tokenBalance(baseAta("aging"));
+      }
+
+      if (name === "aging") {
+        await buy("buy before the market shuts", "aging", curveSupply.divn(200));
+        agingHeld = await tokenBalance(baseAta("aging", 0));
         assert.isAbove(Number(agingHeld), 0);
       }
     }
@@ -286,27 +298,28 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
     const ceiling = bandCeiling1e18(BigInt(manifest.low.stockPrice), BAND_BPS);
     assert.isTrue(before < ceiling, "the curve already opens above the ceiling");
 
-    const amount = cap.divn(200);
-    await send("banded buy inside the band", await buyTx("low", amount), buyer, [
-      buyer,
-    ]);
+    await buy("banded buy inside the band", "low", curveSupply.divn(200));
     assert.isTrue((await curvePrice(sales.low.pool)) <= ceiling);
   });
 
   it("d. buying stops at the ceiling, and a smaller buy still gets through", async () => {
     const ceiling = bandCeiling1e18(BigInt(manifest.low.stockPrice), BAND_BPS);
-    const amount = cap.divn(25);
+    const amount = curveSupply.divn(25);
     let rounds = 0;
     let refusal = "";
 
     // Keep buying the same size until one of them is refused. Every round sends
     // a real transaction, so nothing here depends on a simulation.
+    // Each round goes to the first buyer with room under the cap, so the only
+    // refusal that can end the loop is the band's.
     for (; rounds < MAX_ROUNDS; rounds += 1) {
-      const outcome = await trySend(await buyTx("low", amount));
+      const index = nextBuyer("low", amount);
+      const outcome = await trySend(await buyTx("low", amount, index), buyers[index]!);
       if (!outcome.ok) {
         refusal = outcome.logs;
         break;
       }
+      bought.low[index] += BigInt(amount.toString());
     }
 
     assert.include(
@@ -325,12 +338,7 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
 
     // The band is a ceiling on where a buy leaves the price, not a freeze. A
     // smaller buy lands under the ceiling and goes through.
-    await send(
-      "smaller buy under the ceiling",
-      await buyTx("low", amount.divn(16)),
-      buyer,
-      [buyer]
-    );
+    await buy("smaller buy under the ceiling", "low", amount.divn(16));
     assert.isTrue((await curvePrice(sales.low.pool)) <= ceiling);
   });
 
@@ -346,23 +354,13 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
         reached = true;
         break;
       }
-      await send(
-        `banded buy on the high sale ${round + 1}`,
-        await buyTx("high", amount),
-        buyer,
-        [buyer]
-      );
+      await buy(`banded buy on the high sale ${round + 1}`, "high", amount);
     }
     assert.isTrue(reached, "the high sale never caught up with the low sale");
 
     // The low sale refused exactly this buy a moment ago, from a curve price no
     // higher than this one.
-    await send(
-      "the refused buy, at a higher stock price",
-      await buyTx("high", amount),
-      buyer,
-      [buyer]
-    );
+    await buy("the refused buy, at a higher stock price", "high", amount);
 
     const highCeiling = bandCeiling1e18(
       BigInt(manifest.high.stockPrice),
@@ -380,21 +378,22 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
       manifest.aging.publishTime + manifest.aging.maxPriceAgeSecs + 5
     );
 
+    const first = buyers[0]!;
     await expectPanguError(
-      await buyTx("aging", cap.divn(200)),
-      buyer,
-      [buyer],
+      await buyTx("aging", curveSupply.divn(200), 0),
+      first,
+      [first],
       "PriceStale"
     );
 
-    const held = await tokenBalance(baseAta("aging"));
+    const held = await tokenBalance(baseAta("aging", 0));
     await send(
       "sell against a stale price",
-      await sellTx("aging", held / 2n),
-      buyer,
-      [buyer]
+      await sellTx("aging", held / 2n, 0),
+      first,
+      [first]
     );
-    assert.isBelow(Number(await tokenBalance(baseAta("aging"))), Number(held));
+    assert.isBelow(Number(await tokenBalance(baseAta("aging", 0))), Number(held));
     assert.isAbove(Number(held), 0, "the buyer had nothing left to sell");
     assert.equal(Number(held), Number(agingHeld));
   });
@@ -403,15 +402,12 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
     // Each sale names its own price account and its own age limit, so one sale
     // shutting says nothing about the next. The high sale allows an hour and its
     // ceiling is a hundred times the low sale's, so it still has room to buy.
-    const before = await tokenBalance(baseAta("high"));
-    await send(
-      "buy on a sale whose price is still fresh",
-      await buyTx("high", cap.divn(200)),
-      buyer,
-      [buyer]
-    );
+    const amount = curveSupply.divn(200);
+    const index = nextBuyer("high", amount);
+    const before = await tokenBalance(baseAta("high", index));
+    await buy("buy on a sale whose price is still fresh", "high", amount);
     assert.isAbove(
-      Number(await tokenBalance(baseAta("high"))),
+      Number(await tokenBalance(baseAta("high", index))),
       Number(before),
       "a fresh sale was shut by another sale's stale price"
     );
@@ -425,7 +421,8 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
 
   /** Sends a transaction and reports whether it landed, without asserting. */
   async function trySend(
-    tx: Transaction
+    tx: Transaction,
+    buyer: Keypair
   ): Promise<{ ok: boolean; logs: string }> {
     tx.feePayer = buyer.publicKey;
     tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
@@ -457,19 +454,37 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
     }
   }
 
-  function baseAta(name: SaleName): PublicKey {
+  /** The first buyer with room under the cap for this buy on this sale. */
+  function nextBuyer(name: SaleName, amount: BN): number {
+    const wanted = BigInt(amount.toString());
+    const limit = BigInt(cap.toString());
+    const index = bought[name].findIndex((held) => held + wanted <= limit);
+    assert.notEqual(index, -1, `no buyer has room for ${wanted} more on the ${name} sale`);
+    return index;
+  }
+
+  /** Sends a buy from the first buyer with room for it, and counts it against them. */
+  async function buy(label: string, name: SaleName, amount: BN): Promise<number> {
+    const index = nextBuyer(name, amount);
+    const buyer = buyers[index]!;
+    await send(label, await buyTx(name, amount, index), buyer, [buyer]);
+    bought[name][index] += BigInt(amount.toString());
+    return index;
+  }
+
+  function baseAta(name: SaleName, index: number): PublicKey {
     return getAssociatedTokenAddressSync(
       sales[name].baseMint,
-      buyer.publicKey,
+      buyers[index]!.publicKey,
       false,
       TOKEN_2022_PROGRAM_ID
     );
   }
 
-  function buyTx(name: SaleName, amount: BN) {
+  function buyTx(name: SaleName, amount: BN, index: number) {
     return buildSwapTx({
       sale: sales[name],
-      owner: buyer,
+      owner: buyers[index]!,
       swapBaseForQuote: false,
       swapMode: SWAP_EXACT_OUT,
       amount0: amount,
@@ -477,10 +492,10 @@ describe("a price-banded Pangu sale against a real DBC pool", () => {
     });
   }
 
-  function sellTx(name: SaleName, amount: bigint) {
+  function sellTx(name: SaleName, amount: bigint, index: number) {
     return buildSwapTx({
       sale: sales[name],
-      owner: buyer,
+      owner: buyers[index]!,
       swapBaseForQuote: true,
       amount0: new BN(amount.toString()),
       amount1: new BN(0),

@@ -30,8 +30,9 @@ cd ../scripts && npm install && npm run sdk:refresh
 npm run mint-dollars                               # a dollar token to price a sale in
 npm run refresh-price                              # write a fresh stock price
 npm run refresh-price -- --feed Crypto.AAPLX/USD   # a feed that trades all week
-npm run launch -- --mode list --cap-share-bps 1000 # open a sale
-npm run launch -- --mode open --band 500 --quote <dollar mint>  # one with a price band
+npm run launch -- --mode list --ends-in 72          # open a sale whose rules lift in 72 hours
+npm run launch -- --mode credential --no-end       # one only attested wallets may buy
+npm run launch -- --mode open --band 500 --quote <dollar mint> --no-end  # one with a price band
 npm run seed                                       # a few real buyers
 npm run prove                                      # attack it, print every refusal
 npm run graduate                                   # fill the curve and migrate
@@ -99,8 +100,10 @@ address; pass that address to `launch --quote`.
 
 | Flag | Default | What it does |
 | --- | --- | --- |
-| `--mode` | `list` | Who may buy: `open`, `list` for the issuer's list, `credential` for an attestation from a verifier. A credential sale also needs `--credential` and `--schema`. |
-| `--cap-share-bps` | `1000` | The per wallet cap, in basis points of what the curve sells. 1000 is 10 percent. |
+| `--ends-in` or `--no-end` | none, one is required | When the offering period ends. `--ends-in 72` lifts every rule, cap and access included, 72 hours after the chain's clock at launch; fractions are fine, from 0.1 (six minutes) to 8760 (a year). `--no-end` keeps the rules until the curve graduates, so a curve that never fills holds its buyers for good. There is no default because both have a cost. The end is printed and stored in `sales.json` as `endsAt`. |
+| `--mode` | `list` | Who may buy: `open`, `list` for the issuer's list, `credential` for an attestation from a verifier. |
+| `--credential`, `--schema` | the paying key's own verifier | Credential mode only. Leave both out and the sale checks the paying key's own credential and schema on the Solana Attestation Service, opened on the first credential launch and reused after. Both addresses go into `sales.json`, which is how `prove` finds them. |
+| `--cap-share-bps` | `1000` | The per wallet cap, in basis points of what the curve sells. 1000 is 10 percent. Must stay below 10000: the program refuses a cap covering the whole curve. |
 | `--band` | none | How far over the stock price the curve may go, in basis points. 500 is 5 percent. Leave it out and the sale has no band. |
 | `--feed` | `Equity.US.AAPL/USD` | The Pyth feed the band reads. The `Equity.US.*` feeds only publish in US market hours, so those sales shut overnight. The `Crypto.*X` ones publish all week. |
 | `--quote` | `wsol` | The token buyers pay in: `wsol`, or the address of a mint with 6 to 9 decimals. Use the mint from `mint-dollars` for a dollar priced sale. |
@@ -160,9 +163,14 @@ that preflight, and sent at that size. When the curve cannot reach the ceiling
 the row is skipped with the reason: the curve ends below it, or the sale is paid
 in SOL.
 
-`prove` has no credential rows yet. The scripts have no way to issue a devnet
-attestation, so on a credential sale its access rows are wrong and the run
-exits non-zero. Run it on open and list sales.
+On a credential sale `prove` attests two throwaway wallets under the verifier
+the sale checks, signed by the paying key, for a day. It then shows a wallet
+with no attestation refused with the program's `CredentialInvalid`, an attested
+wallet buying under the cap, the same cap attacks as the other modes refused
+with `OverCap`, and an attested wallet selling back. That needs the paying key
+to be a signer on the sale's credential: true for the paying key's own
+verifier, which `launch` opens by default. A sale naming some other verifier
+gets those rows skipped with the reason.
 
 `graduate` hands each throwaway buyer what its buy spends in the sale's own
 paying token, plus the devnet SOL the accounts and fees need. Whatever the run

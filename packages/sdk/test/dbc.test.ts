@@ -112,11 +112,15 @@ describe("the settings a Pangu sale forces", () => {
 describe("the cap as a share of the curve", () => {
   it("takes its share of what the curve sells", () => {
     expect(capFromShare(1_000_000_000n, 1_000)).toBe(100_000_000n);
-    expect(capFromShare(1_000_000_000n, 10_000)).toBe(1_000_000_000n);
+    expect(capFromShare(1_000_000_000n, 9_999)).toBe(999_900_000n);
   });
 
-  it("refuses a share outside one basis point to the whole curve", () => {
+  it("refuses a share below one basis point", () => {
     expect(() => capFromShare(1_000_000_000n, 0)).toThrow(PanguInputError);
+  });
+
+  it("refuses a share of the whole curve or more, which the chain answers CapCoversWholeSale", () => {
+    expect(() => capFromShare(1_000_000_000n, 10_000)).toThrow(/below 10000 \(100 percent\)/);
     expect(() => capFromShare(1_000_000_000n, 10_001)).toThrow(PanguInputError);
   });
 

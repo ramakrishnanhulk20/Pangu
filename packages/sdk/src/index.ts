@@ -72,6 +72,20 @@ export type {
 } from "./instructions.js";
 
 export {
+  credentialAddress,
+  schemaAddress,
+  createCredentialInstruction,
+  createSchemaInstruction,
+  createAttestationInstruction,
+  VERIFIED_SCHEMA,
+} from "./sas.js";
+export type {
+  CreateCredentialInput,
+  CreateSchemaInput,
+  CreateAttestationInput,
+} from "./sas.js";
+
+export {
   panguErrorFromLogs,
   explainPanguError,
   PANGU_ERRORS,

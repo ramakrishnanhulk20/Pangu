@@ -6,9 +6,12 @@
  *
  * Each attack is a real transaction sent to the real program, landed on chain
  * on purpose so a reader gets a signature to open rather than a promise that it
- * was tried. Every refusal is read back through the program's own error names,
- * never from "it failed", and the command exits non-zero if anything did
- * something other than what the rules promise.
+ * was tried. Which access rows run depends on the sale's mode: open, the
+ * issuer's list, or a verifier's credential, where the paying key attests two
+ * throwaway wallets under the verifier the sale checks (see access-rows.ts).
+ * Every refusal is read back through the program's own error names, never
+ * from "it failed", and the command exits non-zero if anything did something
+ * other than what the rules promise.
  */
 
 import {
@@ -43,6 +46,15 @@ import {
   type Sale,
 } from "pangu-sdk";
 import { buyTransaction, loadPool, preflightBuy, sellTransaction } from "pangu-sdk/dbc";
+import {
+  accessRows,
+  exitRow,
+  refusedRow,
+  skippedRow,
+  type AccessChain,
+  type SaleAccess,
+  type Tried,
+} from "./access-rows.js";
 import { readFlags } from "./arguments.js";
 import {
   directExecute,
@@ -69,7 +81,15 @@ import {
   type TokenDecimals,
 } from "./buying.js";
 import { priceAfterOnPool, smallestCrossing } from "./ceiling.js";
-import { attempt, lastLogLine, payingDecimals, refusal, send } from "./chain.js";
+import {
+  attempt,
+  chainTime,
+  lastLogLine,
+  payingDecimals,
+  refusal,
+  send,
+  type Landed,
+} from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
 import {
@@ -80,26 +100,31 @@ import {
   repeatableWallet,
   returnLeftovers,
 } from "./wallets.js";
+import {
+  attestWallets,
+  ensureVerifier,
+  payerVerifier,
+  sameVerifier,
+  type Verifier,
+} from "./verifier.js";
+
+/** How long a throwaway wallet's attestation lasts: long enough for the run, and a day to look at it. */
+const ATTESTATION_LIFETIME_SECS = 24 * 60 * 60;
 
 /** Spare devnet SOL each attacking wallet gets on top of what it tries to spend. */
 const OVERHEAD_LAMPORTS = 12_000_000;
 
 const connection: Connection = devnet();
 
-function skipped(
-  attack: string,
-  invariant: string,
-  expected: string,
-  why: string
-): AttackReport {
+const skipped = skippedRow;
+
+function triedOf(landed: Landed): Tried {
   return {
-    attack,
-    invariant,
-    expected,
-    actual: why,
-    verdict: "skipped",
-    signature: null,
-    link: null,
+    succeeded: landed.succeeded,
+    refusal: refusal(landed)?.name ?? null,
+    lastLine: lastLogLine(landed),
+    signature: landed.signature,
+    link: landed.link,
   };
 }
 
@@ -112,44 +137,11 @@ async function mustRefuse(
   signers: Signer[]
 ): Promise<AttackReport> {
   console.log(`trying   : ${attack}`);
-  const landed = await attempt(connection, transaction, signers);
-  const found = refusal(landed);
-  const actual = landed.succeeded
-    ? "it went through"
-    : (found?.name ?? `refused, but not by Pangu: ${lastLogLine(landed)}`);
-  return {
-    attack,
-    invariant,
-    expected,
-    actual,
-    verdict: landed.succeeded ? "allowed" : "refused",
-    signature: landed.signature,
-    link: landed.link,
-  };
+  return refusedRow(attack, invariant, expected, await tryOnChain(transaction, signers));
 }
 
-/** Sends something the rules promise will work, such as a holder selling back. */
-async function mustPass(
-  attack: string,
-  invariant: string,
-  transaction: Transaction,
-  signers: Signer[]
-): Promise<AttackReport> {
-  const expected = "it goes through";
-  console.log(`trying   : ${attack}`);
-  const landed = await attempt(connection, transaction, signers);
-  const found = refusal(landed);
-  return {
-    attack,
-    invariant,
-    expected,
-    actual: landed.succeeded
-      ? expected
-      : `refused with ${found?.name ?? lastLogLine(landed)}`,
-    verdict: landed.succeeded ? "allowed" : "refused",
-    signature: landed.signature,
-    link: landed.link,
-  };
+async function tryOnChain(transaction: Transaction, signers: Signer[]): Promise<Tried> {
+  return triedOf(await attempt(connection, transaction, signers));
 }
 
 async function tokenBalance(account: PublicKey): Promise<bigint> {
@@ -202,8 +194,18 @@ async function main(): Promise<void> {
       `this sale has already graduated, so the mint no longer names Pangu as its hook and there are no rules left to attack. Launch a new sale to prove them.`
     );
   }
+  if (sale.endsAt !== null && (await chainTime(connection)) >= sale.endsAt) {
+    throw new Error(
+      `this sale's offering period ended at ${new Date(sale.endsAt * 1_000).toISOString()}, so every rule has lifted and there is nothing left to attack. Launch a new sale to prove them.`
+    );
+  }
 
-  const listMode = sale.accessMode === ACCESS_MODE.issuerList;
+  const access: SaleAccess =
+    sale.accessMode === ACCESS_MODE.issuerList
+      ? "list"
+      : sale.accessMode === ACCESS_MODE.verifierCredential
+        ? "credential"
+        : "open";
   const price = sale.hasBand ? await readPrice(connection, sale) : null;
 
   // The pool itself, for the token buyers pay in and for where the curve stands.
@@ -242,8 +244,33 @@ async function main(): Promise<void> {
         : aboveCeiling
           ? "PriceOutsideBand"
           : null;
-  const canBuy = bandRefusal === null;
   const stock = record.feed ?? "the stock";
+
+  // Credential mode: the verifier the sale checks, and whether the paying key
+  // can attest under it. The paying key's own verifier is opened if it is
+  // missing; one recorded by launch is used as it is, and the attestation
+  // transaction says so loudly if the paying key is not one of its signers.
+  let verifier: Verifier | null = null;
+  let cannotAttest: string | null = null;
+  if (access === "credential") {
+    const named: Verifier = { credential: sale.credential, schema: sale.schema };
+    const recorded =
+      typeof record.credential === "string" && typeof record.schema === "string"
+        ? { credential: new PublicKey(record.credential), schema: new PublicKey(record.schema) }
+        : null;
+    if (sameVerifier(named, payerVerifier(issuer.publicKey))) {
+      const opened = await ensureVerifier(connection, issuer);
+      verifier = { credential: opened.credential, schema: opened.schema };
+    } else if (recorded !== null && sameVerifier(named, recorded)) {
+      verifier = recorded;
+    } else {
+      cannotAttest =
+        "this sale checks a verifier that is neither the paying key's own nor the one launch recorded, so this run cannot attest a wallet";
+    }
+    console.log(`verifier : credential ${sale.credential.toBase58()}, schema ${sale.schema.toBase58()}`);
+    console.log(`           ${cannotAttest ?? "the paying key attests the throwaway wallets under it"}`);
+  }
+  const canBuy = bandRefusal === null && cannotAttest === null;
 
   console.log(`sale     : ${record.name} (${record.symbol}), ${record.mode} access`);
   console.log(`mint     : ${record.mint}`);
@@ -459,69 +486,6 @@ async function main(): Promise<void> {
     console.log(`wallets  : three fresh ones, never seen by this sale`);
     console.log("");
 
-    const noRecordBuy = await buyTransaction({
-      connection,
-      buyer: newcomer.publicKey,
-      mint,
-      amountIn: smallBuy,
-    });
-    reports.push(
-      await mustRefuse(
-        "buy with no buyer record",
-        "C2",
-        "BuyerRecordMissing",
-        withoutRecordOpening(noRecordBuy.transaction, newcomer.publicKey, mint),
-        [newcomer]
-      )
-    );
-
-    if (listMode) {
-      const unapproved = await buyTransaction({
-        connection,
-        buyer: newcomer.publicKey,
-        mint,
-        amountIn: smallBuy,
-      });
-      reports.push(
-        await mustRefuse(
-          "buy while not on the approved list",
-          "C6",
-          "NotApproved",
-          unapproved.transaction,
-          [newcomer]
-        )
-      );
-      const approvals = new Transaction()
-        .add(
-          approveBuyerInstruction({
-            issuer: issuer.publicKey,
-            mint,
-            wallet: filler.publicKey,
-          })
-        )
-        .add(
-          approveBuyerInstruction({
-            issuer: issuer.publicKey,
-            mint,
-            wallet: careless.publicKey,
-          })
-        );
-      await send(connection, "approving the two attacking wallets", approvals, [issuer]);
-    } else {
-      reports.push(
-        skipped(
-          "buy while not on the approved list",
-          "C6",
-          "NotApproved",
-          "this sale has open access, so there is no list to be left off"
-        )
-      );
-    }
-
-    reports.push(
-      await capAttack("buy past the cap in one go", bandRefusal ?? "OverCap", filler, sale.cap)
-    );
-
     const fillerAta = getAssociatedTokenAddressSync(
       mint,
       filler.publicKey,
@@ -542,9 +506,113 @@ async function main(): Promise<void> {
     );
 
     const shut =
-      bandRefusal === "PriceOutsideBand"
-        ? "the curve already stands above the ceiling, so no buy can land to set this up"
-        : `the sale's price cannot be used right now (${bandRefusal}), so no buy can land to set this up`;
+      cannotAttest !== null
+        ? `no attacking wallet can be attested: ${cannotAttest}`
+        : bandRefusal === "PriceOutsideBand"
+          ? "the curve already stands above the ceiling, so no buy can land to set this up"
+          : `the sale's price cannot be used right now (${bandRefusal}), so no buy can land to set this up`;
+
+    const sellPart = async (seller: Keypair, held: bigint): Promise<Tried> => {
+      const exit = await sellTransaction({
+        connection,
+        seller: seller.publicKey,
+        mint,
+        amountIn: held / SELL_SHARE,
+      });
+      return tryOnChain(exit.transaction, [seller]);
+    };
+
+    const chain: AccessChain = {
+      buyWithoutRecord: async () => {
+        const noRecordBuy = await buyTransaction({
+          connection,
+          buyer: newcomer.publicKey,
+          mint,
+          amountIn: smallBuy,
+        });
+        console.log("trying   : buy with no buyer record");
+        return tryOnChain(
+          withoutRecordOpening(noRecordBuy.transaction, newcomer.publicKey, mint),
+          [newcomer]
+        );
+      },
+      buyAsOutsider: async () => {
+        const outsider = await buyTransaction({
+          connection,
+          buyer: newcomer.publicKey,
+          mint,
+          amountIn: smallBuy,
+        });
+        console.log(`trying   : buy from a wallet the sale has not admitted`);
+        return tryOnChain(outsider.transaction, [newcomer]);
+      },
+      approveAttackers: async () => {
+        const approvals = new Transaction()
+          .add(approveBuyerInstruction({ issuer: issuer.publicKey, mint, wallet: filler.publicKey }))
+          .add(approveBuyerInstruction({ issuer: issuer.publicKey, mint, wallet: careless.publicKey }));
+        await send(connection, "approving the two attacking wallets", approvals, [issuer]);
+      },
+      attestAttackers: async () => {
+        const expiry = (await chainTime(connection)) + ATTESTATION_LIFETIME_SECS;
+        const attested = await attestWallets(
+          connection,
+          issuer,
+          verifier as Verifier,
+          [filler.publicKey, careless.publicKey],
+          expiry
+        );
+        console.log(`attested : the two attacking wallets, for a day: ${attested.landed.link}`);
+      },
+      buyUnderCap: async () => {
+        const underCap = await buyWithin(connection, careless.publicKey, mint, smallBuy, sale.cap);
+        console.log("trying   : an attested wallet buys under the cap");
+        return tryOnChain(underCap.transaction, [careless]);
+      },
+      sellAsSeededBuyer: async () => {
+        const seller = await seedBuyerHolding(issuer, mint);
+        return seller === null ? null : sellPart(seller.wallet, seller.held);
+      },
+      revokeAndSell: async () => {
+        const fillerHolds = await tokenBalance(fillerAta);
+        if (fillerHolds === 0n) {
+          return null;
+        }
+        await send(
+          connection,
+          "revoking the approval of a wallet that already holds",
+          new Transaction().add(
+            revokeBuyerInstruction({ issuer: issuer.publicKey, mint, wallet: filler.publicKey })
+          ),
+          [issuer]
+        );
+        return sellPart(filler, fillerHolds);
+      },
+      sellAsAttested: async () => {
+        for (const [wallet, account] of [
+          [filler, fillerAta],
+          [careless, carelessAta],
+        ] as const) {
+          const holds = await tokenBalance(account);
+          if (holds > 0n) {
+            return sellPart(wallet, holds);
+          }
+        }
+        return null;
+      },
+    };
+
+    reports.push(...(await accessRows(access, chain, { canBuy, shut, cannotAttest })));
+
+    // The hook reads the attestation before the band, so a wallet this run
+    // could not attest meets CredentialInvalid first.
+    reports.push(
+      await capAttack(
+        "buy past the cap in one go",
+        cannotAttest !== null ? "CredentialInvalid" : (bandRefusal ?? "OverCap"),
+        filler,
+        sale.cap
+      )
+    );
 
     if (canBuy) {
       // Aimed straight at the cap rather than searched for. A search reads
@@ -585,14 +653,22 @@ async function main(): Promise<void> {
         )
       );
 
-      const firstBuy = await buyWithin(
-        connection,
-        careless.publicKey,
-        mint,
-        smallBuy,
-        sale.cap
+      // In credential mode this wallet already bought under the cap as a row.
+      if ((await tokenBalance(carelessAta)) === 0n) {
+        const firstBuy = await buyWithin(
+          connection,
+          careless.publicKey,
+          mint,
+          smallBuy,
+          sale.cap
+        );
+        await send(connection, "a normal buy, under the cap", firstBuy.transaction, [careless]);
+      }
+    } else if (cannotAttest !== null) {
+      reports.push(
+        skipped("a second buy that crosses the cap", "C3", "OverCap", shut),
+        skipped("buy into a second token account of the same wallet", "C3", "OverCap", shut)
       );
-      await send(connection, "a normal buy, under the cap", firstBuy.transaction, [careless]);
     } else {
       const wouldBuy = await buyWithin(
         connection,
@@ -725,67 +801,7 @@ async function main(): Promise<void> {
       )
     );
 
-    const fillerHolds = await tokenBalance(fillerAta);
-    if (!listMode) {
-      // Open access has no approval to revoke, so the exit is proven the other
-      // way round: one of the wallets that seeded this sale sells part of what
-      // it holds. The hook has to let that through. A sale nobody can leave is
-      // not a sale, and it is the same invariant either way.
-      const seller = await seedBuyerHolding(issuer, mint);
-      if (seller === null) {
-        reports.push(
-          skipped(
-            "a seeded buyer sells part of it back to the pool",
-            "C5",
-            "it goes through",
-            "no seeded wallet is holding anything to sell"
-          )
-        );
-      } else {
-        const exit = await sellTransaction({
-          connection,
-          seller: seller.wallet.publicKey,
-          mint,
-          amountIn: seller.held / SELL_SHARE,
-        });
-        reports.push(
-          await mustPass(
-            "a seeded buyer sells part of it back to the pool",
-            "C5",
-            exit.transaction,
-            [seller.wallet]
-          )
-        );
-      }
-    } else if (fillerHolds > 0n) {
-      await send(
-        connection,
-        "revoking the approval of a wallet that already holds",
-        new Transaction().add(
-          revokeBuyerInstruction({
-            issuer: issuer.publicKey,
-            mint,
-            wallet: filler.publicKey,
-          })
-        ),
-        [issuer]
-      );
-      const exit = await sellTransaction({
-        connection,
-        seller: filler.publicKey,
-        mint,
-        amountIn: fillerHolds / SELL_SHARE,
-      });
-      reports.push(
-        await mustPass("a revoked wallet sells back to the pool", "C5", exit.transaction, [
-          filler,
-        ])
-      );
-    } else {
-      reports.push(
-        skipped("a revoked wallet sells back to the pool", "C5", "it goes through", shut)
-      );
-    }
+    reports.push(await exitRow(access, chain, shut));
 
     if (price !== null && price.usable && ceiling !== null) {
       reports.push(await ceilingAttack(careless, ceiling));

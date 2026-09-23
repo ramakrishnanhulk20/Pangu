@@ -56,11 +56,18 @@ export interface OpenSale {
  * A cap written as a share of the tokens the curve will sell before graduation.
  *
  * Taken from the template rather than from a number typed in, so the cap means
- * the same thing whatever supply the issuer chose.
+ * the same thing whatever supply the issuer chose. A share of 100 percent or
+ * more is refused: create_sale answers CapCoversWholeSale for a cap at or above
+ * the curve's supply, because one wallet could then buy the whole sale.
  */
 export function capFromShare(swapBaseAmount: bigint, capShareBps: number): bigint {
   const amount = requireBigint(swapBaseAmount, "swapBaseAmount");
-  const bps = requireWholeNumber(capShareBps, "sale.capShareBps", 1, 10_000);
+  if (typeof capShareBps === "number" && capShareBps >= 10_000) {
+    throw new PanguInputError(
+      `sale.capShareBps must be below 10000 (100 percent), got ${capShareBps}: a cap covering the whole curve lets one wallet buy everything, and the program refuses it`
+    );
+  }
+  const bps = requireWholeNumber(capShareBps, "sale.capShareBps", 1, 9_999);
   const cap = (amount * BigInt(bps)) / 10_000n;
   if (cap <= 0n) {
     throw new PanguInputError(

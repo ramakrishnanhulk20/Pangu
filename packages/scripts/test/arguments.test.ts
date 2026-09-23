@@ -45,6 +45,14 @@ describe("readFlags", () => {
   it("reads nothing at all as no flags", () => {
     expect(readFlags([], KNOWN).size).toBe(0);
   });
+
+  it("reads a switch with no value, and refuses one given a value", () => {
+    const flags = readFlags(["--no-end", "--mode", "list"], KNOWN, ["no-end"]);
+    expect(flags.get("no-end")).toBe("true");
+    expect(flags.get("mode")).toBe("list");
+    expect(() => readFlags(["--no-end=yes"], KNOWN, ["no-end"])).toThrow(/takes no value/);
+    expect(() => readFlags(["--no-end", "soon"], KNOWN, ["no-end"])).toThrow(/is not a flag/);
+  });
 });
 
 describe("reading one flag", () => {

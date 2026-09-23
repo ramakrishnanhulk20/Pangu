@@ -13,6 +13,7 @@ import {
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
+  SYSVAR_CLOCK_PUBKEY,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -725,8 +726,14 @@ export interface CreateSaleOptions {
   dbcConfig: PublicKey;
   verifier?: { credential: PublicKey; schema: PublicKey };
   band?: typeof NO_BAND;
-  /** The paying token that template names. A band cannot be opened without it. */
-  quoteMint?: PublicKey;
+  /**
+   * The paying token that template names. Every sale needs it: the program
+   * stores it, checks it against the template and refuses one the issuer can
+   * freeze.
+   */
+  quoteMint: PublicKey;
+  /** Unix seconds at which the offering period ends. Zero, the default, means no end. */
+  endsAt?: number;
 }
 
 export function createSaleIx(
@@ -744,7 +751,8 @@ export function createSaleIx(
       accessMode,
       verifier?.credential ?? PublicKey.default,
       verifier?.schema ?? PublicKey.default,
-      options.band ?? NO_BAND
+      options.band ?? NO_BAND,
+      new BN(options.endsAt ?? 0)
     )
     .accountsPartial({
       issuer,
@@ -753,7 +761,7 @@ export function createSaleIx(
       credential: verifier?.credential ?? null,
       schema: verifier?.schema ?? null,
       dbcConfig: options.dbcConfig,
-      quoteMint: options.quoteMint ?? null,
+      quoteMint: options.quoteMint,
       rules: saleRulesPda(mint),
       extraAccountMetaList: extraMetasPda(mint),
       systemProgram: SystemProgram.programId,
@@ -820,8 +828,19 @@ export function closeBuyerRecordIx(
       wallet,
       mint,
       record: buyerRecordPda(mint, wallet),
+      rules: saleRulesPda(mint),
     })
     .instruction();
+}
+
+/**
+ * The chain's own clock, read off the clock sysvar. The offering period is
+ * judged against this, not against the machine running the test.
+ */
+export async function chainTime(): Promise<number> {
+  const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, "confirmed");
+  assert.isNotNull(info, "the clock sysvar is missing");
+  return Number(info!.data.readBigInt64LE(32));
 }
 
 export async function readRecord(mint: PublicKey, wallet: PublicKey) {

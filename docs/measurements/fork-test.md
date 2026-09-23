@@ -128,3 +128,51 @@ At graduation, with the cap set to a tenth of what the curve sells:
    the cap, but once other wallets sell back, one wallet's share of what is still
    held rises above the cap share. That is arithmetic, not a hole: it is stated in
    the proof number above so nobody reads a single percentage as a promise.
+
+## Run of 23 September 2026: the v2 rules
+
+Same command, against the build whose rules store the paying token and the end
+of the offering period. Binary SHA256
+`191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731`, IDL SHA256
+`48836ab193d10b8a58321a9f6777640bc43873f207a6210f2de18c1a47032772`.
+
+Result: 37 tests pass across `life-band.ts`, `life.ts`, `stock-quote.ts` and
+`life-credential.ts`, `FORK-TEST-OK`. The one run before it failed on the new
+test p, and only in the test's own set-up: the receiving token account has to
+exist before the hook's account list can be resolved against it, so it is now
+opened in a transaction of its own first.
+
+What changed in the tests:
+
+- Every `create_sale` passes the paying token's mint and an `ends_at`, and
+  `close_buyer_record` passes the sale's rules.
+- The banded sale's cap was the whole curve, which the program now refuses
+  (`CapCoversWholeSale`). It is half the curve, and the walk up to the ceiling
+  is spread over three wallets, each kept under the cap. The ceiling still
+  refused the buy that crossed it after 9 buys: curve 0.000296 against a
+  ceiling of 0.000312 dollars a token.
+- New test p. A second sale on the same template, issuer list, with an offering
+  period ending 25 seconds after the chain clock. While it runs, a buy from a
+  wallet with no record is refused `BuyerRecordMissing`. Once the chain clock
+  passes the end, the same wallet, never approved and with no record, buys half
+  again over the cap and it lands, no record is written, a wallet-to-wallet
+  transfer of 1,000 raw units lands, and a sell lands. The mint still names
+  Pangu as its hook at the end, so this is the offering period lifting the
+  rules, not graduation.
+
+| Action | Bytes | Compute units | Accounts |
+|---|---|---|---|
+| Pool plus `create_sale`, issuer list | 944 | 107,968 | 16 |
+| Pool plus `create_sale` with an end | 948 | 94,839 | 16 |
+| Pool plus `create_sale`, credential mode | 1,012 | 104,841 | 18 |
+| First buy, issuer list | 910 | 137,850 | 22 |
+| Sell, issuer list | 878 | 108,030 | 22 |
+| Over-cap buy after the offering ended | 910 | 120,489 | 22 |
+| Wallet to wallet after the offering ended | 484 | 33,002 | 11 |
+| Sell after the offering ended | 878 | 90,697 | 22 |
+| `close_buyer_record`, now with the rules | 277 | 7,820 | 5 |
+| Buy, credential mode | 1,009 | 134,322 | 25 |
+
+The pool and a credential-mode sale still fit one transaction, at 1,012 bytes
+against the 1,232 limit. The proof number is unchanged: the largest wallet holds
+9.99 percent of every token the curve sold, against a cap share of 9.99 percent.

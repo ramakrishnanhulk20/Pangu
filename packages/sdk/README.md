@@ -40,8 +40,18 @@ const instruction = createSaleInstruction({
   mint,
   cap: 100_000_000n,
   accessMode: ACCESS_MODE.issuerList,
+  dbcConfig,
+  quoteMint,
+  endsAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
 });
 ```
+
+`dbcConfig` is the launch template the pool was opened on and `quoteMint` is the
+paying token it names. Both are needed on every sale: the program stores the
+paying token and refuses one the issuer can freeze. `endsAt` is the end of the
+offering period in unix seconds, after which every rule lifts; leave it out for
+no end, and the rules hold until graduation. The cap must stay below the
+curve's supply, since a cap covering the whole sale is no cap at all.
 
 The builder refuses anything the program would refuse, before it builds. Pass a
 `band` to add the price ceiling against the real stock price:
@@ -89,7 +99,7 @@ const sale = await openSaleTransaction({
   name: "Acme Shares",
   symbol: "ACME",
   uri,
-  sale: { capShareBps: 1_000, accessMode: 1 },
+  sale: { capShareBps: 1_000, accessMode: 1, endsAt },
 });
 ```
 

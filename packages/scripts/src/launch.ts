@@ -2,9 +2,12 @@
  * Opens a Pangu sale on devnet: the launch template, then the pool and the
  * sale's rules in one transaction.
  *
- *   npm run launch -- --mode list --cap-share-bps 1000
- *   npm run launch -- --mode open --band 500 --quote <dollar mint> --feed Crypto.AAPLX/USD
- *   npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40
+ *   npm run launch -- --mode list --cap-share-bps 1000 --ends-in 72
+ *   npm run launch -- --mode open --band 500 --quote <dollar mint> --feed Crypto.AAPLX/USD --no-end
+ *   npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40 --ends-in 168
+ *
+ * Every launch says when its offering period ends, with `--ends-in <hours>` or
+ * `--no-end`. There is no default: see offering.ts.
  *
  * A band needs a paying token that is a dollar, so `--band` with the default
  * wrapped SOL is refused before anything is read or sent.
@@ -35,7 +38,7 @@ import {
   text,
   wholeNumber,
 } from "./arguments.js";
-import { send } from "./chain.js";
+import { chainTime, send } from "./chain.js";
 import {
   DEFAULT_SUPPLY,
   demoCurve,
@@ -63,7 +66,15 @@ import {
   MAX_PRICE_AGE_SECS,
 } from "./feeds.js";
 import { refreshFeedPrice } from "./price-refresh.js";
+import {
+  NO_END_FLAG,
+  describeEnd,
+  endsAtFrom,
+  endsAtRecord,
+  offeringChoice,
+} from "./offering.js";
 import { enrichSale, recordSale } from "./sales.js";
+import { ensureVerifier } from "./verifier.js";
 
 const FLAGS = [
   "mode",
@@ -80,6 +91,7 @@ const FLAGS = [
   "supply",
   "credential",
   "schema",
+  "ends-in",
 ];
 
 const MODES = ["open", "list", "credential"] as const;
@@ -145,9 +157,12 @@ async function quoteDecimalsOf(
 }
 
 async function main(): Promise<void> {
-  const flags = readFlags(process.argv.slice(2), FLAGS);
+  const flags = readFlags(process.argv.slice(2), FLAGS, [NO_END_FLAG]);
   const mode = choice(flags, "mode", MODES, "list");
-  const capShareBps = wholeNumber(flags, "cap-share-bps", 1, 10_000, 1_000);
+  const offering = offeringChoice(flags);
+  // Below the whole curve: create_sale refuses a cap at or above it
+  // (CapCoversWholeSale), and the template would already have been paid for.
+  const capShareBps = wholeNumber(flags, "cap-share-bps", 1, 9_999, 1_000);
   const bandBps = wholeNumber(flags, "band", 1, 5_000, 0);
   const feed = feedFor(text(flags, "feed", DEFAULT_FEED));
   const threshold = amount(flags, "threshold", 0.01, 1e15, DEFAULT_THRESHOLD);
@@ -161,12 +176,13 @@ async function main(): Promise<void> {
   );
   const supply = wholeNumber(flags, "supply", 1, 1e12, DEFAULT_SUPPLY);
   const quoteFlag = text(flags, "quote", "wsol");
-  const name = text(
-    flags,
-    "name",
-    mode === "open" ? "Pangu Open Share" : "Pangu Listed Share"
-  );
-  const symbol = text(flags, "symbol", mode === "open" ? "POPEN" : "PLIST");
+  const DEFAULT_NAMES = {
+    open: ["Pangu Open Share", "POPEN"],
+    list: ["Pangu Listed Share", "PLIST"],
+    credential: ["Pangu Verified Share", "PVRFD"],
+  } as const;
+  const name = text(flags, "name", DEFAULT_NAMES[mode][0]);
+  const symbol = text(flags, "symbol", DEFAULT_NAMES[mode][1]);
   const uri = text(
     flags,
     "uri",
@@ -193,6 +209,7 @@ async function main(): Promise<void> {
     threshold,
   };
 
+  const endsAt = endsAtFrom(offering, await chainTime(connection));
   const started = await connection.getBalance(issuer.publicKey, "confirmed");
   console.log(`network  : devnet, ${rpcUrl()}`);
   console.log(`program  : ${PANGU_PROGRAM_ID.toBase58()}`);
@@ -209,6 +226,7 @@ async function main(): Promise<void> {
   console.log(
     `price    : opens at ${openingPrice(shape)} of the paying token a share, ends at ${graduationPrice(shape)}`
   );
+  console.log(`offering : ${describeEnd(endsAt, offering)}`);
 
   if (bandBps > 0) {
     console.log(
@@ -253,6 +271,34 @@ async function main(): Promise<void> {
     }
   }
 
+  // Settled before the template is paid for. Without --credential and --schema
+  // the sale checks the paying key's own verifier, opened here if this is its
+  // first credential sale, so prove can attest a throwaway wallet later.
+  let credentialTerms: { credential?: PublicKey; schema?: PublicKey } = {};
+  if (mode === "credential") {
+    if (flags.has("credential") || flags.has("schema")) {
+      credentialTerms = {
+        credential: new PublicKey(
+          requiredText(flags, "credential", "--schema was given, and a schema belongs to one credential")
+        ),
+        schema: new PublicKey(
+          requiredText(flags, "schema", "--credential was given, and a sale checks one schema of it")
+        ),
+      };
+      console.log(`verifier : the one named on the command line`);
+    } else {
+      const verifier = await ensureVerifier(connection, issuer);
+      credentialTerms = { credential: verifier.credential, schema: verifier.schema };
+      console.log(
+        verifier.opened === null
+          ? `verifier : the paying key's own, already open`
+          : `verifier : the paying key's own, opened now: ${transactionLink(verifier.opened.signature)}`
+      );
+    }
+    console.log(`           credential ${credentialTerms.credential!.toBase58()}`);
+    console.log(`           schema     ${credentialTerms.schema!.toBase58()}`);
+  }
+
   const template = await launchTemplateTransaction({
     connection,
     partner: issuer.publicKey,
@@ -266,26 +312,6 @@ async function main(): Promise<void> {
     [issuer, template.config]
   );
 
-  const credentialTerms =
-    mode === "credential"
-      ? {
-          credential: new PublicKey(
-            requiredText(
-              flags,
-              "credential",
-              "a credential sale checks attestations against one verifier"
-            )
-          ),
-          schema: new PublicKey(
-            requiredText(
-              flags,
-              "schema",
-              "a credential sale checks one schema of attestation"
-            )
-          ),
-        }
-      : {};
-
   const opened = await openSaleTransaction({
     connection,
     creator: issuer.publicKey,
@@ -298,6 +324,7 @@ async function main(): Promise<void> {
       accessMode: ACCESS_MODE_OF[mode],
       ...credentialTerms,
       ...(bandBps > 0 ? { band: bandFor(feed, bandBps) } : {}),
+      ...(endsAt > 0 ? { endsAt } : {}),
     },
   });
   const saleLanded = await send(
@@ -337,6 +364,9 @@ async function main(): Promise<void> {
     priceAccount: bandBps > 0 ? feedPriceAccount(feed).toBase58() : null,
     templateSignature: templateLanded.signature,
     saleSignature: saleLanded.signature,
+    endsAt: endsAtRecord(endsAt),
+    credential: credentialTerms.credential?.toBase58() ?? null,
+    schema: credentialTerms.schema?.toBase58() ?? null,
   });
   console.log("recorded : packages/scripts/sales.json, filled in below once the rules are read back");
 
@@ -353,6 +383,9 @@ async function main(): Promise<void> {
     bandBps: sale.hasBand ? sale.bandBps : null,
     pool: sale.pool.toBase58(),
     priceAccount: sale.hasBand ? sale.priceAccount.toBase58() : null,
+    endsAt: endsAtRecord(sale.endsAt),
+    credential: sale.accessMode === ACCESS_MODE.verifierCredential ? sale.credential.toBase58() : null,
+    schema: sale.accessMode === ACCESS_MODE.verifierCredential ? sale.schema.toBase58() : null,
   });
   const spent = started - (await connection.getBalance(issuer.publicKey, "confirmed"));
 
@@ -374,6 +407,7 @@ async function main(): Promise<void> {
   console.log(`sale     : ${transactionLink(saleLanded.signature)}`);
   console.log("");
   console.log(`cap      : ${sale.cap} raw units, the most one wallet may hold`);
+  console.log(`offering : ${describeEnd(sale.endsAt)}, as the rules on chain say`);
   console.log(
     `bytes    : ${template.bytes} for the template, ${opened.bytes} for the pool and rules, against the 1232 byte limit`
   );
