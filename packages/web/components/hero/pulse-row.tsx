@@ -3,7 +3,8 @@
 import { useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { HeroPulse } from "@/lib/pulse";
+import { timeUntil } from "@/components/readout/format";
+import type { HeroPulse, Offering } from "@/lib/pulse";
 
 const POLL_MS = 15_000;
 
@@ -102,6 +103,20 @@ function LiveDot({ still }: { still: boolean }) {
   );
 }
 
+/**
+ * The sale the line leads with, and its offering period: the priced sale when
+ * its numbers are on the line, otherwise the sale the sharing numbers came from.
+ */
+function shownOffering(pulse: HeroPulse): { name: string; offering: Offering } | null {
+  if (pulse.priceDollars !== null || pulse.stockDollars !== null) {
+    return { name: pulse.priceSaleName, offering: pulse.priceOffering };
+  }
+  if (pulse.buyers !== null) {
+    return { name: pulse.sharedSaleName, offering: pulse.sharedOffering };
+  }
+  return null;
+}
+
 export function PulseFallback() {
   return (
     <div className="flex flex-wrap items-start gap-x-10 gap-y-5">
@@ -167,6 +182,13 @@ export function PulseRow({ initial }: { initial: HeroPulse }) {
     );
   }
 
+  // Nothing is added for a sale with no end date.
+  const shown = shownOffering(pulse);
+  const ending =
+    shown === null || shown.offering.endsAt === null
+      ? null
+      : { ...shown, endsAt: shown.offering.endsAt };
+
   const ceilingNote =
     pulse.ceilingDollars === null
       ? null
@@ -215,6 +237,23 @@ export function PulseRow({ initial }: { initial: HeroPulse }) {
         >
           <Counting value={pulse.buyers} format={whole} still={still} />{" "}
           <span className="text-muted">buyers</span>
+        </Cell>
+      )}
+
+      {ending !== null && (
+        <Cell
+          label={`${ending.name}, the offering`}
+          note={
+            ending.offering.offeringOver
+              ? "the rules have lifted and the token trades freely"
+              : "then every rule lifts"
+          }
+        >
+          <span data-testid="hero-offering">
+            {ending.offering.offeringOver
+              ? "ended"
+              : `ends in ${timeUntil(ending.endsAt * 1000, pulse.readAt, true)}`}
+          </span>
         </Cell>
       )}
     </div>

@@ -19,6 +19,7 @@ import {
   type Target,
   type TargetReading,
 } from "@/lib/break";
+import { utcDay, utcMoment } from "@/components/readout/format";
 import { tokenAmount } from "@/lib/format";
 
 import { AttackRow, IDLE, STOPPED, Tags, asExpected, type RowState } from "./attack-row";
@@ -514,12 +515,21 @@ function SaleFacts({
       value: `$${target.stockDollars.toFixed(2)}`,
     });
   }
+  facts.push({
+    label: "the offering",
+    value:
+      target.endsAt === null
+        ? "no end date"
+        : target.offeringOver
+          ? `over since ${utcDay(target.endsAt * 1000)}`
+          : `ends ${utcMoment(target.endsAt * 1000)}`,
+  });
 
   return (
     <div>
       <dl
         data-testid="break-facts"
-        className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-6"
+        className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
       >
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">

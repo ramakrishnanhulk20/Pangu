@@ -13,6 +13,9 @@ import {
   percent,
   shares,
   shortAddress,
+  timeUntil,
+  utcDay,
+  utcMoment,
   whole,
 } from "./format";
 import { Bar, Counting, Holders, Stat, largestOfSale } from "./numbers";
@@ -61,7 +64,8 @@ function settle(current: Readout, next: Readout): Readout {
  * climbed past the ceiling, or there is no fresh stock price to set one.
  */
 function everyBuyRefused(readout: Readout): string | null {
-  if (readout.graduated || readout.stockName === null) {
+  // Past the offering period the hook stands aside before it reads the price.
+  if (readout.graduated || readout.offeringOver || readout.stockName === null) {
     return null;
   }
   if (readout.priceWarning !== null) {
@@ -75,6 +79,41 @@ function everyBuyRefused(readout: Readout): string | null {
     return "the curve sits above the price ceiling";
   }
   return null;
+}
+
+/**
+ * When this sale's rules stop, written from the reading, never typed. The count
+ * is measured from the reading's own time, so it moves on each poll and the
+ * server's HTML matches the first paint.
+ *
+ * Null on a graduated sale: graduation already took the rules off, and the
+ * rule line above says so.
+ */
+function OfferingLine({ readout }: { readout: Readout }) {
+  if (readout.graduated) {
+    return null;
+  }
+  if (readout.endsAt === null) {
+    return <>No end date: the rules stay until the curve fills and the sale graduates.</>;
+  }
+  const endsAt = readout.endsAt * 1000;
+  if (readout.offeringOver) {
+    return (
+      <>
+        {`Offering over since ${utcDay(endsAt)}: `}
+        <span className="text-ink">the rules have lifted and the token trades freely.</span>
+      </>
+    );
+  }
+  return (
+    <>
+      {`Offering ends ${utcMoment(endsAt)}, `}
+      <span data-testid="readout-offering-count" className="tabular-nums text-ink">
+        {`in ${timeUntil(endsAt, readout.readAt)}`}
+      </span>
+      .
+    </>
+  );
 }
 
 function Picker({
@@ -585,6 +624,25 @@ export function SaleReadout({
           >
             {readout.rule}
           </motion.p>
+
+          {!readout.graduated && (
+            <motion.p
+              initial={still ? false : { opacity: 0, y: 14 }}
+              animate={revealed || still ? { opacity: 1, y: 0 } : undefined}
+              transition={
+                still ? { duration: 0 } : { duration: 0.7, delay: 0.45, ease: EASE }
+              }
+              data-testid="readout-offering"
+              className="relative mt-5 flex max-w-[60ch] flex-col gap-1.5 pl-[22px] text-[15px] leading-snug text-muted sm:flex-row sm:items-baseline sm:gap-3"
+            >
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em]">
+                the offering
+              </span>
+              <span>
+                <OfferingLine readout={readout} />
+              </span>
+            </motion.p>
+          )}
         </>
       )}
     </section>

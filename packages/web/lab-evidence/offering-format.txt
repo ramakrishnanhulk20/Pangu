@@ -1,0 +1,9 @@
+utcMoment  Offering ends 7 Oct 2026, 09:12 UTC
+utcDay     Offering over since 7 Oct 2026
+13 days 4 hours before                   readout "in 13 days 4 hours"   hero "ends in 13 days"
+13 days exactly before                   readout "in 13 days"   hero "ends in 13 days"
+1 day 1 hour before                      readout "in 1 day 1 hour"   hero "ends in 1 day"
+4 hours 12 minutes before                readout "in 4 hours 12 minutes"   hero "ends in 4 hours"
+1 minute before                          readout "in 1 minute"   hero "ends in 1 minute"
+30 seconds before                        readout "in under a minute"   hero "ends in under a minute"
+10 seconds after, before the next poll   readout "in under a minute"   hero "ends in under a minute"

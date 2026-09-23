@@ -48,10 +48,30 @@ function countMiss(misses: Misses, error: unknown): void {
   }
 }
 
+/** When one sale's offering period ends, as its rules account holds it. */
+export interface Offering {
+  /** Unix seconds, or null when the sale has no end, which is every version 1 sale. */
+  endsAt: number | null;
+  /** True once that moment has passed, judged by the SDK's standing helper. */
+  offeringOver: boolean;
+}
+
+const NO_END: Offering = { endsAt: null, offeringOver: false };
+
+/**
+ * The offering period of a sale. The standing helper is asked with no records
+ * on purpose: whether the period is over turns on the rules alone, so a read of
+ * the buyer records that fails cannot take the end date off the page with it.
+ */
+function offeringOf(sale: Sale): Offering {
+  return { endsAt: sale.endsAt, offeringOver: saleStanding(sale, []).offeringOver };
+}
+
 /** The three live numbers the hero paints before any wallet is connected. */
 export interface HeroPulse {
   /** The sale the curve price was read from. */
   priceSaleName: string;
+  priceOffering: Offering;
   /** Dollars per whole share, off the pool's own square root price. */
   priceDollars: number | null;
   /** Apple, as Pyth published it into the account the program reads. */
@@ -63,6 +83,7 @@ export interface HeroPulse {
   priceWarning: string | null;
   /** The sale the sharing numbers were read from. */
   sharedSaleName: string;
+  sharedOffering: Offering;
   buyers: number | null;
   /** The largest wallet's share of everything sold, 0 to 1. */
   largestShare: number;
@@ -72,21 +93,26 @@ export interface HeroPulse {
   skipped: number;
   /** Set when not one sale could be read. Nothing is invented in its place. */
   failure: string | null;
+  /** Unix milliseconds this reading was taken, which the offering count is measured from. */
+  readAt: number;
 }
 
 const EMPTY: HeroPulse = {
   priceSaleName: "",
+  priceOffering: NO_END,
   priceDollars: null,
   stockName: "Apple",
   stockDollars: null,
   ceilingDollars: null,
   priceWarning: null,
   sharedSaleName: "",
+  sharedOffering: NO_END,
   buyers: null,
   largestShare: 0,
   capShare: 0,
   skipped: 0,
   failure: null,
+  readAt: 0,
 };
 
 /** The dollar-priced sale carrying the price ceiling, the hero's own sale. */
@@ -164,14 +190,27 @@ async function standingOf(sale: Sale): Promise<Standing> {
   };
 }
 
-/** The sharing numbers for one mint. Throws when that sale will not decode. */
-async function standingOfMint(mint: string): Promise<Standing | null> {
+/**
+ * The sharing numbers for one mint. Throws when that sale will not decode.
+ * The sale's offering period is handed to `seen` beside them, because the walk
+ * over the listed sales only carries the sharing numbers back.
+ */
+async function standingOfMint(
+  mint: string,
+  seen: (offering: Offering) => void
+): Promise<Standing | null> {
   const sale = await getSale(devnetConnection(), new PublicKey(mint));
-  return sale === null ? null : standingOf(sale);
+  if (sale === null) {
+    return null;
+  }
+  const standing = await standingOf(sale);
+  seen(offeringOf(sale));
+  return standing;
 }
 
 interface PricedNumbers {
   name: string;
+  offering: Offering;
   priceDollars: number | null;
   stockDollars: number | null;
   ceilingDollars: number | null;
@@ -197,6 +236,7 @@ async function readPricedSale(
     const { sale } = pool;
     const numbers: PricedNumbers = {
       name: opened.name,
+      offering: offeringOf(sale),
       priceDollars: null,
       stockDollars: null,
       ceilingDollars: null,
@@ -269,6 +309,7 @@ async function readFromChain(): Promise<HeroPulse> {
 
   if (pricedNumbers !== null) {
     pulse.priceSaleName = pricedNumbers.name;
+    pulse.priceOffering = pricedNumbers.offering;
     pulse.priceDollars = pricedNumbers.priceDollars;
     pulse.stockDollars = pricedNumbers.stockDollars;
     pulse.ceilingDollars = pricedNumbers.ceilingDollars;
@@ -277,6 +318,7 @@ async function readFromChain(): Promise<HeroPulse> {
     const own = pricedNumbers.standing;
     if (own !== null && own.buyers > 0) {
       pulse.sharedSaleName = pricedNumbers.name;
+      pulse.sharedOffering = pricedNumbers.offering;
       pulse.buyers = own.buyers;
       pulse.largestShare = own.largestShare;
       pulse.capShare = own.capShare;
@@ -286,8 +328,13 @@ async function readFromChain(): Promise<HeroPulse> {
   // The priced sale has refused every buy so far, so the sharing numbers come
   // from the newest listed sale that reads. The label on screen says which.
   if (pulse.buyers === null && order.length > 0) {
+    // The walk stops at the first sale that reads, so the last offering seen
+    // belongs to the sale whose numbers come back.
+    let offering = NO_END;
     const shared = await firstReadableSharing(order, (mint) =>
-      standingOfMint(mint).catch((error: unknown) => {
+      standingOfMint(mint, (seen) => {
+        offering = seen;
+      }).catch((error: unknown) => {
         countMiss(misses, error);
         throw error;
       })
@@ -295,12 +342,14 @@ async function readFromChain(): Promise<HeroPulse> {
     pulse.skipped += shared.skipped;
     if (shared.sharing !== null) {
       pulse.sharedSaleName = shared.sharing.name;
+      pulse.sharedOffering = offering;
       pulse.buyers = shared.sharing.standing.buyers;
       pulse.largestShare = shared.sharing.standing.largestShare;
       pulse.capShare = shared.sharing.standing.capShare;
     }
   }
 
+  pulse.readAt = Date.now();
   if (pricedNumbers === null && pulse.buyers === null) {
     const onlyOldBuilds = misses.silent === 0;
     return { ...pulse, failure: onlyOldBuilds ? REFRESHING : DEVNET_SILENT };
@@ -329,7 +378,7 @@ function startReading(): Promise<HeroPulse> {
   // A reading that throws is turned into the outage line and cleared like any
   // other, or the next visit would wait on a promise that already gave up.
   reading = readFromChain()
-    .catch((): HeroPulse => ({ ...EMPTY, failure: DEVNET_SILENT }))
+    .catch((): HeroPulse => ({ ...EMPTY, failure: DEVNET_SILENT, readAt: Date.now() }))
     .then((pulse) => {
       if (pulse.failure === null) {
         lastGood = { at: Date.now(), pulse };

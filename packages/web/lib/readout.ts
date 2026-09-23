@@ -87,6 +87,13 @@ export interface SaleReadout {
   curve: CurvePoint[];
   /** The rule a buyer would run into first, in plain words, built from the numbers. */
   rule: string;
+  /**
+   * Unix seconds at which the offering period ends and every rule lifts, or
+   * null when the sale has none, which is every version 1 sale.
+   */
+  endsAt: number | null;
+  /** True once that moment has passed, judged by the SDK's standing helper. */
+  offeringOver: boolean;
   /** Unix milliseconds this reading was taken. */
   readAt: number;
   /**
@@ -243,10 +250,17 @@ function bindingRule(
     ceilingDollars: number | null;
     priceNow: number | null;
     priceWarning: string | null;
+    offeringOver: boolean;
   }
 ): string {
   if (input.graduated) {
     return "The curve filled, so Pangu came off the token for good and it trades freely now.";
+  }
+
+  // The hook stands aside before it reads the list, the price or the cap, so
+  // none of the rules below is what a buyer meets any more.
+  if (input.offeringOver) {
+    return "The offering period ended, so Pangu no longer checks a buy or a transfer on this token.";
   }
 
   const capLine = `any wallet may buy up to ${percentWords(input.capOfSale)} of the sale`;
@@ -308,6 +322,8 @@ function refused(
     holders: [],
     curve: [],
     rule: "",
+    endsAt: null,
+    offeringOver: false,
     readAt: Date.now(),
     stale: false,
     missedAt: null,
@@ -457,7 +473,10 @@ async function readSale(opened: OpenedSale): Promise<SaleReadout> {
       ceilingDollars,
       priceNow: priceAt(now, baseDecimals, quoteDecimals),
       priceWarning,
+      offeringOver: standing.offeringOver,
     }),
+    endsAt: sale.endsAt,
+    offeringOver: standing.offeringOver,
     readAt: Date.now(),
     stale: false,
     missedAt: null,

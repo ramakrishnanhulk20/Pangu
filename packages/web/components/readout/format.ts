@@ -118,3 +118,51 @@ export function shortAddress(address: string): string {
 export function explorerAddress(address: string): string {
   return `https://explorer.solana.com/address/${address}?cluster=devnet`;
 }
+
+/**
+ * A calendar day and time in UTC, "7 Oct 2026, 09:12 UTC". Labelled UTC for the
+ * same reason as {@link clock}: the server writes it before the visitor's own
+ * zone is known.
+ */
+export function utcMoment(at: number): string {
+  const moment = new Date(at);
+  const hours = String(moment.getUTCHours()).padStart(2, "0");
+  const minutes = String(moment.getUTCMinutes()).padStart(2, "0");
+  return `${utcDay(at)}, ${hours}:${minutes} UTC`;
+}
+
+/** A calendar day in UTC, "7 Oct 2026". */
+export function utcDay(at: number): string {
+  const moment = new Date(at);
+  return `${moment.getUTCDate()} ${MONTHS[moment.getUTCMonth()]} ${moment.getUTCFullYear()}`;
+}
+
+function counted(value: number, unit: string): string {
+  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+}
+
+/**
+ * How long until a moment, in the two largest units that matter: "13 days 4
+ * hours", "4 hours 12 minutes", "12 minutes". With `largestOnly` it keeps the
+ * first unit alone, "13 days", for a line with no room for more.
+ *
+ * Measured against the reading's own time, not the visitor's clock, so the
+ * server's HTML and the first client paint say the same thing and the count
+ * moves on each poll.
+ */
+export function timeUntil(at: number, from: number, largestOnly = false): string {
+  const minutesLeft = Math.floor((at - from) / 60_000);
+  if (minutesLeft < 1) {
+    return "under a minute";
+  }
+  const days = Math.floor(minutesLeft / 1_440);
+  const hours = Math.floor((minutesLeft % 1_440) / 60);
+  const minutes = minutesLeft % 60;
+  const [first, second]: [string, string | null] =
+    days > 0
+      ? [counted(days, "day"), hours > 0 ? counted(hours, "hour") : null]
+      : hours > 0
+        ? [counted(hours, "hour"), minutes > 0 ? counted(minutes, "minute") : null]
+        : [counted(minutes, "minute"), null];
+  return largestOnly || second === null ? first : `${first} ${second}`;
+}

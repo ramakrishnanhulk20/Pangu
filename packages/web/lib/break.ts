@@ -286,6 +286,27 @@ export const ATTACKS: readonly Attack[] = [
   },
 ];
 
+/**
+ * What an attack row says once the sale's offering period is over. The hook
+ * returns before it reads a record, an approval, a price or the cap, so a row
+ * built to meet one of those goes through instead.
+ */
+export const OFFERING_OVER_LINE =
+  "The offering is over, so this rule has lifted: the program lets this through.";
+
+/**
+ * True when the end of the offering period changes what the program answers
+ * this row with.
+ *
+ * Two rows keep their promise. Selling back goes through either way. Calling
+ * the rules program on its own is refused as NotTransferring before the hook
+ * ever looks at the offering period (read_transferring_account in execute.rs
+ * runs first), so it stays refused.
+ */
+export function liftedByOffering(attack: Attack): boolean {
+  return attack.id !== "sell-back" && attack.id !== "direct-call";
+}
+
 /** A sale the scripts opened, as the page knows it before reading the chain. */
 export interface SaleCandidate {
   mint: string;
@@ -324,6 +345,17 @@ export interface Target {
   capShare: number;
   totalNetBought: bigint;
   buyers: number;
+  /**
+   * Unix seconds at which the offering period ends and every rule lifts, or
+   * null when the sale has none, which is every version 1 sale.
+   */
+  endsAt: number | null;
+  /**
+   * True once that moment has passed, judged by the SDK's standing helper on
+   * the server's clock when the sale was read. There is no standing refusal
+   * then: the hook lets every transfer through.
+   */
+  offeringOver: boolean;
 }
 
 /** Every attack lands on devnet, so every link goes to devnet's explorer. */
@@ -401,6 +433,8 @@ async function readSale(
   const sqrtPrice = BigInt(view.poolAccount.poolState.sqrtPrice.toString());
   const curve = curvePriceDollars(sqrtPrice, baseDecimals, quoteDecimals);
 
+  const standing = saleStanding(sale, records);
+
   let stockDollars: number | null = null;
   let ceiling: bigint | null = null;
   let standingRefusal: PanguErrorName | null = null;
@@ -408,26 +442,28 @@ async function readSale(
 
   if (price !== null) {
     stockDollars = price.priceDollars;
-    if (!price.usable) {
+    if (!price.usable && !standing.offeringOver) {
       standingRefusal = price.error ?? "PriceStale";
       standingReason =
         "There is no usable stock price right now, and a sale with a price ceiling refuses every buy until there is. Selling back is never touched by it.";
     } else {
       ceiling = priceCeiling(sale, price.price);
-      if (curve > ceiling) {
+      if (curve > ceiling && !standing.offeringOver) {
         standingRefusal = "PriceOutsideBand";
         standingReason =
           "This sale's curve already stands above the price ceiling, so the program refuses every buy for its price before the cap is ever reached.";
       }
     }
   }
-  if (standingRefusal === null && sale.accessMode === ACCESS_MODE.issuerList) {
+  if (
+    standingRefusal === null &&
+    !standing.offeringOver &&
+    sale.accessMode === ACCESS_MODE.issuerList
+  ) {
     standingRefusal = "NotApproved";
     standingReason =
       "This sale runs on the issuer's approved list and your wallet is not on it, so a buy is refused before the cap is reached.";
   }
-
-  const standing = saleStanding(sale, records);
 
   return {
     mint,
@@ -451,6 +487,8 @@ async function readSale(
     capShare: standing.capShare,
     totalNetBought: standing.totalNetBought,
     buyers: standing.buyers,
+    endsAt: sale.endsAt,
+    offeringOver: standing.offeringOver,
   };
 }
 
@@ -481,6 +519,8 @@ export interface TargetWire {
   capShare: number;
   totalNetBought: string;
   buyers: number;
+  endsAt: number | null;
+  offeringOver: boolean;
 }
 
 type SaleKey = "mint" | "pool" | "baseVault" | "issuer" | "credential" | "schema" | "priceAccount";
@@ -590,6 +630,9 @@ export async function expectedOf(
   shares: bigint | null
 ): Promise<Expected> {
   if (attack.id === "sell-back") {
+    return { name: "it goes through", why: null };
+  }
+  if (context.target.offeringOver && liftedByOffering(attack)) {
     return { name: "it goes through", why: null };
   }
   if (!askedOfTheProgram(attack.id) || shares === null) {

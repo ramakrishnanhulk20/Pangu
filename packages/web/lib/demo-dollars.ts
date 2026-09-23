@@ -16,7 +16,7 @@ import {
   type Target,
 } from "@/lib/break";
 import { openedSales } from "@/lib/sales";
-import { devnetRpcUrl } from "@/lib/solana";
+import { devnetConnection } from "@/lib/solana";
 
 /**
  * Hands a visitor's devnet wallet the token the live sale is priced in.
@@ -246,7 +246,7 @@ async function landed(connection: Connection, sent: Sent): Promise<boolean> {
  * its signature is returned instead, so one grant is never minted twice.
  */
 async function send(transaction: Transaction, authority: Keypair): Promise<string> {
-  const connection = new Connection(devnetRpcUrl(), "confirmed");
+  const connection = devnetConnection();
   let previous: Sent | null = null;
   for (let attempt = 0; attempt < SEND_TRIES; attempt += 1) {
     if (previous !== null && (await landed(connection, previous))) {
@@ -348,7 +348,7 @@ function grantSize(authority: Keypair, wallet: PublicKey): Promise<GrantSize> {
  * is the same for every wallet it is shared with.
  */
 async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<GrantSize> {
-  const connection = breakConnection();
+  const connection = breakConnection(devnetConnection().rpcEndpoint);
   const candidates = openedSales().map((sale) => ({
     mint: sale.mint,
     name: sale.name,
@@ -382,7 +382,7 @@ async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<Gran
 async function mintGrant(wallet: PublicKey): Promise<Grant> {
   const authority = mintAuthority();
   const { target, amount } = await grantSize(authority, wallet);
-  const connection = breakConnection();
+  const connection = breakConnection(devnetConnection().rpcEndpoint);
   const held = await payingHeld(connection, target, wallet);
   if (held >= amount) {
     throw new Refused(400, "You already hold enough demo dollars for every row.");

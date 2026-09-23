@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import type { Attack, AttackResult, Expected, Target } from "@/lib/break";
-import { explorerTx, plainFailure } from "@/lib/break";
+import { OFFERING_OVER_LINE, explorerTx, liftedByOffering, plainFailure } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
 
 import { Spinner, Strike } from "./strike";
@@ -98,6 +98,7 @@ export function AttackRow({
   const verdict = verdictOf(state);
   const running = state.status === "building" || state.status === "waiting";
   const exit = attack.kind === "pass" && attack.id === "sell-back";
+  const lifted = target !== null && target.offeringOver && liftedByOffering(attack);
 
   // The list item is the Reveal around this row, so the row itself is a plain block.
   return (
@@ -137,12 +138,14 @@ export function AttackRow({
           </div>
 
           <p className="mt-4 max-w-[62ch] text-[14px] leading-relaxed">
-            {attack.kind === "pass"
-              ? `The program lets this through: ${attack.plain}.`
-              : `The program refuses this: ${attack.plain}.`}{" "}
+            {lifted
+              ? OFFERING_OVER_LINE
+              : attack.kind === "pass"
+                ? `The program lets this through: ${attack.plain}.`
+                : `The program refuses this: ${attack.plain}.`}{" "}
             <Tags
               names={[
-                attack.promise === "it goes through" ? null : attack.promise,
+                lifted || attack.promise === "it goes through" ? null : attack.promise,
                 `rule ${attack.invariant}`,
               ]}
             />
@@ -323,7 +326,9 @@ function Verdict({
       {failure === null ? (
         <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">
           {result.outcome === "allowed"
-            ? "The pool paid out and the sale's counters moved. This is the one row that has to work."
+            ? target !== null && target.offeringOver
+              ? "The offering is over, so the program let it through without checking a rule, and no counter moved."
+              : "The pool paid out and the sale's counters moved. This is the one row that has to work."
             : result.sentence}{" "}
           <Tags names={[result.errorName]} />
         </p>
