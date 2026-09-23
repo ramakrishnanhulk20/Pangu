@@ -307,6 +307,19 @@ export function liftedByOffering(attack: Attack): boolean {
   return attack.id !== "sell-back" && attack.id !== "direct-call";
 }
 
+/**
+ * What rows 03, 06 and 09 say to a wallet with no shares. Each needs a buy that
+ * really landed behind it, and in simulate mode row 01 lands nothing, so the
+ * ledger offers the real buy beside this line.
+ */
+export const NEEDS_REAL_BUY =
+  "This row needs shares your wallet really holds. A simulated buy lands nothing.";
+
+/** The rows that cannot run until the wallet holds shares from a real buy. */
+export function needsRealBuy(attack: Attack): boolean {
+  return attack.id === "second-buy" || attack.id === "wallet-to-wallet" || attack.id === "sell-back";
+}
+
 /** A sale the scripts opened, as the page knows it before reading the chain. */
 export interface SaleCandidate {
   mint: string;
@@ -1385,9 +1398,7 @@ export async function buildAttack(
     // A first buy is only needed so the second one crosses the cap, and after
     // the offering the cap is never read.
     if (left === target.cap && !target.offeringOver) {
-      throw new Error(
-        "this one needs a first buy behind it. Run the buy under the cap above, then come back."
-      );
+      throw new Error(NEEDS_REAL_BUY);
     }
     const buy = await buyShares(context, left + 1n, "atLeast");
     return promised(buy.built.transaction, buy.built.expectedAmountOut);
@@ -1411,7 +1422,7 @@ export async function buildAttack(
   if (id === "wallet-to-wallet") {
     const held = await tokensHeld(connection, target.mint, wallet);
     if (held === 0n) {
-      throw new Error("this one needs tokens to send. Run the buy under the cap above first.");
+      throw new Error(NEEDS_REAL_BUY);
     }
     const stranger = Keypair.generate().publicKey;
     const strangerAccount = getAssociatedTokenAddressSync(
@@ -1510,7 +1521,7 @@ export async function buildAttack(
 
   const held = await tokensHeld(connection, target.mint, wallet);
   if (held === 0n) {
-    throw new Error("this one needs tokens to sell back. Run the buy under the cap above first.");
+    throw new Error(NEEDS_REAL_BUY);
   }
   const part = max(held / SELL_HELD_PART, 1n);
   const exit = await sellTransaction({

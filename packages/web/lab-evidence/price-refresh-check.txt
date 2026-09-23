@@ -1,0 +1,58 @@
+route     : POST http://127.0.0.1:3452/api/price/refresh
+
+sale      : Pangu Priced Share, 2dp5caL9PPVWafYkmNHBdHEX6zWfG42BmERcnLK75N4Y
+account   : 9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb
+            https://explorer.solana.com/address/9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb?cluster=devnet
+stored    : 2026-09-23T12:27:35.000Z, 616 seconds ago (before)
+
+first call : HTTP 200 in 7.3 s
+{
+  "status": "posted",
+  "posted": "3sati2VtgHTp5YWsVGMRygcq71EEs6y2qMMaoFNbz82Q6c37JUanA1cXKbA7ziZQgqjd9Mx3kBgbMkUWZBFGLJ3A",
+  "signatures": [
+    "3KQQtY2pv2T2AQKEtonYQcLFHtm2u93PKCtmqz3hy4nMr8ejAnsiUNUAJJ4PAUhM6SobCFm9aSUQMbJRtbY79qQE",
+    "3sati2VtgHTp5YWsVGMRygcq71EEs6y2qMMaoFNbz82Q6c37JUanA1cXKbA7ziZQgqjd9Mx3kBgbMkUWZBFGLJ3A"
+  ],
+  "publishedAt": 1790167076,
+  "price": 340.79998
+}
+signature : https://explorer.solana.com/tx/3KQQtY2pv2T2AQKEtonYQcLFHtm2u93PKCtmqz3hy4nMr8ejAnsiUNUAJJ4PAUhM6SobCFm9aSUQMbJRtbY79qQE?cluster=devnet
+signature : https://explorer.solana.com/tx/3sati2VtgHTp5YWsVGMRygcq71EEs6y2qMMaoFNbz82Q6c37JUanA1cXKbA7ziZQgqjd9Mx3kBgbMkUWZBFGLJ3A?cluster=devnet
+published : 2026-09-23T12:37:56.000Z, price 340.79998
+
+second call: HTTP 200 in 0.0 s
+{
+  "status": "fresh",
+  "publishedAt": 1790167076,
+  "price": 340.79998
+}
+
+stored    : 2026-09-23T12:37:56.000Z, 3 seconds ago (after)
+verdict   : as expected, the second call posted nothing
+
+sale      : Pangu Priced Share, second offering, 5VrNEfV1gQrBrMLSxyaK3AXRa2yj9Xp9i65MZzKHGZSo
+account   : 9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb
+            https://explorer.solana.com/address/9wtpaS1kCEqXC9XGDJ14kKVuBNDkMwaDZG3vXe2KPQWb?cluster=devnet
+stored    : 2026-09-23T12:37:56.000Z, 3 seconds ago (before)
+
+first call : HTTP 200 in 0.5 s
+{
+  "status": "fresh",
+  "publishedAt": 1790167076,
+  "price": 340.79998
+}
+
+second call: HTTP 200 in 0.0 s
+{
+  "status": "fresh",
+  "publishedAt": 1790167076,
+  "price": 340.79998
+}
+
+stored    : 2026-09-23T12:37:56.000Z, 4 seconds ago (after)
+verdict   : as expected, the second call posted nothing
+
+a mint that is not one of the app's sales: HTTP 404
+{"reason":"This app only brings the price up to date for its own sales with a price band."}
+
+run at 2026-09-23T12:38:00.110Z

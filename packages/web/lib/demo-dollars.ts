@@ -76,15 +76,16 @@ export class Refused extends Error {
 let triedRootEnv = false;
 
 /**
- * The key that mints the demo dollar, as a Solana key file holds it: a JSON
- * array of bytes.
+ * The devnet demo key, as a Solana key file holds it: a JSON array of bytes. It
+ * mints the demo dollar here, and lib/price-refresh.ts pays for price updates
+ * with it, so both read it through this one loader.
  *
  * On a deploy the variable is set in the project's own settings. On a developer
  * machine it lives in the repository root .env, two folders above this app,
  * which Next does not read by itself, so that file is loaded the first time the
  * variable is missing.
  */
-function mintAuthority(): Keypair {
+export function demoKey(): Keypair {
   if (process.env[VARIABLE] === undefined && !triedRootEnv) {
     triedRootEnv = true;
     try {
@@ -380,7 +381,7 @@ async function measureGrant(authority: Keypair, wallet: PublicKey): Promise<Gran
 }
 
 async function mintGrant(wallet: PublicKey): Promise<Grant> {
-  const authority = mintAuthority();
+  const authority = demoKey();
   const { target, amount } = await grantSize(authority, wallet);
   const connection = breakConnection(devnetConnection().rpcEndpoint);
   const held = await payingHeld(connection, target, wallet);

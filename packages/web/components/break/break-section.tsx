@@ -9,22 +9,31 @@ import {
   ATTACKS,
   breakConnection,
   buildAttack,
+  needsRealBuy,
   payingHeld,
   payingNeeded,
   readLanded,
   simulateAttack,
   targetFromWire,
+  tokensHeld,
   type Attack,
   type AttackId,
   type AttackResult,
-
   type Target,
   type TargetReading,
 } from "@/lib/break";
 import { utcDay, utcMoment } from "@/components/readout/format";
 import { tokenAmount } from "@/lib/format";
 
-import { AttackRow, IDLE, STOPPED, Tags, asExpected, type RowState } from "./attack-row";
+import {
+  AttackRow,
+  IDLE,
+  STOPPED,
+  Tags,
+  asExpected,
+  type FirstBuy,
+  type RowState,
+} from "./attack-row";
 import { Reveal, Spinner } from "./strike";
 import { Tally } from "./tally";
 import { WalletStrip } from "./wallet-strip";
@@ -35,6 +44,16 @@ type Rows = Partial<Record<string, RowState>>;
 
 const POLL_MS = 15_000;
 const RETRY_MS = 5_000;
+
+/** Row 01, the one row meant to succeed, and the real buy the locked rows offer. */
+const FIRST_BUY = ATTACKS[0] as Attack;
+
+/** Where the page's one ask to bring the sale's price up to date has got to. */
+type PriceRefresh =
+  | { state: "idle" }
+  | { state: "running" }
+  | { state: "closed"; lastPublishedAt: number }
+  | { state: "failed"; reason: string };
 
 const UNREACHABLE =
   "This page could not reach its own server to read the sale. Check the connection, then press try again.";
@@ -63,6 +82,9 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   const [mode, setMode] = useState<Mode>("simulate");
   const [lamports, setLamports] = useState<number | null>(null);
   const [payingRaw, setPayingRaw] = useState<bigint | null>(null);
+  const [saleHeld, setSaleHeld] = useState<bigint | null>(null);
+  const [priceRefresh, setPriceRefresh] = useState<PriceRefresh>({ state: "idle" });
+  const [refreshAsked, setRefreshAsked] = useState(false);
 
   // Bumped after a transaction really lands, so the sale and the wallet are
   // read again. The reads themselves live in effects and only ever set state
@@ -81,6 +103,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     setRows((current) => stopRunning(current));
     setLamports(null);
     setPayingRaw(null);
+    setSaleHeld(null);
   }
 
   // Bumped on every change of wallet, so a run can tell after each await whether
@@ -101,6 +124,51 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   const ticket = useRef(0);
   const mounted = useRef(true);
   const retryTimer = useRef<number | null>(null);
+
+  // A stale price is refreshed once a page load, by the server, and after that
+  // only when the visitor presses try again. Never on a poll.
+  const refreshTried = useRef(false);
+
+  const refreshPrice = useCallback((mint: string) => {
+    setRefreshAsked(true);
+    setPriceRefresh({ state: "running" });
+    fetch("/api/price/refresh", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mint }),
+      cache: "no-store",
+    })
+      .then(async (answer) => {
+        const body = (await answer.json().catch(() => null)) as {
+          status?: string;
+          lastPublishedAt?: number;
+          reason?: string;
+        } | null;
+        if (!mounted.current) {
+          return;
+        }
+        if (body?.status === "closed" && typeof body.lastPublishedAt === "number") {
+          setPriceRefresh({ state: "closed", lastPublishedAt: body.lastPublishedAt });
+          return;
+        }
+        if (body?.status === "posted" || body?.status === "fresh" || body?.status === "limited") {
+          // Limited means another refresh ran moments ago, so reading the sale
+          // again is the answer to all three.
+          setPriceRefresh({ state: "idle" });
+          setReload((count) => count + 1);
+          return;
+        }
+        setPriceRefresh({
+          state: "failed",
+          reason: body?.reason ?? "The server could not bring the price up to date.",
+        });
+      })
+      .catch(() => {
+        if (mounted.current) {
+          setPriceRefresh({ state: "failed", reason: UNREACHABLE });
+        }
+      });
+  }, []);
 
   const readSale = useCallback((first: boolean) => {
     // Named inside, so the retry can call it again after five seconds.
@@ -152,6 +220,10 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
               return;
             }
             const next = targetFromWire(answer.target);
+            if (next.standingRefusal === "PriceStale" && !refreshTried.current) {
+              refreshTried.current = true;
+              refreshPrice(next.mint.toBase58());
+            }
             shown.current = next;
             setTarget(next);
             setReadFailure(null);
@@ -166,7 +238,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
         );
     };
     attempt(first);
-  }, []);
+  }, [refreshPrice]);
 
   const tryAgain = () => {
     setReading(true);
@@ -208,13 +280,15 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     Promise.all([
       connection.getBalance(publicKey, "confirmed"),
       payingHeld(connection, target, publicKey),
+      tokensHeld(connection, target.mint, publicKey),
     ]).then(
-      ([sol, paying]) => {
+      ([sol, paying, shares]) => {
         if (!alive) {
           return;
         }
         setLamports(sol);
         setPayingRaw(paying);
+        setSaleHeld(shares);
       },
       () => {
         // A missed read leaves the last real number on screen, never a guess.
@@ -229,7 +303,9 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     setRows((current) => ({ ...current, [attack.id]: state }));
   };
 
-  const run = async (attack: Attack) => {
+  // `how` lets the real first buy offered on rows 03, 06 and 09 send row 01
+  // whatever the toggle says.
+  const run = async (attack: Attack, how: Mode = mode) => {
     if (publicKey === null || target === null) {
       return;
     }
@@ -277,7 +353,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
         return;
       }
 
-      if (mode === "simulate") {
+      if (how === "simulate") {
         const result = await simulateAttack(connection, built);
         settle({ ...IDLE, ...promised, status: "done", result });
         return;
@@ -308,6 +384,13 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     } catch (error) {
       settle({ ...IDLE, status: "unavailable", message: messageOf(error) });
     }
+  };
+
+  const firstBuyState = rows[FIRST_BUY.id] ?? IDLE;
+  const firstBuy: FirstBuy = {
+    running: firstBuyState.status === "building" || firstBuyState.status === "waiting",
+    short: shortFor(FIRST_BUY, target, payingRaw),
+    blocked: target !== null && target.standingRefusal !== null && !target.offeringOver,
   };
 
   const counts = useMemo(() => {
@@ -390,6 +473,12 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
             reading={reading}
             failure={readFailure}
             onTryAgain={canRetry ? tryAgain : null}
+            priceRefresh={priceRefresh}
+            onRefreshAgain={
+              refreshAsked && target !== null
+                ? () => refreshPrice(target.mint.toBase58())
+                : null
+            }
           />
         </Reveal>
 
@@ -408,6 +497,9 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
                 ready={target !== null}
                 payingShort={shortFor(attack, target, payingRaw)}
                 onRun={() => void run(attack)}
+                realBuy={realBuyOffer(attack, target, saleHeld)}
+                firstBuy={firstBuy}
+                onRealBuy={() => void run(FIRST_BUY, "send")}
               />
             </Reveal>
           ))}
@@ -458,12 +550,17 @@ function SaleFacts({
   reading,
   failure,
   onTryAgain,
+  priceRefresh,
+  onRefreshAgain,
 }: {
   target: Target | null;
   reading: boolean;
   failure: string | null;
   /** Set when the read failed and asking again may help. */
   onTryAgain: (() => void) | null;
+  priceRefresh: PriceRefresh;
+  /** Set once the page has asked for a fresh price, so the visitor can ask once more. */
+  onRefreshAgain: (() => void) | null;
 }) {
   if (reading && target === null) {
     return (
@@ -543,12 +640,76 @@ function SaleFacts({
         ))}
       </dl>
 
-      {target.standingReason !== null && (
-        <p className="mt-7 max-w-[68ch] text-[14px] leading-relaxed text-muted">
-          {target.standingReason} <Tags names={[target.standingRefusal]} />
-        </p>
+      {target.standingRefusal === "PriceStale" ? (
+        <StalePrice
+          target={target}
+          priceRefresh={priceRefresh}
+          onRefreshAgain={onRefreshAgain}
+        />
+      ) : (
+        target.standingReason !== null && (
+          <p className="mt-7 max-w-[68ch] text-[14px] leading-relaxed text-muted">
+            {target.standingReason} <Tags names={[target.standingRefusal]} />
+          </p>
+        )
       )}
     </div>
+  );
+}
+
+/**
+ * The standing line while the sale's price is stale: the server bringing it up
+ * to date, a shut market, or why the update did not happen.
+ */
+function StalePrice({
+  target,
+  priceRefresh,
+  onRefreshAgain,
+}: {
+  target: Target;
+  priceRefresh: PriceRefresh;
+  onRefreshAgain: (() => void) | null;
+}) {
+  if (priceRefresh.state === "running") {
+    return (
+      <p
+        data-testid="break-price-refresh"
+        className="mt-7 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending"
+      >
+        <Spinner />
+        bringing Apple&rsquo;s price up to date on devnet
+      </p>
+    );
+  }
+
+  const sentence =
+    priceRefresh.state === "closed"
+      ? `Apple's market is closed and Pyth has no new price since ${utcMoment(
+          priceRefresh.lastPublishedAt * 1000
+        )}. Buys on this sale wait for the next session; selling back is never affected.`
+      : priceRefresh.state === "failed"
+        ? `${target.standingReason ?? ""} ${priceRefresh.reason}`.trim()
+        : target.standingReason;
+
+  return (
+    <p
+      data-testid="break-price-refresh"
+      className="mt-7 max-w-[68ch] text-[14px] leading-relaxed text-muted"
+    >
+      {sentence} <Tags names={[target.standingRefusal]} />
+      {onRefreshAgain !== null && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={onRefreshAgain}
+            className="whitespace-nowrap border-b border-line pb-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-ink transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          >
+            try again
+          </button>
+        </>
+      )}
+    </p>
   );
 }
 
@@ -619,6 +780,18 @@ function shortFor(attack: Attack, target: Target | null, payingRaw: bigint | nul
     return false;
   }
   return payingRaw < payingNeeded(attack, target);
+}
+
+/**
+ * True when this row should offer the real first buy: it needs shares from a
+ * buy that landed, and the wallet holds none. After the offering row 03 needs
+ * no first buy, since the cap is never read.
+ */
+function realBuyOffer(attack: Attack, target: Target | null, saleHeld: bigint | null): boolean {
+  if (target === null || saleHeld === null || saleHeld > 0n || !needsRealBuy(attack)) {
+    return false;
+  }
+  return !(attack.id === "second-buy" && target.offeringOver);
 }
 
 /** A thrown value as a sentence a visitor can act on. */

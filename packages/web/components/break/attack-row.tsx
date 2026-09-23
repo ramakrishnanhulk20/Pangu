@@ -3,7 +3,13 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import type { Attack, AttackResult, Expected, Target } from "@/lib/break";
-import { OFFERING_OVER_LINE, explorerTx, liftedByOffering, plainFailure } from "@/lib/break";
+import {
+  NEEDS_REAL_BUY,
+  OFFERING_OVER_LINE,
+  explorerTx,
+  liftedByOffering,
+  plainFailure,
+} from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
 
 import { Spinner, Strike } from "./strike";
@@ -42,6 +48,16 @@ export const IDLE: RowState = {
   shares: null,
   signature: null,
 };
+
+/** Row 01 as the rows that need shares see it, for the real buy they offer. */
+export interface FirstBuy {
+  /** Row 01 is being built, sent or read back right now. */
+  running: boolean;
+  /** The wallet holds less of the paying token than row 01 spends. */
+  short: boolean;
+  /** The sale refuses every buy right now, so a real buy would land only a refusal. */
+  blocked: boolean;
+}
 
 /** A run the wallet changed under before it finished. It says nothing about either wallet. */
 export const STOPPED: RowState = {
@@ -82,6 +98,9 @@ export function AttackRow({
   ready,
   payingShort,
   onRun,
+  realBuy,
+  firstBuy,
+  onRealBuy,
 }: {
   attack: Attack;
   target: Target | null;
@@ -92,6 +111,11 @@ export function AttackRow({
   /** True when this row spends more of the paying token than the wallet holds. */
   payingShort: boolean;
   onRun: () => void;
+  /** True when this row needs shares from a real buy and the wallet holds none. */
+  realBuy: boolean;
+  firstBuy: FirstBuy;
+  /** Sends row 01 for real, whatever the simulate toggle says. */
+  onRealBuy: () => void;
 }) {
   const still = useReducedMotion() === true;
   const expected = promiseOf(attack, state);
@@ -99,6 +123,8 @@ export function AttackRow({
   const running = state.status === "building" || state.status === "waiting";
   const exit = attack.kind === "pass" && attack.id === "sell-back";
   const lifted = target !== null && target.offeringOver && liftedByOffering(attack);
+  const gatedMessage = state.status === "unavailable" && state.message === NEEDS_REAL_BUY;
+  const offerRealBuy = connected && ready && !running && (realBuy || gatedMessage);
 
   // The list item is the Reveal around this row, so the row itself is a plain block.
   return (
@@ -164,6 +190,8 @@ export function AttackRow({
             </p>
           )}
 
+          {offerRealBuy && <RealBuyOffer firstBuy={firstBuy} onRealBuy={onRealBuy} />}
+
           <AnimatePresence initial={false}>
             {(state.status === "done" ||
               state.status === "unavailable" ||
@@ -189,7 +217,7 @@ export function AttackRow({
                     </p>
                   )}
 
-                  {state.status === "unavailable" && state.message !== null && (
+                  {state.status === "unavailable" && state.message !== null && !gatedMessage && (
                     <p className="max-w-[62ch] text-[14px] leading-relaxed text-muted">
                       {state.message}
                     </p>
@@ -234,7 +262,11 @@ export function AttackRow({
         </div>
 
         <div className="col-span-2 mt-6 sm:col-span-1 sm:mt-0 sm:pt-1">
-          {connected && ready ? (
+          {connected && ready && realBuy && !running ? (
+            <span className="block max-w-[14rem] font-mono text-[10px] uppercase leading-relaxed tracking-[0.16em] text-muted">
+              needs a real buy first
+            </span>
+          ) : connected && ready ? (
             <button
               type="button"
               onClick={onRun}
@@ -262,6 +294,60 @@ export function AttackRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * What a row that needs shares offers a wallet holding none: row 01, sent for
+ * real. Row 01 is the one row meant to go through, so asking the wallet to sign
+ * it keeps the page's promise never to ask for a signature on something meant
+ * to fail. Its pending, landed and failed states show on row 01 itself.
+ */
+function RealBuyOffer({ firstBuy, onRealBuy }: { firstBuy: FirstBuy; onRealBuy: () => void }) {
+  const still = useReducedMotion() === true;
+  const held = firstBuy.running || firstBuy.short || firstBuy.blocked;
+
+  return (
+    <motion.div
+      initial={still ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={still ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="mt-5 max-w-[62ch] border-l-2 border-accent/60 pl-4"
+    >
+      <p className="text-[14px] leading-relaxed">{NEEDS_REAL_BUY}</p>
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <button
+          type="button"
+          onClick={onRealBuy}
+          disabled={held}
+          className="group/buy inline-flex h-11 items-center gap-2.5 rounded-lg border border-accent bg-accent px-5 text-[13px] font-medium text-accent-ink transition-all duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        >
+          {firstBuy.running ? "buying for real" : "Buy under the cap for real"}
+          <span className="transition-transform duration-200 group-hover/buy:translate-x-0.5">
+            &rarr;
+          </span>
+        </button>
+        {firstBuy.running ? (
+          <span className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-pending">
+            <Spinner />
+            watch row 01
+          </span>
+        ) : firstBuy.blocked ? (
+          <span className="max-w-[36ch] text-[13px] leading-relaxed text-muted">
+            No buy can land on this sale right now, so this waits: see the line under the
+            sale&rsquo;s facts.
+          </span>
+        ) : firstBuy.short ? (
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+            get demo dollars above first
+          </span>
+        ) : (
+          <span className="max-w-[36ch] text-[13px] leading-relaxed text-muted">
+            Your wallet signs row 01 and it lands on devnet.
+          </span>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
@@ -368,6 +454,12 @@ function Verdict({
           <span className="text-muted">simulated, nothing was sent</span>
         )}
       </div>
+
+      {attack.id === "honest-buy" && seen && result.link === null && (
+        <p className="mt-3 text-[13px] leading-relaxed text-muted">
+          Simulated only, nothing landed. Rows 03, 06 and 09 need a real buy.
+        </p>
+      )}
     </div>
   );
 }

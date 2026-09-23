@@ -31,6 +31,21 @@ const NO_ANSWER =
 let held: { at: number; reading: TargetReading } | null = null;
 let missed: { at: number; reading: TargetReading } | null = null;
 let inFlight: Promise<TargetReading> | null = null;
+// Bumped when a reading is dropped on purpose, so a read already in flight from
+// before that moment answers its own callers but is never kept.
+let generation = 0;
+
+/**
+ * Drops the shared reading, so the next load reads the sale off devnet again.
+ * Called after a price refresh lands: the reading from before it still says the
+ * price is stale, and would for up to ten more seconds.
+ */
+export function forgetBreakTarget(): void {
+  generation += 1;
+  held = null;
+  missed = null;
+  inFlight = null;
+}
 
 async function readFresh(): Promise<TargetReading> {
   const candidates = openedSales().map((sale) => ({
@@ -69,6 +84,7 @@ export async function readBreakTarget(): Promise<TargetReading> {
     return inFlight;
   }
 
+  const startedIn = generation;
   const started = readFresh()
     .catch((error: unknown): TargetReading => {
       if (error instanceof PanguLayoutError) {
@@ -85,6 +101,9 @@ export async function readBreakTarget(): Promise<TargetReading> {
       return { target: null, failure: NO_ANSWER, unanswered: true, readAt: Date.now(), stale: false };
     })
     .then((reading) => {
+      if (startedIn !== generation) {
+        return reading;
+      }
       if (reading.unanswered || reading.stale) {
         missed = { at: Date.now(), reading };
       } else {
