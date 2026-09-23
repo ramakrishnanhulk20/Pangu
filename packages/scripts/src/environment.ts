@@ -49,8 +49,13 @@ export function rpcUrl(): string {
  * answers the eleventh with an error the web3.js client turns into a crash. A
  * launch or an attack run makes hundreds of calls, so the starts are spaced out
  * here rather than hoping the retries cover it.
+ *
+ * Measured on 22 September 2026: at 120 the endpoint started answering "429
+ * Connection rate limits exceeded" partway through a seeding run and kept
+ * answering it for minutes, which is its own separate limit on how many calls
+ * one address may hold open at once. Three a second clears both.
  */
-const REQUEST_GAP_MS = 120;
+const REQUEST_GAP_MS = 300;
 
 let inLine: Promise<void> = Promise.resolve();
 

@@ -69,12 +69,36 @@ address; pass that address to `launch --quote`.
 | `--quote` | `wsol` | The token buyers pay in: `wsol`, or the address of a mint with 6 to 9 decimals. Use the mint from `mint-dollars` for a dollar priced sale. |
 | `--threshold` | `0.1` | How much of the paying token the curve takes in before the sale graduates, in whole units of it. |
 | `--base-decimals` | `6` | Decimals of the sale token. Ask for 9 when a share is priced in dollars: more raw units per share is what lets the curve carry a three figure opening price. |
-| `--migration-percent` | `20` | The share of the supply carried to DAMM v2 at graduation, 10 to 40. The more kept back, the closer the opening price sits to the graduation price. |
+| `--migration-percent` | `20` | The share of the supply carried to DAMM v2 at graduation, 10 to 45. The more kept back, the closer the opening price sits to the graduation price, and the further up the curve a price ceiling bites. Meteora's own builder refuses 50. |
+| `--supply` | `1000000000` | How many shares the sale ever mints. A three figure opening price on a billion shares needs a raise in the hundreds of billions; twenty shares reach the same price on a few thousand. |
 
 A dollar priced sale with a band is the full set:
 
 ```bash
-npm run launch -- --mode open --band 500 --quote <dollar mint> --threshold 360000000000 --base-decimals 9 --migration-percent 40
+npm run launch -- --mode open --band 500 --quote <dollar mint> \
+  --supply 20 --threshold 3710 --base-decimals 9 --migration-percent 45
+```
+
+The opening price is not something a launch sets directly. Meteora works it out
+from the raise, the supply and the share kept back: threshold times migration
+share, over supply times the square of what is left to sell. Those four flags
+are how a sale is aimed at a price, and `launch` prints the price it will open
+at, the price it would end at, and how far up the curve the ceiling bites,
+before it sends anything.
+
+## What seed takes
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--mint` | the last sale opened | Which sale to seed. |
+| `--seed-to-share` | none | Buy until this percentage of the curve's shares have sold, in eight buys of different sizes. Left out, the run makes six buys of one size, which is what a sale priced in SOL wants. |
+
+A banded sale is seeded with a target, because what the demo needs is a place on
+the curve: sell enough of it and the price sits just under the ceiling, where
+the next honest buy is the one that breaks it.
+
+```bash
+npm run seed -- --seed-to-share 58
 ```
 
 ## Rebuilding the SDK

@@ -33,7 +33,14 @@ import {
   wholeNumber,
 } from "./arguments.js";
 import { send } from "./chain.js";
-import { demoCurve, openingPrice, type CurveShape } from "./curve.js";
+import {
+  DEFAULT_SUPPLY,
+  demoCurve,
+  graduationPrice,
+  openingPrice,
+  shareSoldAtPrice,
+  type CurveShape,
+} from "./curve.js";
 import {
   addressLink,
   devnet,
@@ -66,6 +73,7 @@ const FLAGS = [
   "threshold",
   "base-decimals",
   "migration-percent",
+  "supply",
   "credential",
   "schema",
 ];
@@ -86,6 +94,16 @@ const DEFAULT_THRESHOLD = 0.1;
  * closer the opening price sits to the graduation price.
  */
 const DEFAULT_MIGRATION_PERCENT = 20;
+
+/**
+ * The most of the supply a launch may keep back, as a percentage.
+ *
+ * Forty five is the flattest curve Meteora will build: at fifty its own
+ * `buildCurve` refuses the shape with "SafeMath: subtraction overflow". A flat
+ * curve is what lets a banded sale open near the stock price and still take
+ * most of its shares before the ceiling bites.
+ */
+const MAX_MIGRATION_PERCENT = 45;
 
 /**
  * The sale token's own decimals.
@@ -134,9 +152,10 @@ async function main(): Promise<void> {
     flags,
     "migration-percent",
     10,
-    40,
+    MAX_MIGRATION_PERCENT,
     DEFAULT_MIGRATION_PERCENT
   );
+  const supply = wholeNumber(flags, "supply", 1, 1e12, DEFAULT_SUPPLY);
   const quoteFlag = text(flags, "quote", "wsol");
   const name = text(
     flags,
@@ -159,6 +178,7 @@ async function main(): Promise<void> {
   const shape: CurveShape = {
     quoteDecimals,
     baseDecimals: baseDecimals as TokenDecimal,
+    supply,
     migrationPercent,
     threshold,
   };
@@ -174,7 +194,10 @@ async function main(): Promise<void> {
     `paying in: ${quoteMint.toBase58()}, ${quoteDecimals} decimals, ${threshold} of it to graduate`
   );
   console.log(
-    `curve    : ${baseDecimals} decimal shares, ${migrationPercent} percent kept back for DAMM v2, opening at ${openingPrice(shape)} of the paying token a share`
+    `curve    : ${supply} shares of ${baseDecimals} decimals, ${migrationPercent} percent kept back for DAMM v2`
+  );
+  console.log(
+    `price    : opens at ${openingPrice(shape)} of the paying token a share, ends at ${graduationPrice(shape)}`
   );
 
   if (bandBps > 0) {
@@ -186,6 +209,21 @@ async function main(): Promise<void> {
       console.log(
         `           ${feed.symbol} at ${refresh.price.toFixed(4)} dollars, published ${refresh.secondsOld} seconds ago, confidence ${refresh.confBps} basis points`
       );
+      const ceiling = refresh.price * (1 + bandBps / 10_000);
+      const bites = shareSoldAtPrice(shape, ceiling);
+      if (bites <= 0) {
+        console.log(
+          `           ceiling ${ceiling.toFixed(4)} dollars, under this curve's opening price, so every buy is refused until the stock rises`
+        );
+      } else if (bites > 1) {
+        console.log(
+          `           ceiling ${ceiling.toFixed(4)} dollars, which this curve never reaches: it ends at ${graduationPrice(shape)}`
+        );
+      } else {
+        console.log(
+          `           ceiling ${ceiling.toFixed(4)} dollars, reached once ${(bites * 100).toFixed(1)} percent of the curve's shares have sold`
+        );
+      }
       console.log(`           price account ${refresh.priceAccount.toBase58()}`);
       for (const link of refresh.links) {
         console.log(`           ${link}`);

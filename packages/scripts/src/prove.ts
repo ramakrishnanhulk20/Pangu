@@ -27,6 +27,7 @@ import {
 } from "@solana/spl-token";
 import {
   ACCESS_MODE,
+  DOLLAR_SCALE,
   TOKEN_2022_PROGRAM_ID,
   approveBuyerInstruction,
   curvePriceDollars,
@@ -58,7 +59,7 @@ import {
   summaryLine,
   type AttackReport,
 } from "./attack-table.js";
-import { buyWithin } from "./buying.js";
+import { buyWithin, sizedBuy } from "./buying.js";
 import { attempt, lastLogLine, refusal, send } from "./chain.js";
 import { addressLink, devnet, payerKeypair, requireDevnet, sol } from "./environment.js";
 import { chooseSale } from "./sales.js";
@@ -66,14 +67,18 @@ import {
   freshWallet,
   fundQuoteTokens,
   fundWallets,
+  repeatableWallet,
   returnLeftovers,
 } from "./wallets.js";
 
 /** Spare devnet SOL each attacking wallet gets on top of what it tries to spend. */
 const OVERHEAD_LAMPORTS = 12_000_000;
 
-/** How much more than the cap the one-shot over-cap buy reaches for. */
-const OVER_CAP_TRIES = [3n, 2n, 1n];
+/** How many times the over-cap buy may grow before it gives up. */
+const OVER_CAP_TRIES = 8;
+
+/** How much bigger each try is than the last: five percent. */
+const OVER_CAP_STEP = 21n;
 
 const connection: Connection = devnet();
 
@@ -143,27 +148,37 @@ async function mustPass(
   };
 }
 
-/** A buy larger than the cap allows, as large as this curve can still fill. */
+/**
+ * The smallest buy this run could build that still breaks the cap.
+ *
+ * Sized in sale tokens, not in multiples of what the cap is worth. On a banded
+ * sale those are two different attacks: a buy three times the cap's worth walks
+ * the curve far past the price ceiling, and the hook reads the band before the
+ * cap, so what came back was `PriceOutsideBand` and said nothing about the cap
+ * at all. Starting at the cap's own worth and growing five percent at a time
+ * keeps the attack about the cap.
+ *
+ * `start` is what the cap is worth at the curve's price right now, in the
+ * paying token.
+ */
 async function oversizedBuy(
   buyer: PublicKey,
   mint: PublicKey,
-  capWorth: bigint,
+  start: bigint,
   cap: bigint
 ): Promise<Transaction> {
-  for (const multiple of OVER_CAP_TRIES) {
+  let amountIn = start;
+  for (let tries = 0; tries < OVER_CAP_TRIES; tries += 1) {
     try {
-      const built = await buyTransaction({
-        connection,
-        buyer,
-        mint,
-        amountIn: capWorth * multiple,
-      });
+      const built = await buyTransaction({ connection, buyer, mint, amountIn });
       if (built.expectedAmountOut > cap) {
         return built.transaction;
       }
     } catch {
-      continue;
+      // The curve cannot fill a buy this size. Nothing larger will fit either.
+      break;
     }
+    amountIn = (amountIn * OVER_CAP_STEP) / 20n;
   }
   throw new Error("could not build a buy that passes the cap on this curve");
 }
@@ -171,6 +186,35 @@ async function oversizedBuy(
 async function tokenBalance(account: PublicKey): Promise<bigint> {
   const info = await connection.getAccountInfo(account, "confirmed");
   return info === null ? 0n : info.data.readBigUInt64LE(64);
+}
+
+/** What one seeded wallet still sells back, as a share of what it holds. */
+const SELL_SHARE = 4n;
+
+/** How far down the seeded wallets to look for one that can sell. */
+const SEEDED_WALLETS = 8;
+
+/**
+ * The first wallet `seed` bought with that is still holding something.
+ *
+ * The wallets are derived from the paying key and the mint the same way `seed`
+ * derives them, so no secret is stored anywhere and this run can sign for one
+ * of them. Returns null when nothing has been seeded.
+ */
+async function seedBuyerHolding(
+  issuer: Keypair,
+  mint: PublicKey
+): Promise<{ wallet: Keypair; held: bigint } | null> {
+  for (let index = 0; index < SEEDED_WALLETS; index += 1) {
+    const wallet = repeatableWallet(issuer, mint, "seed buyer", index);
+    const held = await tokenBalance(
+      getAssociatedTokenAddressSync(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID)
+    );
+    if (held > 0n) {
+      return { wallet, held };
+    }
+  }
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -203,13 +247,17 @@ async function main(): Promise<void> {
 
   const ceiling =
     price !== null && price.usable ? priceCeiling(sale, price.price) : null;
-  const curveNow = sale.hasBand
-    ? curvePriceDollars(
-        BigInt(view.poolAccount.poolState.sqrtPrice.toString()),
-        sale.baseDecimals,
-        sale.quoteDecimals
-      )
-    : null;
+  // Where the curve stands, in whole units of the paying token per share.
+  // Read through the paying mint's own decimals, the same number every amount
+  // below is scaled with. The sale's rules only carry the quote decimals when
+  // the sale has a band, and read 0 otherwise, which once turned the cap's
+  // worth on a SOL sale into millions of SOL.
+  const curvePrice = curvePriceDollars(
+    BigInt(view.poolAccount.poolState.sqrtPrice.toString()),
+    sale.baseDecimals,
+    quoteDecimals
+  );
+  const curveNow = sale.hasBand ? curvePrice : null;
   const aboveCeiling = ceiling !== null && curveNow !== null && curveNow > ceiling;
 
   // What a banded sale would refuse every buy with right now, or null when buys
@@ -261,6 +309,21 @@ async function main(): Promise<void> {
     1_000_000n;
   const smallBuy = capWorth / 5n > 0n ? capWorth / 5n : 1_000_000n;
 
+  // What a whole cap of tokens costs at the curve's price right now, which is
+  // where the over-cap attack starts from. Read off the pool rather than worked
+  // out from the threshold, because the two are only the same number at the
+  // very start of a curve.
+  const capWorthNow =
+    (sale.cap * curvePrice * 10n ** BigInt(quoteDecimals)) /
+    (DOLLAR_SCALE * 10n ** BigInt(sale.baseDecimals));
+  const overCapStart = capWorthNow > 0n ? capWorthNow : capWorth;
+
+  // The careless wallet makes one small buy that lands and then tries a buy
+  // worth the whole cap against the ceiling, so it has to hold both. Handed
+  // only the cap's worth, it came up short on 23 September 2026 and the token
+  // program refused the ceiling attack before Pangu ever saw it.
+  const carelessFunds = capWorth + smallBuy;
+
   const newcomer = freshWallet();
   const filler = freshWallet();
   const careless = freshWallet();
@@ -306,7 +369,7 @@ async function main(): Promise<void> {
         connection,
         issuer,
         [careless.publicKey],
-        Number(capWorth) + OVERHEAD_LAMPORTS
+        Number(carelessFunds) + OVERHEAD_LAMPORTS
       );
     } else {
       // The paying token is not SOL, so each wallet needs devnet SOL for the
@@ -326,7 +389,7 @@ async function main(): Promise<void> {
         [
           { wallet: newcomer.publicKey, amount: smallBuy },
           { wallet: filler.publicKey, amount: capWorth * 5n },
-          { wallet: careless.publicKey, amount: capWorth },
+          { wallet: careless.publicKey, amount: carelessFunds },
         ]
       );
     }
@@ -397,7 +460,7 @@ async function main(): Promise<void> {
         "buy past the cap in one go",
         "C3",
         bandRefusal ?? "OverCap",
-        await oversizedBuy(filler.publicKey, mint, capWorth, sale.cap),
+        await oversizedBuy(filler.publicKey, mint, overCapStart, sale.cap),
         [filler]
       )
     );
@@ -427,12 +490,17 @@ async function main(): Promise<void> {
         : `the sale's price cannot be used right now (${bandRefusal}), so no buy can land to set this up`;
 
     if (canBuy) {
-      const toTheCap = await buyWithin(
+      // Aimed straight at the cap rather than searched for. A search reads
+      // every failed quote as "that size does not fit", and on a node that is
+      // rate limiting it walks itself down to a fraction of the cap, which
+      // would leave the two attacks below buying inside the cap instead of
+      // crossing it.
+      const toTheCap = await sizedBuy(
         connection,
         filler.publicKey,
         mint,
-        capWorth * 2n,
-        sale.cap
+        sale,
+        sale.cap - sale.cap / 50n
       );
       await send(connection, "filling one wallet to its cap", toTheCap.transaction, [filler]);
       const held = await getBuyerRecord(connection, mint, filler.publicKey);
@@ -620,7 +688,38 @@ async function main(): Promise<void> {
     );
 
     const fillerHolds = await tokenBalance(fillerAta);
-    if (listMode && fillerHolds > 0n) {
+    if (!listMode) {
+      // Open access has no approval to revoke, so the exit is proven the other
+      // way round: one of the wallets that seeded this sale sells part of what
+      // it holds. The hook has to let that through. A sale nobody can leave is
+      // not a sale, and it is the same invariant either way.
+      const seller = await seedBuyerHolding(issuer, mint);
+      if (seller === null) {
+        reports.push(
+          skipped(
+            "a seeded buyer sells part of it back to the pool",
+            "C5",
+            "it goes through",
+            "no seeded wallet is holding anything to sell"
+          )
+        );
+      } else {
+        const exit = await sellTransaction({
+          connection,
+          seller: seller.wallet.publicKey,
+          mint,
+          amountIn: seller.held / SELL_SHARE,
+        });
+        reports.push(
+          await mustPass(
+            "a seeded buyer sells part of it back to the pool",
+            "C5",
+            exit.transaction,
+            [seller.wallet]
+          )
+        );
+      }
+    } else if (fillerHolds > 0n) {
       await send(
         connection,
         "revoking the approval of a wallet that already holds",
@@ -637,7 +736,7 @@ async function main(): Promise<void> {
         connection,
         seller: filler.publicKey,
         mint,
-        amountIn: fillerHolds / 4n,
+        amountIn: fillerHolds / SELL_SHARE,
       });
       reports.push(
         await mustPass("a revoked wallet sells back to the pool", "C5", exit.transaction, [
@@ -646,12 +745,7 @@ async function main(): Promise<void> {
       );
     } else {
       reports.push(
-        skipped(
-          "a revoked wallet sells back to the pool",
-          "C5",
-          "it goes through",
-          listMode ? shut : "nothing to revoke: this sale has open access"
-        )
+        skipped("a revoked wallet sells back to the pool", "C5", "it goes through", shut)
       );
     }
 
