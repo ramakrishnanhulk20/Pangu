@@ -1,0 +1,3 @@
+1440px: 0 console errors
+375px: 0 console errors
+total: 0

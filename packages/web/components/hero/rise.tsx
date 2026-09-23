@@ -1,7 +1,29 @@
-"use client";
+import type { CSSProperties, ReactNode } from "react";
 
-import { motion, useReducedMotion } from "framer-motion";
-import type { ReactNode } from "react";
+// A CSS animation rather than a script-driven one, so the hero's words are in
+// the first HTML, visible and already rising before any JavaScript has loaded.
+// React hoists this one style block into the head once, however many times it
+// renders. Anyone who asked for still gets the words where they rest.
+const RISE_CSS = `
+@keyframes pangu-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--rise-distance, 24px), 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pangu-rise {
+  animation: pangu-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) var(--rise-delay, 0s) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pangu-rise {
+    animation: none;
+  }
+}
+`;
 
 /** Enters by rising and fading, once, on load. Still for anyone who asked for still. */
 export function Rise({
@@ -15,23 +37,19 @@ export function Rise({
   delay?: number;
   distance?: number;
 }) {
-  const still = useReducedMotion() === true;
+  const timing = {
+    "--rise-delay": `${delay}s`,
+    "--rise-distance": `${distance}px`,
+  } as CSSProperties;
 
   return (
-    <motion.div
-      className={className}
-      initial={still ? false : { opacity: 0, y: distance }}
-      // The animate target is set in both cases on purpose. The reduced-motion
-      // answer only arrives after the first render, so an element that already
-      // rendered hidden has to be told to be visible.
-      animate={{ opacity: 1, y: 0 }}
-      transition={
-        still
-          ? { duration: 0 }
-          : { duration: 0.85, delay, ease: [0.22, 1, 0.36, 1] }
-      }
-    >
-      {children}
-    </motion.div>
+    <>
+      <style href="pangu-rise" precedence="default">
+        {RISE_CSS}
+      </style>
+      <div className={className === undefined ? "pangu-rise" : `pangu-rise ${className}`} style={timing}>
+        {children}
+      </div>
+    </>
   );
 }

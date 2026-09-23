@@ -1,0 +1,4 @@
+DEVNET_RPC_URL host: api.devnet.solana.com (public node, reads paced 140 ms apart) | NEXT_PUBLIC_DEVNET_RPC_URL: unset
+cold load, nothing held on the server: ledger facts shown 3593 ms after navigation started; console errors on /: 0
+load after the shared reading expired, server reads devnet again: ledger facts shown 3393 ms after navigation started; console errors on /: 0
+load inside the shared reading: ledger facts shown 901 ms after navigation started; console errors on /: 0

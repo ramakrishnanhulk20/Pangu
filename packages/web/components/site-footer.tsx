@@ -36,7 +36,7 @@ export function SiteFooter() {
             Pangu
           </Link>
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
-            Built on Meteora DBC, price by Pyth
+            Built on Meteora&rsquo;s Dynamic Bonding Curve, price by Pyth
           </p>
         </div>
 

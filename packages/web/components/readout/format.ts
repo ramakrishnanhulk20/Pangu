@@ -66,6 +66,21 @@ export function shares(value: number): string {
   });
 }
 
+/** Below this, one share's price is mostly zeros, so it is quoted per 1,000 shares. */
+const TINY_PRICE = 0.0001;
+
+/** True when a price per share is too small to read, and reads per 1,000 shares instead. */
+export function perThousand(price: number): boolean {
+  return price > 0 && price < TINY_PRICE;
+}
+
+/** What shares cost, with the unit said: "a share", or "per 1,000 shares" for a tiny price. */
+export function sharePrice(price: number, unit: Money): string {
+  return perThousand(price)
+    ? `${money(price * 1_000, unit)} per 1,000 shares`
+    : `${money(price, unit)} a share`;
+}
+
 /** A share of something as a percentage, shown as it is: past 100 is past 100. */
 export function percent(share: number): string {
   return `${(share * 100).toFixed(1)}%`;

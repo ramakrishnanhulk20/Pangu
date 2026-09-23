@@ -1,0 +1,16 @@
+== without x2 in the starting values (dev server) ==
+1440px: 4 console errors
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+375px: 4 console errors
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+  Error: <line> attribute x2: Expected length, "undefined".
+total: 8
+== with x2: LEFT in the starting values (same dev server) ==
+1440px: 0 console errors
+375px: 0 console errors
+total: 0

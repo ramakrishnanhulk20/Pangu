@@ -1,0 +1,3 @@
+failure shown: "This page could not reach its own server to read the sale. Check the connection, then press try again. This ledger also tries once more by itself in 5 seconds."
+try again button: 1
+facts shown 7867 ms after the failure, after 2 reads

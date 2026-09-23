@@ -51,20 +51,28 @@ export function Spinner() {
   );
 }
 
-/** Enters by rising and fading when it first comes into view, once. */
+/**
+ * Enters by rising and fading when it first comes into view, once.
+ *
+ * `as="li"` makes it the list item itself, so a list built from reveals still
+ * has only list items as its children.
+ */
 export function Reveal({
   children,
   className,
   delay = 0,
+  as = "div",
 }: {
   children: React.ReactNode;
   className?: string;
   delay?: number;
+  as?: "div" | "li";
 }) {
   const still = useReducedMotion() === true;
+  const Element = as === "li" ? motion.li : motion.div;
 
   return (
-    <motion.div
+    <Element
       className={className}
       initial={still ? false : { opacity: 0, y: 26 }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -72,6 +80,6 @@ export function Reveal({
       transition={still ? { duration: 0 } : { duration: 0.8, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
-    </motion.div>
+    </Element>
   );
 }

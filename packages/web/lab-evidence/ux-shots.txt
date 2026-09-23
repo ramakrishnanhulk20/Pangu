@@ -1,0 +1,8 @@
+readout headline at 1440: 2 lines
+/no-such-page at 1440: HTTP 404
+/no-such-page at 375: HTTP 404
+/docs/no-such-page at 1440: HTTP 404
+/docs/no-such-page at 375: HTTP 404
+diagram at 375: frame 343px, drawing 309px, sideways scroll false
+diagram dialog open: true; viewport meta: width=device-width, initial-scale=1
+hero title with scripts off, 1.5 s after load: opacity 1

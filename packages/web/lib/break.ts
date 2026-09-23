@@ -108,8 +108,13 @@ async function pacedFetch(input: RequestInfo | URL, init?: RequestInit): Promise
   return response;
 }
 
-/** A devnet connection that paces itself, for the attack ledger and its proof. */
-export function breakConnection(): Connection {
+/**
+ * A devnet connection that paces itself, for the attack ledger and its proof.
+ *
+ * The browser's copy talks to the public endpoint. The server's reading of the
+ * sale passes its own keyed endpoint instead, which never reaches a browser.
+ */
+export function breakConnection(endpoint: string = devnetRpcUrl()): Connection {
   // web3.js types its fetch option against its own bundled fetch declaration,
   // which the platform's own fetch does not line up with by name. The call
   // shape is the same one, so it is handed over as the config wants it.
@@ -117,7 +122,7 @@ export function breakConnection(): Connection {
     commitment: "confirmed",
     fetch: pacedFetch,
   } as unknown as ConnectionConfig;
-  return new Connection(devnetRpcUrl(), config);
+  return new Connection(endpoint, config);
 }
 
 export type AttackId =
@@ -137,9 +142,15 @@ export interface Attack {
   /** Poster numbering, in the order a visitor is walked through them. */
   index: string;
   title: string;
-  /** The threat model line this exercises, and a few words of what it means. */
+  /**
+   * The rule tag from the threat model, shown small beside the program's own
+   * error name, never inside a sentence.
+   */
   invariant: string;
+  /** A few words of what the rule means. */
   gloss: string;
+  /** What the program does with this, in plain words: the reason after "refuses this:" or "lets this through:". */
+  plain: string;
   /** The program's own error name, or the one row that has to go through. */
   promise: PanguErrorName | "it goes through";
   kind: "refuse" | "pass";
@@ -152,7 +163,8 @@ export interface Attack {
 }
 
 const FEE = "0.000005 SOL in fees";
-const FEE_AND_RENT = "0.000005 SOL in fees, and about 0.002 SOL of rent for the account it opens";
+const FEE_AND_DEPOSIT =
+  "0.000005 SOL in fees, and about 0.002 SOL as a small deposit the network keeps for the account it opens";
 
 export const ATTACKS: readonly Attack[] = [
   {
@@ -161,6 +173,7 @@ export const ATTACKS: readonly Attack[] = [
     title: "Buy under the cap, the way a buyer would",
     invariant: "C3",
     gloss: "under the cap, buying works",
+    plain: "a buy under the cap is an ordinary buy",
     promise: "it goes through",
     kind: "pass",
     cost: FEE,
@@ -172,7 +185,8 @@ export const ATTACKS: readonly Attack[] = [
     index: "02",
     title: "Take more than the cap in one go",
     invariant: "C3",
-    gloss: "one wallet, one share, always",
+    gloss: "one wallet, one cap, always",
+    plain: "no wallet may take more than the cap",
     promise: "OverCap",
     kind: "refuse",
     cost: FEE,
@@ -185,6 +199,7 @@ export const ATTACKS: readonly Attack[] = [
     title: "Buy again, and cross the cap on the second try",
     invariant: "C3",
     gloss: "the counter remembers every buy",
+    plain: "the cap counts every buy the wallet has made, not only this one",
     promise: "OverCap",
     kind: "refuse",
     cost: FEE,
@@ -194,12 +209,13 @@ export const ATTACKS: readonly Attack[] = [
   {
     id: "second-account",
     index: "04",
-    title: "Buy into a second token account of the same wallet",
+    title: "Buy into another of the wallet's holding accounts",
     invariant: "C3",
     gloss: "counted per wallet, not per account",
+    plain: "the cap counts the wallet, not each holding account it opens",
     promise: "OverCap",
     kind: "refuse",
-    cost: FEE_AND_RENT,
+    cost: FEE_AND_DEPOSIT,
     needsTokens: false,
     needsPayingToken: true,
   },
@@ -209,9 +225,10 @@ export const ATTACKS: readonly Attack[] = [
     title: "Buy into an account whose owner can still change",
     invariant: "C13",
     gloss: "no handing the whole account on",
+    plain: "tokens never land in an account that could be handed to someone else",
     promise: "ReceivingAccountOwnerCanChange",
     kind: "refuse",
-    cost: FEE_AND_RENT,
+    cost: FEE_AND_DEPOSIT,
     needsTokens: false,
     needsPayingToken: true,
   },
@@ -221,9 +238,10 @@ export const ATTACKS: readonly Attack[] = [
     title: "Send tokens straight to another wallet",
     invariant: "C4",
     gloss: "no side market during the sale",
+    plain: "tokens cannot move from one wallet to another while the sale runs",
     promise: "WalletToWalletDuringSale",
     kind: "refuse",
-    cost: FEE_AND_RENT,
+    cost: FEE_AND_DEPOSIT,
     needsTokens: true,
     needsPayingToken: false,
   },
@@ -233,6 +251,7 @@ export const ATTACKS: readonly Attack[] = [
     title: "Call the rules program on its own, with no transfer",
     invariant: "C1",
     gloss: "no transfer, no counter change",
+    plain: "the rules only act inside a real transfer, so calling them alone changes nothing",
     promise: "NotTransferring",
     kind: "refuse",
     cost: FEE,
@@ -242,9 +261,10 @@ export const ATTACKS: readonly Attack[] = [
   {
     id: "above-ceiling",
     index: "08",
-    title: "Buy above the price ceiling the band sets",
+    title: "Buy above the price ceiling",
     invariant: "C9",
     gloss: "never far above the real stock",
+    plain: "no buy may push the price past the price ceiling",
     promise: "PriceOutsideBand",
     kind: "refuse",
     cost: FEE,
@@ -257,6 +277,7 @@ export const ATTACKS: readonly Attack[] = [
     title: "Sell back to the pool",
     invariant: "C5",
     gloss: "the exit is always open",
+    plain: "selling back to the pool is always allowed",
     promise: "it goes through",
     kind: "pass",
     cost: `sells a fifth of what you hold back to the pool, and ${FEE}`,
@@ -330,14 +351,20 @@ export async function readTarget(
   connection: Connection,
   candidates: readonly SaleCandidate[]
 ): Promise<Target | null> {
-  const running: { candidate: SaleCandidate; sale: Sale }[] = [];
-  for (const candidate of [...candidates].reverse()) {
-    const mint = new PublicKey(candidate.mint);
-    const sale = await getSale(connection, mint);
-    if (sale !== null && (await isSaleRunning(connection, mint))) {
-      running.push({ candidate, sale });
-    }
-  }
+  // Asked side by side: a paced connection still sends them one at a time, and
+  // an unpaced one answers in the time of the slowest.
+  const checked = await Promise.all(
+    [...candidates].reverse().map(async (candidate) => {
+      const mint = new PublicKey(candidate.mint);
+      const sale = await getSale(connection, mint);
+      return sale !== null && (await isSaleRunning(connection, mint))
+        ? { candidate, sale }
+        : null;
+    })
+  );
+  const running = checked.filter(
+    (entry): entry is { candidate: SaleCandidate; sale: Sale } => entry !== null
+  );
   if (running.length === 0) {
     return null;
   }
@@ -356,12 +383,19 @@ async function readSale(
   sale: Sale
 ): Promise<Target> {
   const mint = new PublicKey(candidate.mint);
-  const view = await loadPool(connection, mint);
-  const quote = await getMint(connection, view.quoteMint, "confirmed", view.quoteProgram);
-  const baseDecimals =
+  const [view, price, records] = await Promise.all([
+    loadPool(connection, mint),
+    sale.hasBand ? readPrice(connection, sale) : Promise.resolve(null),
+    listBuyerRecords(connection, mint),
+  ]);
+  const [quote, baseDecimals] = await Promise.all([
+    getMint(connection, view.quoteMint, "confirmed", view.quoteProgram),
     sale.baseDecimals !== 0
-      ? sale.baseDecimals
-      : (await getMint(connection, mint, "confirmed", TOKEN_2022_PROGRAM_ID)).decimals;
+      ? Promise.resolve(sale.baseDecimals)
+      : getMint(connection, mint, "confirmed", TOKEN_2022_PROGRAM_ID).then(
+          (state) => state.decimals
+        ),
+  ]);
   const quoteDecimals = sale.quoteDecimals !== 0 ? sale.quoteDecimals : quote.decimals;
 
   const sqrtPrice = BigInt(view.poolAccount.poolState.sqrtPrice.toString());
@@ -372,19 +406,18 @@ async function readSale(
   let standingRefusal: PanguErrorName | null = null;
   let standingReason: string | null = null;
 
-  if (sale.hasBand) {
-    const price = await readPrice(connection, sale);
+  if (price !== null) {
     stockDollars = price.priceDollars;
     if (!price.usable) {
       standingRefusal = price.error ?? "PriceStale";
       standingReason =
-        "There is no usable stock price right now, and a banded sale refuses every buy until there is. Selling back is never touched by it.";
+        "There is no usable stock price right now, and a sale with a price ceiling refuses every buy until there is. Selling back is never touched by it.";
     } else {
       ceiling = priceCeiling(sale, price.price);
       if (curve > ceiling) {
         standingRefusal = "PriceOutsideBand";
         standingReason =
-          "This sale's curve already stands above the ceiling the band sets, so the chain refuses every buy with PriceOutsideBand before the cap is ever reached.";
+          "This sale's curve already stands above the price ceiling, so the program refuses every buy for its price before the cap is ever reached.";
       }
     }
   }
@@ -394,7 +427,7 @@ async function readSale(
       "This sale runs on the issuer's approved list and your wallet is not on it, so a buy is refused before the cap is reached.";
   }
 
-  const standing = saleStanding(sale, await listBuyerRecords(connection, mint));
+  const standing = saleStanding(sale, records);
 
   return {
     mint,
@@ -419,6 +452,109 @@ async function readSale(
     totalNetBought: standing.totalNetBought,
     buyers: standing.buyers,
   };
+}
+
+/**
+ * A Target as JSON carries it: addresses as text, raw amounts as decimal
+ * strings, because JSON has no bigint. The server reads the sale once for
+ * every visitor and hands it over in this shape.
+ */
+export interface TargetWire {
+  mint: string;
+  name: string;
+  symbol: string;
+  sale: SaleWire;
+  cap: string;
+  baseDecimals: number;
+  quoteMint: string;
+  quoteDecimals: number;
+  quoteProgram: string;
+  payingInSol: boolean;
+  capWorth: string;
+  openAccess: boolean;
+  curveDollars: number;
+  stockDollars: number | null;
+  ceilingDollars: number | null;
+  standingRefusal: PanguErrorName | null;
+  standingReason: string | null;
+  largestShare: number;
+  capShare: number;
+  totalNetBought: string;
+  buyers: number;
+}
+
+type SaleKey = "mint" | "pool" | "baseVault" | "issuer" | "credential" | "schema" | "priceAccount";
+
+type SaleWire = Omit<Sale, SaleKey | "cap" | "totalNetBought" | "reserved"> &
+  Record<SaleKey, string> & { cap: string; totalNetBought: string; reserved: number[] };
+
+const SALE_KEYS: readonly SaleKey[] = [
+  "mint",
+  "pool",
+  "baseVault",
+  "issuer",
+  "credential",
+  "schema",
+  "priceAccount",
+];
+
+export function targetToWire(target: Target): TargetWire {
+  const { sale } = target;
+  const keys = Object.fromEntries(
+    SALE_KEYS.map((key) => [key, sale[key].toBase58()])
+  ) as Record<SaleKey, string>;
+  return {
+    ...target,
+    mint: target.mint.toBase58(),
+    sale: {
+      ...sale,
+      ...keys,
+      cap: sale.cap.toString(),
+      totalNetBought: sale.totalNetBought.toString(),
+      reserved: Array.from(sale.reserved),
+    },
+    cap: target.cap.toString(),
+    quoteMint: target.quoteMint.toBase58(),
+    quoteProgram: target.quoteProgram.toBase58(),
+    capWorth: target.capWorth.toString(),
+    totalNetBought: target.totalNetBought.toString(),
+  };
+}
+
+export function targetFromWire(wire: TargetWire): Target {
+  const { sale } = wire;
+  const keys = Object.fromEntries(
+    SALE_KEYS.map((key) => [key, new PublicKey(sale[key])])
+  ) as Record<SaleKey, PublicKey>;
+  return {
+    ...wire,
+    mint: new PublicKey(wire.mint),
+    sale: {
+      ...sale,
+      ...keys,
+      cap: BigInt(sale.cap),
+      totalNetBought: BigInt(sale.totalNetBought),
+      reserved: Uint8Array.from(sale.reserved),
+    },
+    cap: BigInt(wire.cap),
+    quoteMint: new PublicKey(wire.quoteMint),
+    quoteProgram: new PublicKey(wire.quoteProgram),
+    capWorth: BigInt(wire.capWorth),
+    totalNetBought: BigInt(wire.totalNetBought),
+  };
+}
+
+/** What GET /api/break/sale answers: the sale the ledger runs against, or why there is none. */
+export interface TargetReading {
+  target: TargetWire | null;
+  /** A sentence for the visitor when there is no target, naming what to do next. */
+  failure: string | null;
+  /** True when devnet did not answer, which trying again may fix. */
+  unanswered: boolean;
+  /** Unix milliseconds this reading was taken. */
+  readAt: number;
+  /** True when devnet missed the latest read and this is the last one it answered. */
+  stale: boolean;
 }
 
 /** What the program will answer one row with, and why when that is not the rule the row is about. */
@@ -544,8 +680,8 @@ function answerOf(
       name: "PriceOutsideBand",
       why:
         `A buy of ${sharesText(shares, target.baseDecimals)} shares would leave the curve at ` +
-        `$${dollars(reading.curvePrice).toFixed(2)}, past the band's ceiling of ` +
-        `$${dollars(reading.ceiling).toFixed(2)}. The program judges the band before the cap, ` +
+        `$${dollars(reading.curvePrice).toFixed(2)}, past the price ceiling of ` +
+        `$${dollars(reading.ceiling).toFixed(2)}. The program checks the price ceiling before the cap, ` +
         "so this buy is refused for its price.",
     };
   }
@@ -563,7 +699,7 @@ function sharesText(raw: bigint, decimals: number): string {
 /** A transaction ready to simulate or to send, and anything else that signs it. */
 export interface BuiltAttack {
   transaction: Transaction;
-  /** A token account the attack opens for itself signs for its own creation. */
+  /** A holding account the attack opens for itself signs for its own creation. */
   signers: Keypair[];
   /** What the program will answer this exact transaction with. */
   expected: Expected;
@@ -586,7 +722,7 @@ export async function heldIn(
 ): Promise<bigint> {
   const account = getAssociatedTokenAddressSync(mint, wallet, false, program);
   const info = await connection.getAccountInfo(account, "confirmed");
-  // The amount sits at byte 64 of every token account, in both token programs.
+  // The amount sits at byte 64 of every holding account, in both token programs.
   return info === null ? 0n : info.data.readBigUInt64LE(64);
 }
 
@@ -999,7 +1135,7 @@ async function aboveCeilingShares(context: BuildContext): Promise<bigint | null>
 class CannotCross extends Error {
   constructor() {
     super(
-      "no buy this curve can fill pushes it past the band's ceiling right now, so there is no ceiling to cross"
+      "no buy this curve can fill pushes it past the price ceiling right now, so there is no ceiling to cross"
     );
     this.name = "CannotCross";
   }
@@ -1058,7 +1194,7 @@ async function secondTokenAccount(
     "confirmed",
     TOKEN_2022_PROGRAM_ID
   );
-  // A token account carries the account side of every extension its mint has,
+  // A holding account carries the account side of every extension its mint has,
   // read off the mint rather than listed here.
   const required = getExtensionTypes(state.tlvData).map(getAccountTypeOfMintType);
   const space = getAccountLen(
@@ -1090,7 +1226,7 @@ async function secondTokenAccount(
 }
 
 /**
- * Points a built buy at another token account of the same wallet.
+ * Points a built buy at another holding account of the same wallet.
  *
  * Only the Meteora swap is touched, and only where it names the account the
  * tokens land in. The hook's own accounts are rebuilt on chain from whatever
@@ -1166,7 +1302,7 @@ export async function buildAttack(
     if (sized.tight && built.expected.name === "PriceOutsideBand") {
       built.expected = {
         name: "PriceOutsideBand",
-        why: "The curve sits at the ceiling right now, so even this small buy would cross it; the program refuses it, which is the band doing its job.",
+        why: "The curve sits at the ceiling right now, so even this small buy would cross it; the program refuses it, which is the price ceiling doing its job.",
       };
     }
     return built;
@@ -1293,7 +1429,7 @@ export async function buildAttack(
 
   if (id === "above-ceiling") {
     if (!target.sale.hasBand) {
-      throw new Error("this sale has no price band, so there is no ceiling to buy above");
+      throw new Error("this sale has no price ceiling, so there is nothing to buy above");
     }
     const shares = await aboveCeilingShares(context);
     // With no usable price every buy meets the price refusal first, whatever

@@ -1,0 +1,2 @@
+1440px: heading block ends 443, cap line 483 to 486, facts start 549: clear of text
+375px: heading block ends 641, cap line 673 to 676, facts start 731: clear of text

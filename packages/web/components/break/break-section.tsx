@@ -1,7 +1,7 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ATTACKS,
@@ -10,24 +10,31 @@ import {
   payingHeld,
   payingNeeded,
   readLanded,
-  readTarget,
   simulateAttack,
+  targetFromWire,
   type Attack,
   type AttackId,
   type AttackResult,
-  type SaleCandidate,
+
   type Target,
+  type TargetReading,
 } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
 
-import { AttackRow, IDLE, STOPPED, asExpected, type RowState } from "./attack-row";
-import { Reveal } from "./strike";
+import { AttackRow, IDLE, STOPPED, Tags, asExpected, type RowState } from "./attack-row";
+import { Reveal, Spinner } from "./strike";
 import { Tally } from "./tally";
 import { WalletStrip } from "./wallet-strip";
 
 type Mode = "simulate" | "send";
 
 type Rows = Partial<Record<string, RowState>>;
+
+const POLL_MS = 15_000;
+const RETRY_MS = 5_000;
+
+const UNREACHABLE =
+  "This page could not reach its own server to read the sale. Check the connection, then press try again.";
 
 /**
  * The whole "Try to break it" ledger.
@@ -37,15 +44,10 @@ type Rows = Partial<Record<string, RowState>>;
  * sign something meant to fail; sending for real is a deliberate switch, and it
  * is what leaves a refusal on chain with a signature anybody can open.
  */
-export function BreakSection({
-  sales,
-  id = "try-to-break-it",
-}: {
-  sales: SaleCandidate[];
-  id?: string;
-}) {
+export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
   // Its own paced connection, not the wallet adapter's: building nine attacks
   // reads a hundred accounts and the public devnet node rate limits bursts.
+  // Only a connected wallet's own work goes through it.
   const connection = useMemo(() => breakConnection(), []);
   const { connection: walletConnection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
@@ -53,6 +55,7 @@ export function BreakSection({
   const [target, setTarget] = useState<Target | null>(null);
   const [reading, setReading] = useState(true);
   const [readFailure, setReadFailure] = useState<string | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
   const [rows, setRows] = useState<Rows>({});
   const [mode, setMode] = useState<Mode>("simulate");
   const [lamports, setLamports] = useState<number | null>(null);
@@ -87,40 +90,112 @@ export function BreakSection({
 
   // The latest run of each row. An older run finishing late never overwrites it.
   const latestRun = useRef(new Map<AttackId, number>());
-  // The list of sales comes from the server and does not change while the page
-  // is open, so it is taken once. Reading it every render would restart the
-  // chain read on every keystroke of state above.
-  const [candidates] = useState(sales);
+
+  // The sale on screen, beside the state, so a failed read can tell whether
+  // there are real facts to keep. Every read takes a ticket and only the
+  // newest may change the screen.
+  const shown = useRef<Target | null>(null);
+  const ticket = useRef(0);
+  const mounted = useRef(true);
+  const retryTimer = useRef<number | null>(null);
+
+  const readSale = useCallback((first: boolean) => {
+    // Named inside, so the retry can call it again after five seconds.
+    const attempt = (automatic: boolean) => {
+      ticket.current += 1;
+      const mine = ticket.current;
+      const newest = () => mounted.current && ticket.current === mine;
+      if (retryTimer.current !== null) {
+        window.clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+
+      const failed = (sentence: string, retryable: boolean) => {
+        setReading(false);
+        // A missed poll leaves the facts already on screen where they are.
+        if (retryable && shown.current !== null) {
+          return;
+        }
+        if (!retryable) {
+          shown.current = null;
+          setTarget(null);
+        }
+        setCanRetry(true);
+        if (retryable && !automatic) {
+          setReadFailure(`${sentence} This ledger also tries once more by itself in 5 seconds.`);
+          retryTimer.current = window.setTimeout(() => {
+            retryTimer.current = null;
+            attempt(true);
+          }, RETRY_MS);
+          return;
+        }
+        setReadFailure(sentence);
+      };
+
+      fetch("/api/break/sale", { cache: "no-store" })
+        .then(async (answer) => {
+          if (!answer.ok) {
+            throw new Error(`the server answered ${answer.status}`);
+          }
+          return (await answer.json()) as TargetReading;
+        })
+        .then(
+          (answer) => {
+            if (!newest()) {
+              return;
+            }
+            if (answer.target === null) {
+              failed(answer.failure ?? UNREACHABLE, answer.unanswered);
+              return;
+            }
+            const next = targetFromWire(answer.target);
+            shown.current = next;
+            setTarget(next);
+            setReadFailure(null);
+            setCanRetry(false);
+            setReading(false);
+          },
+          () => {
+            if (newest()) {
+              failed(UNREACHABLE, true);
+            }
+          }
+        );
+    };
+    attempt(first);
+  }, []);
+
+  const tryAgain = () => {
+    setReading(true);
+    setReadFailure(null);
+    setCanRetry(false);
+    readSale(false);
+  };
 
   useEffect(() => {
-    let alive = true;
-    readTarget(connection, candidates).then(
-      (found) => {
-        if (!alive) {
-          return;
-        }
-        setTarget(found);
-        setReadFailure(
-          found === null
-            ? "No Pangu sale is running on devnet right now, so there are no rules left to attack. A sale that has graduated has had its hook removed by Meteora, which is the design."
-            : null
-        );
-        setReading(false);
-      },
-      (error: unknown) => {
-        if (!alive) {
-          return;
-        }
-        setReadFailure(
-          `Devnet did not answer, so this ledger has nothing real to show yet: ${messageOf(error)}`
-        );
-        setReading(false);
+    mounted.current = true;
+    readSale(false);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        readSale(true);
       }
-    );
+    }, POLL_MS);
     return () => {
-      alive = false;
+      mounted.current = false;
+      window.clearInterval(timer);
+      if (retryTimer.current !== null) {
+        window.clearTimeout(retryTimer.current);
+      }
     };
-  }, [connection, candidates, reload]);
+  }, [readSale]);
+
+  // A transaction that landed, or a wallet just funded, moves the sale's own
+  // numbers, so the sale is read again straight away.
+  useEffect(() => {
+    if (reload > 0) {
+      readSale(true);
+    }
+  }, [reload, readSale]);
 
   useEffect(() => {
     if (publicKey === null || target === null) {
@@ -304,8 +379,15 @@ export function BreakSection({
           </Reveal>
         </header>
 
+        <CapLine />
+
         <Reveal delay={0.1} className="mt-16 sm:mt-20">
-          <SaleFacts target={target} reading={reading} failure={readFailure} />
+          <SaleFacts
+            target={target}
+            reading={reading}
+            failure={readFailure}
+            onTryAgain={canRetry ? tryAgain : null}
+          />
         </Reveal>
 
         <Reveal delay={0.05} className="mt-12">
@@ -314,7 +396,7 @@ export function BreakSection({
 
         <ol className="mt-10 border-b border-line">
           {ATTACKS.map((attack, place) => (
-            <Reveal key={attack.id} delay={Math.min(place * 0.04, 0.24)}>
+            <Reveal key={attack.id} as="li" delay={Math.min(place * 0.04, 0.24)}>
               <AttackRow
                 attack={attack}
                 target={target}
@@ -348,6 +430,7 @@ function ModeToggle({ mode, onPick }: { mode: Mode; onPick: (mode: Mode) => void
             key={option.value}
             type="button"
             onClick={() => onPick(option.value)}
+            aria-pressed={mode === option.value}
             className={`rounded-md px-3.5 py-2 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors duration-200 ${
               mode === option.value
                 ? "bg-accent text-accent-ink"
@@ -371,28 +454,47 @@ function SaleFacts({
   target,
   reading,
   failure,
+  onTryAgain,
 }: {
   target: Target | null;
   reading: boolean;
   failure: string | null;
+  /** Set when the read failed and asking again may help. */
+  onTryAgain: (() => void) | null;
 }) {
-  if (reading) {
+  if (reading && target === null) {
     return (
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
-        reading devnet
+      <p
+        data-testid="break-reading"
+        className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-pending"
+      >
+        <Spinner />
+        reading the sale from devnet
       </p>
     );
   }
   if (target === null) {
     return (
-      <p className="max-w-[62ch] text-[15px] leading-relaxed text-muted">
-        {failure ?? "No sale to attack right now."}
-      </p>
+      <div data-testid="break-failure" className="max-w-[62ch]">
+        <p className="text-[15px] leading-relaxed text-muted">
+          {failure ?? "No sale to attack right now. Come back once a sale opens."}
+        </p>
+        {onTryAgain !== null && (
+          <button
+            type="button"
+            onClick={onTryAgain}
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-line px-4 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          >
+            try again
+            <span aria-hidden="true">&rarr;</span>
+          </button>
+        )}
+      </div>
     );
   }
 
   const facts: { label: string; value: string }[] = [
-    { label: "the sale", value: `${target.name} (${target.symbol})` },
+    { label: "the sale", value: target.name },
     { label: "who may buy", value: target.openAccess ? "anyone, under the cap" : "the issuer's list" },
     {
       label: "the cap, per wallet",
@@ -402,7 +504,7 @@ function SaleFacts({
   ];
   if (target.ceilingDollars !== null) {
     facts.push({
-      label: "the band's ceiling",
+      label: "the price ceiling",
       value: `$${target.ceilingDollars.toFixed(2)} a share`,
     });
   }
@@ -415,7 +517,10 @@ function SaleFacts({
 
   return (
     <div>
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-6">
+      <dl
+        data-testid="break-facts"
+        className="grid grid-cols-2 gap-x-8 gap-y-7 border-t border-line pt-7 sm:grid-cols-3 lg:grid-cols-6"
+      >
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
             <dt className="font-mono text-[10px] uppercase leading-none tracking-[0.18em] text-muted">
@@ -428,14 +533,36 @@ function SaleFacts({
 
       {target.standingReason !== null && (
         <p className="mt-7 max-w-[68ch] text-[14px] leading-relaxed text-muted">
-          {target.standingReason}
+          {target.standingReason} <Tags names={[target.standingRefusal]} />
         </p>
       )}
     </div>
   );
 }
 
-/** The cap line again, faint, running the width of the section behind the ledger. */
+/**
+ * The cap line again, dotted, running the full width of the section in the
+ * gap between the heading and the sale's facts. It sits in that gap rather
+ * than at a fixed height of the section, so however tall the section grows at
+ * any width, it never runs through a line of text.
+ */
+function CapLine() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none relative">
+      <div
+        className="absolute left-1/2 top-8 h-[3px] w-screen -translate-x-1/2 opacity-50 sm:top-10"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, var(--accent) 0 1px, transparent 1.4px)",
+          backgroundSize: "10.5px 3px",
+          filter: "var(--motif-glow)",
+        }}
+      />
+    </div>
+  );
+}
+
+/** The curve, faint, rising across the section behind the ledger. */
 function CapMotif() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
@@ -445,17 +572,6 @@ function CapMotif() {
         className="h-full w-full"
         style={{ filter: "var(--motif-glow)" }}
       >
-        <line
-          x1={0}
-          x2={1440}
-          y1={188}
-          y2={188}
-          stroke="var(--accent)"
-          strokeWidth={1.5}
-          strokeDasharray="0.5 10"
-          strokeLinecap="round"
-          opacity={0.5}
-        />
         <path
           d="M -40 880 C 300 866, 640 804, 880 620 C 1080 466, 1240 250, 1340 20"
           pathLength={1}

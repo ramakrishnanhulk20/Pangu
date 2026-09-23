@@ -5,7 +5,8 @@ import { useId } from "react";
 
 import type { SaleReadout } from "@/lib/readout";
 
-import { money, shares } from "./format";
+import { money, perThousand, sharePrice, shares } from "./format";
+import { largestOfSale } from "./numbers";
 
 // The frame the drawing is laid out in. Everything below is in these units, so
 // one set of numbers serves the wide version and the phone one.
@@ -19,8 +20,32 @@ const AXIS_Y = 598;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
+/** The dot's halo, in frame units: a label closer than this to the dot sits under it. */
+const HALO = 30;
+
+/**
+ * About how wide a label runs, in frame units. The labels are uppercase mono
+ * with 0.14em of tracking, so each character takes close to 0.74 of its size.
+ */
+function labelWidth(text: string, size: number): number {
+  return text.length * size * 0.74;
+}
+
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
 interface Frame {
   line: string;
+  /** The curve's points in frame units, left to right. */
+  path: { x: number; y: number }[];
   area: string;
   dot: { x: number; y: number };
   soldX: number;
@@ -62,6 +87,7 @@ function frameOf(readout: SaleReadout): Frame | null {
 
   return {
     line,
+    path: points.map((point) => ({ x: across(point.sold), y: up(point.price) })),
     area: `${line} L ${RIGHT} ${FLOOR} L ${LEFT} ${FLOOR} Z`,
     dot: {
       x: across(readout.sold),
@@ -135,6 +161,48 @@ function Drawing({
   // in one spot read as neither. The mark's own label carries the price there.
   const atEnd = frame.dot.x > RIGHT - (RIGHT - LEFT) * 0.04;
 
+  // The opening price is only written where it clears the dot, its halo and
+  // the two-line price label beside the dot. The frame scales as one piece, so
+  // a label that clears here clears at every width.
+  const opening = perThousand(frame.openPrice)
+    ? `opens at ${sharePrice(frame.openPrice, readout.money)}`
+    : `opens at ${money(frame.openPrice, readout.money)}`;
+  // Lifted clear of the curve where the label ends, since the curve climbs
+  // under the label's own length.
+  const openingRight = LEFT + labelWidth(opening, size);
+  const curveAtRight =
+    frame.path.find((point) => point.x >= openingRight)?.y ?? frame.openY;
+  const openingY = Math.min(frame.openY - 18, curveAtRight - 12);
+  const openingBox: Box = {
+    left: LEFT,
+    right: openingRight,
+    top: openingY - size,
+    bottom: openingY + size * 0.3,
+  };
+  const halo: Box = {
+    left: frame.dot.x - HALO,
+    right: frame.dot.x + HALO,
+    top: frame.dot.y - HALO,
+    bottom: frame.dot.y + HALO,
+  };
+  const leftward = frame.dot.x > (LEFT + RIGHT) / 2;
+  const priceWidth =
+    price === null
+      ? 0
+      : Math.max(
+          labelWidth(sharePrice(price, readout.money), size),
+          labelWidth("where it finished", size)
+        );
+  const priceBox: Box = {
+    left: leftward ? frame.dot.x - 22 - priceWidth : frame.dot.x + 22,
+    right: leftward ? frame.dot.x - 22 : frame.dot.x + 22 + priceWidth,
+    top: frame.dot.y - 58 - size,
+    bottom: frame.dot.y - 58 + size * 1.8,
+  };
+  const openingClear =
+    !overlaps(openingBox, halo) &&
+    (price === null || atEnd || !overlaps(openingBox, priceBox));
+
   return (
     <>
       <defs>
@@ -193,12 +261,12 @@ function Drawing({
         {readout.graduated ? "it graduated here" : "graduates here"}
       </Label>
       <Label x={RIGHT} y={TOP - 40 + size * 1.5} size={size} anchor="end">
-        {`${money(frame.topPrice, readout.money)} a share`}
+        {sharePrice(frame.topPrice, readout.money)}
       </Label>
 
-      {full && readout.sold > readout.saleSize * 0.08 && (
-        <Label x={LEFT} y={frame.openY - 18} size={size}>
-          {`opens at ${money(frame.openPrice, readout.money)}`}
+      {full && openingClear && (
+        <Label x={LEFT} y={openingY} size={size}>
+          {opening}
         </Label>
       )}
 
@@ -237,7 +305,7 @@ function Drawing({
             anchor={frame.dot.x > (LEFT + RIGHT) / 2 ? "end" : "start"}
             tone="var(--ink)"
           >
-            {`${money(price, readout.money)} a share`}
+            {sharePrice(price, readout.money)}
           </Label>
           <Label
             x={frame.dot.x > (LEFT + RIGHT) / 2 ? -22 : 22}
@@ -260,7 +328,10 @@ function Drawing({
         stroke="var(--accent)"
         strokeWidth={7}
         strokeLinecap="round"
-        initial={still ? false : { opacity: 0 }}
+        // x2 is named in the starting values too. Left out, the browser logs
+        // "attribute x2: Expected length, undefined" four times a load, two per
+        // bar per drawing; with it, none (lab-evidence/ux-x2-check.txt).
+        initial={still ? false : { opacity: 0, x2: LEFT }}
         animate={{ opacity: 1, x2: frame.capX }}
         transition={still ? { duration: 0 } : { duration: 0.9, delay: 1, ease: EASE }}
       />
@@ -280,7 +351,7 @@ function Drawing({
             stroke="var(--motif-line)"
             strokeWidth={7}
             strokeLinecap="round"
-            initial={still ? false : { opacity: 0 }}
+            initial={still ? false : { opacity: 0, x2: LEFT }}
             animate={{ opacity: 1, x2: Math.max(LEFT + 2, frame.largestX) }}
             transition={
               still ? { duration: 0 } : { duration: 0.9, delay: 1.1, ease: EASE }
@@ -292,7 +363,7 @@ function Drawing({
               y={LARGEST_Y + size * 0.4}
               size={size}
             >
-              {`the largest wallet, ${(readout.largestShare * 100).toFixed(1)}% of what has sold`}
+              {`the largest wallet, ${(largestOfSale(readout) * 100).toFixed(1)}% of the sale`}
             </Label>
           )}
         </>
@@ -330,16 +401,35 @@ export function PriceCurve({
     return null;
   }
 
+  // What the drawing shows, said in words for a screen reader, at every width.
+  const said = [
+    `The price path of ${readout.name}, from ${sharePrice(
+      frame.openPrice,
+      readout.money
+    )} to ${sharePrice(frame.topPrice, readout.money)} at graduation.`,
+    readout.priceNow === null
+      ? null
+      : `${readout.graduated ? "It finished at" : "Right now it is"} ${sharePrice(
+          readout.priceNow,
+          readout.money
+        )}.`,
+    readout.ceilingDollars === null
+      ? null
+      : `Buys stop above ${sharePrice(readout.ceilingDollars, "dollars")}.`,
+    `${shares(readout.sold)} of ${shares(readout.saleSize)} shares have sold, ${(
+      readout.raisedShare * 100
+    ).toFixed(0)} percent of the way to graduation.`,
+  ]
+    .filter((part) => part !== null)
+    .join(" ");
+
   return (
     <div className="relative w-full">
       <svg
         viewBox="0 0 1000 620"
         className="hidden h-auto w-full sm:block"
         role="img"
-        aria-label={`The price path of ${readout.name}, from ${money(
-          frame.openPrice,
-          readout.money
-        )} a share to ${money(frame.topPrice, readout.money)} at graduation.`}
+        aria-label={said}
       >
         <Drawing
           readout={readout}
@@ -356,7 +446,8 @@ export function PriceCurve({
       <svg
         viewBox="0 0 1000 620"
         className="h-auto w-full sm:hidden"
-        aria-hidden="true"
+        role="img"
+        aria-label={said}
       >
         <Drawing
           readout={readout}
@@ -379,9 +470,7 @@ export function PriceCurve({
               className="h-[3px] w-7 shrink-0 rounded-full"
               style={{ background: "var(--motif-line)" }}
             />
-            {`the largest wallet, ${(readout.largestShare * 100).toFixed(
-              1
-            )}% of what has sold`}
+            {`the largest wallet, ${(largestOfSale(readout) * 100).toFixed(1)}% of the sale`}
           </li>
         )}
       </ul>

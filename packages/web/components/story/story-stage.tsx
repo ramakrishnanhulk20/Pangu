@@ -136,7 +136,18 @@ export function StoryStage({ className }: { className?: string }) {
           strokeLinecap="round"
         />
         <text {...LABEL} className={ON_WIDE} x={926} y={144} textAnchor="end">
-          DAMM v2, trades freely from here
+          the open market: trades freely from here
+        </text>
+        <text
+          {...LABEL}
+          fontSize={11}
+          className={ON_WIDE}
+          x={926}
+          y={164}
+          textAnchor="end"
+          opacity={0.8}
+        >
+          (Meteora DAMM v2)
         </text>
       </g>
 

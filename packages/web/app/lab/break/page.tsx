@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { BreakSection } from "@/components/break/break-section";
-import { openedSales } from "@/lib/sales";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default function BreakLabPage() {
-  // Only the mint, the name and the mode travel from the file the devnet
-  // scripts write. Every number on the screen is read back off the chain.
-  const sales = openedSales().map((sale) => ({
-    mint: sale.mint,
-    name: sale.name,
-    symbol: sale.symbol,
-    mode: sale.mode,
-  }));
-
-  return <BreakSection sales={sales} />;
+  // The ledger reads its own sale from the server; every number on the
+  // screen comes back off the chain.
+  return <BreakSection />;
 }

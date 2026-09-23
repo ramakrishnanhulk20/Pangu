@@ -3,7 +3,15 @@
 import { useTheme } from "next-themes";
 import { useEffect, useId, useRef, useState } from "react";
 
-type Drawing = { kind: "drawn"; svg: string } | { kind: "failed" };
+type Drawing =
+  | {
+      kind: "drawn";
+      /** Scaled to the column: never wider than it, never past its drawn size. */
+      fitted: string;
+      /** At its drawn size, for the full size view, which scrolls. */
+      full: string;
+    }
+  | { kind: "failed" };
 
 function readToken(name: string, fallback: string) {
   const value = getComputedStyle(document.documentElement)
@@ -25,7 +33,16 @@ export function Mermaid({ chart }: { chart: string }) {
   const rawId = useId();
   const [near, setNear] = useState(false);
   const [drawing, setDrawing] = useState<Drawing | null>(null);
+  const [enlarged, setEnlarged] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
   const { resolvedTheme } = useTheme();
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (enlarged && element !== null && !element.open) {
+      element.showModal();
+    }
+  }, [enlarged]);
 
   useEffect(() => {
     const element = frame.current;
@@ -103,14 +120,16 @@ export function Mermaid({ chart }: { chart: string }) {
           `pangu-diagram-${rawId.replace(/[^a-zA-Z0-9]/g, "")}`,
           chart
         );
-        // Mermaid writes the drawing's natural width as a max-width and then
-        // stretches the picture to the box. Pinning the width to that same
-        // number keeps the labels readable and lets the box scroll instead.
-        const sized = svg.replace(
-          /max-width:\s*([\d.]+)px;/,
-          "max-width:$1px;width:$1px;"
+        // Mermaid writes the drawing's natural width as a max-width. In the
+        // column it scales down to fit, so a phone sees the whole diagram at
+        // once; the full size view keeps the natural width and scrolls.
+        const drawnWidth = /max-width:\s*([\d.]+)px;/;
+        const fitted = svg.replace(
+          drawnWidth,
+          "max-width:min(100%, $1px);width:100%;height:auto;"
         );
-        if (live) setDrawing({ kind: "drawn", svg: sized });
+        const full = svg.replace(drawnWidth, "max-width:none;width:$1px;height:auto;");
+        if (live) setDrawing({ kind: "drawn", fitted, full });
       })
       .catch(() => {
         if (live) setDrawing({ kind: "failed" });
@@ -128,12 +147,56 @@ export function Mermaid({ chart }: { chart: string }) {
       className="not-prose my-8 overflow-hidden rounded-lg border border-line bg-raised"
     >
       {drawing?.kind === "drawn" ? (
-        <div
-          className="max-h-[78vh] overflow-auto p-4"
-          // The markup comes from Mermaid's own sanitised renderer, run on a
-          // diagram that ships with this repository.
-          dangerouslySetInnerHTML={{ __html: drawing.svg }}
-        />
+        <>
+          <button
+            type="button"
+            onClick={() => setEnlarged(true)}
+            aria-label="Open this diagram full size"
+            className="group block w-full cursor-zoom-in p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-accent"
+          >
+            <span
+              className="block"
+              // The markup comes from Mermaid's own sanitised renderer, run on
+              // a diagram that ships with this repository.
+              dangerouslySetInnerHTML={{ __html: drawing.fitted }}
+            />
+            <span className="mt-3 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted transition-colors group-hover:text-accent">
+              open full size
+            </span>
+          </button>
+
+          <dialog
+            ref={dialog}
+            onClose={() => setEnlarged(false)}
+            onClick={(event) => {
+              // A press on the dimmed backdrop lands on the dialog itself.
+              if (event.target === event.currentTarget) {
+                event.currentTarget.close();
+              }
+            }}
+            aria-label="The diagram at full size"
+            className="m-auto max-h-[92dvh] w-[min(96vw,1400px)] max-w-none overflow-hidden rounded-lg border border-line bg-raised p-0 text-ink backdrop:bg-black/70"
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+                full size: scroll, or pinch to zoom
+              </span>
+              <button
+                type="button"
+                onClick={() => dialog.current?.close()}
+                className="rounded-lg border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted transition-colors hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                close
+              </button>
+            </div>
+            {enlarged && (
+              <div
+                className="max-h-[calc(92dvh-3rem)] overflow-auto overscroll-contain p-4 [touch-action:pan-x_pan-y_pinch-zoom]"
+                dangerouslySetInnerHTML={{ __html: drawing.full }}
+              />
+            )}
+          </dialog>
+        </>
       ) : null}
 
       {drawing === null ? (

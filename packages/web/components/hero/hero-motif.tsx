@@ -35,9 +35,9 @@ function Drawing({ drawn }: { drawn: boolean }) {
   );
 }
 
-function Cap({ labelled }: { labelled: boolean }) {
+function Cap({ labelled, className }: { labelled: boolean; className?: string }) {
   return (
-    <g>
+    <g className={className}>
       <line
         x1={-40}
         x2={1480}
@@ -164,13 +164,13 @@ export function HeroMotif() {
         <g style={rising}>
           <Drawing drawn={reduced} />
         </g>
-        <Cap labelled />
+        <Cap labelled className="hidden md:inline" />
         <Share still={reduced} labelled />
       </svg>
 
-      {/* Same paths, a tighter frame, so the cap and the share stay on screen
-          on a phone rather than being cropped off the right edge. The two mono
-          labels are dropped there: at 390px they would land on the title. */}
+      {/* Same paths, a tighter frame, so the share stays on screen on a phone
+          rather than being cropped off the right edge. The two mono labels are
+          dropped there: at 390px they would land on the title. */}
       <svg
         viewBox="598 -30 740 930"
         preserveAspectRatio="xMidYMid slice"
@@ -179,9 +179,22 @@ export function HeroMotif() {
         <g style={rising}>
           <Drawing drawn={reduced} />
         </g>
-        <Cap labelled={false} />
         <Share still={reduced} labelled={false} />
       </svg>
+
+      {/* Under 768px the text fills the hero's height, and how tall the live
+          numbers run changes with the sale, so a cap line fixed inside the
+          drawing always lands on some line of it. Here the cap runs along the
+          top instead, in the padding above the first line of text, over the
+          curve and the share, which is where a cap sits. */}
+      <div
+        className="absolute inset-x-0 top-[18px] h-[3px] md:hidden"
+        style={{
+          backgroundImage: "radial-gradient(circle, var(--accent) 0 1px, transparent 1.4px)",
+          backgroundSize: "10.5px 3px",
+          filter: "var(--motif-glow)",
+        }}
+      />
     </div>
   );
 }

@@ -9,12 +9,13 @@ import {
   clock,
   explorerAddress,
   money,
+  perThousand,
   percent,
   shares,
   shortAddress,
   whole,
 } from "./format";
-import { Bar, Counting, Holders, Stat } from "./numbers";
+import { Bar, Counting, Holders, Stat, largestOfSale } from "./numbers";
 import { PriceCurve } from "./price-curve";
 
 const POLL_MS = 15_000;
@@ -53,10 +54,34 @@ function settle(current: Readout, next: Readout): Readout {
   return next;
 }
 
+/**
+ * Why no buy can land on this sale right now, or null when one can.
+ *
+ * Only a sale with a price ceiling refuses every buyer at once: the curve has
+ * climbed past the ceiling, or there is no fresh stock price to set one.
+ */
+function everyBuyRefused(readout: Readout): string | null {
+  if (readout.graduated || readout.stockName === null) {
+    return null;
+  }
+  if (readout.priceWarning !== null) {
+    return `there is no fresh ${readout.stockName} price`;
+  }
+  if (
+    readout.priceNow !== null &&
+    readout.ceilingDollars !== null &&
+    readout.priceNow > readout.ceilingDollars
+  ) {
+    return "the curve sits above the price ceiling";
+  }
+  return null;
+}
+
 function Picker({
   choices,
   chosen,
   asking,
+  refusing,
   onChoose,
 }: {
   choices: SaleChoice[];
@@ -64,6 +89,8 @@ function Picker({
   chosen: string;
   /** The sale asked for and still being read, if any. */
   asking: string | null;
+  /** True when the sale on screen refuses every buy right now. */
+  refusing: boolean;
   onChoose: (mint: string) => void;
 }) {
   if (choices.length < 2) {
@@ -92,11 +119,15 @@ function Picker({
           >
             {choice.name}
             <span className="mt-1 block text-[9px] opacity-70">
-              {choice.running === null
-                ? "unknown right now"
-                : choice.running
-                  ? "still taking buys"
-                  : "graduated"}
+              {pending
+                ? "reading devnet"
+                : choice.running === null
+                  ? "unknown right now"
+                  : !choice.running
+                    ? "graduated"
+                    : active && refusing
+                      ? "open, every buy refused now"
+                      : "open"}
             </span>
           </button>
         );
@@ -285,9 +316,18 @@ export function SaleReadout({
           readout.readAt
         )}, showing the reading from ${clock(readout.readAt)}.`
       : null);
-  const priceNote = readout.graduated
-    ? "the price the curve finished at"
-    : "what one share costs right now";
+  // A price of a few millionths reads as a row of zeros, so it is shown for
+  // 1,000 shares and the note says so.
+  const tiny = readout.priceNow !== null && perThousand(readout.priceNow);
+  const priceNote = tiny
+    ? readout.graduated
+      ? `what 1,000 shares cost where the curve finished: one share is under 0.0001 ${readout.money}`
+      : `what 1,000 shares cost right now: one share is under 0.0001 ${readout.money}`
+    : readout.graduated
+      ? "the price the curve finished at"
+      : "what one share costs right now";
+  const refusal = everyBuyRefused(readout);
+  const largest = largestOfSale(readout);
 
   return (
     <section
@@ -307,7 +347,6 @@ export function SaleReadout({
           initial={still ? false : { opacity: 0, y: 26 }}
           animate={revealed || still ? { opacity: 1, y: 0 } : undefined}
           transition={still ? { duration: 0 } : { duration: 0.8, ease: EASE }}
-          className="max-w-[15ch]"
         >
           <div className="flex items-center gap-2 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
             <Dot
@@ -320,7 +359,9 @@ export function SaleReadout({
                 ? "holding the last reading"
                 : "live on Solana devnet"}
           </div>
-          <h2 className="mt-5 font-display text-[clamp(2.25rem,4.6vw,3.9rem)] font-semibold leading-[0.92] tracking-[-0.035em]">
+          {/* The measure sits on the heading itself, so 15ch is fifteen of its
+              own characters and the line breaks once, in the skeleton too. */}
+          <h2 className="mt-5 max-w-[15ch] font-display text-[clamp(2.25rem,4.6vw,3.9rem)] font-semibold leading-[0.92] tracking-[-0.035em]">
             Watch the price find itself.
           </h2>
         </motion.div>
@@ -341,6 +382,7 @@ export function SaleReadout({
             choices={choices}
             chosen={readout.mint}
             asking={asking}
+            refusing={refusal !== null}
             onChoose={choose}
           />
         </motion.div>
@@ -366,8 +408,17 @@ export function SaleReadout({
                 <span className="font-display text-[19px] tracking-[-0.01em]">
                   {readout.name}
                 </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
-                  {readout.graduated ? "graduated" : "still taking buys"}
+                <span
+                  data-testid="readout-status"
+                  className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
+                    refusal === null ? "text-muted" : "text-refused"
+                  }`}
+                >
+                  {readout.graduated
+                    ? "graduated"
+                    : refusal === null
+                      ? "open, taking buys"
+                      : `open, but every buy is refused right now: ${refusal}`}
                 </span>
                 {readout.dammPool !== null && (
                   <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
@@ -403,9 +454,9 @@ export function SaleReadout({
                   <span className="text-muted">not readable</span>
                 ) : (
                   <Counting
-                    value={readout.priceNow}
+                    value={tiny ? readout.priceNow * 1_000 : readout.priceNow}
                     format={(value) => money(value, readout.money)}
-                    unit={readout.money}
+                    unit={`${readout.money}${tiny ? " per 1,000" : ""}`}
                     still={still}
                     revealed={revealed}
                   />
@@ -482,8 +533,11 @@ export function SaleReadout({
                 />
               </Stat>
 
+              {/* Measured on the cap's own basis, the whole sale, so the two
+                  numbers can be read against each other. The share of what has
+                  sold so far is the other basis, said underneath. */}
               <Stat
-                label="the largest wallet"
+                label="the largest wallet, of the whole sale"
                 quiet
                 note={
                   <>
@@ -491,23 +545,22 @@ export function SaleReadout({
                       ? `the cap lets one wallet hold ${percent(
                           readout.capOfSale
                         )} of the sale`
-                      : `of a cap worth ${percent(
-                          readout.capOfSold
-                        )} of everything sold so far`}
+                      : `against a cap of ${percent(readout.capOfSale)} of the sale`}
                     <Bar
-                      share={
-                        readout.capOfSold === 0
-                          ? 0
-                          : readout.largestShare / readout.capOfSold
-                      }
+                      share={readout.capOfSale === 0 ? 0 : largest / readout.capOfSale}
                       still={still}
                       revealed={revealed}
                     />
+                    {readout.holders.length > 0 && (
+                      <span className="mt-2 block font-mono text-[11px] tracking-[0.02em]">
+                        {`= ${percent(readout.largestShare)} of what has sold so far`}
+                      </span>
+                    )}
                   </>
                 }
               >
                 <Counting
-                  value={readout.largestShare}
+                  value={largest}
                   format={percent}
                   still={still}
                   revealed={revealed}

@@ -8,7 +8,11 @@ import { PulseFallback } from "./pulse-row";
 import { Rise } from "./rise";
 import { WatchSaleButton } from "./watch-sale-button";
 
-const FACTS = ["Built on Meteora DBC", "Live on Solana devnet", "Price by Pyth"];
+const FACTS = [
+  "Built on Meteora's Dynamic Bonding Curve",
+  "Live on Solana devnet",
+  "Price by Pyth",
+];
 
 /**
  * The poster. The title, the sentence and the action are in the first HTML the

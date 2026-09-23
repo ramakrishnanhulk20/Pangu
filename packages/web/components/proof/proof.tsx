@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { Reveal } from "@/components/story/reveal";
 
@@ -45,6 +46,44 @@ const LEDGER = [
     link: null,
   },
 ];
+
+/**
+ * A long value in short form. The whole value sits in the title for a hover and
+ * one press copies it, so nobody has to select forty characters by hand.
+ */
+function ShortValue({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState<boolean | null>(null);
+
+  const copy = () => {
+    // The clipboard is only offered on a secure page. Anywhere else the press
+    // spells the whole value out to select by hand, instead of failing silently.
+    const writing =
+      typeof navigator.clipboard?.writeText === "function"
+        ? navigator.clipboard.writeText(value)
+        : Promise.reject(new Error("no clipboard here"));
+    writing.then(
+      () => setCopied(true),
+      () => setCopied(false)
+    );
+  };
+
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span>{label}</span>
+      <span title={value} className="break-all text-paper/80">
+        {copied === false ? value : `${value.slice(0, 6)}...${value.slice(-6)}`}
+      </span>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`copy the full ${label}`}
+        className="rounded border border-paper/25 px-2 py-0.5 uppercase tracking-[0.14em] text-paper/70 transition-colors hover:border-paper hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper"
+      >
+        {copied === true ? "copied" : copied === false ? "select it by hand" : "copy"}
+      </button>
+    </p>
+  );
+}
 
 export function Proof() {
   return (
@@ -130,12 +169,11 @@ export function Proof() {
                 <p className="text-paper">
                   slot 502476730, 22 September 2026, 358,248 bytes
                 </p>
-                <p className="mt-3 break-all">
-                  sha256 a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb
-                </p>
-                <p className="mt-3 break-all">
-                  program 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
-                </p>
+                <ShortValue
+                  label="sha256"
+                  value="a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb"
+                />
+                <ShortValue label="program" value="4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG" />
               </div>
             </div>
           </Reveal>

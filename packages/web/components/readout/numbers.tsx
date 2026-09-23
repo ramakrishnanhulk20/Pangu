@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, type ReactNode } from "react";
 
-import type { HolderRow } from "@/lib/readout";
+import type { HolderRow, SaleReadout } from "@/lib/readout";
 
 import { explorerAddress, percent, shortAddress } from "./format";
 
@@ -70,6 +70,16 @@ export function Counting({
   }, [value, still, revealed, format, unit]);
 
   return <span ref={node}>{format(value)}</span>;
+}
+
+/**
+ * The largest wallet's slice of the whole sale, the basis the cap is written
+ * on. The readout also carries its slice of what has sold so far, which is a
+ * different number and reads like a broken cap when set beside this one.
+ */
+export function largestOfSale(readout: SaleReadout): number {
+  const largest = readout.holders[0]?.shares ?? 0;
+  return readout.saleSize > 0 ? largest / readout.saleSize : 0;
 }
 
 export function Stat({

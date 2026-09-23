@@ -52,7 +52,7 @@ export function Tally({
             the sale token on the explorer
           </a>
         )}
-        <span>the same run as npm run prove</span>
+        <span>the same run the terminal command makes</span>
       </div>
     </Reveal>
   );

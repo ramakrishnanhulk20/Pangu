@@ -99,8 +99,9 @@ export function AttackRow({
   const running = state.status === "building" || state.status === "waiting";
   const exit = attack.kind === "pass" && attack.id === "sell-back";
 
+  // The list item is the Reveal around this row, so the row itself is a plain block.
   return (
-    <li
+    <div
       className={`group relative ${
         exit ? "border-t-2 border-accent/60" : "border-t border-line"
       }`}
@@ -126,8 +127,7 @@ export function AttackRow({
           </h3>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[10px] uppercase leading-none tracking-[0.18em] text-muted">
-            <span className={exit ? "text-accent" : "text-ink"}>{attack.invariant}</span>
-            <span>{attack.gloss}</span>
+            <span className={exit ? "text-accent" : "text-ink"}>{attack.gloss}</span>
             <span className="hidden sm:inline">{attack.cost}</span>
             {state.shares !== null && target !== null && (
               <span className="text-ink">
@@ -136,18 +136,24 @@ export function AttackRow({
             )}
           </div>
 
-          <p className="mt-4 max-w-[62ch] text-[13px] leading-relaxed text-muted">
-            {attack.promise === "it goes through"
-              ? "The rules promise this goes through."
-              : `The rules promise the chain refuses this with ${attack.promise}.`}
-            {state.expected !== null && expected.why !== null && (
-              <>
-                {" "}
-                For this exact transaction the program answers{" "}
-                <span className="text-ink">{expected.name}</span>. {expected.why}
-              </>
-            )}
+          <p className="mt-4 max-w-[62ch] text-[14px] leading-relaxed">
+            {attack.kind === "pass"
+              ? `The program lets this through: ${attack.plain}.`
+              : `The program refuses this: ${attack.plain}.`}{" "}
+            <Tags
+              names={[
+                attack.promise === "it goes through" ? null : attack.promise,
+                `rule ${attack.invariant}`,
+              ]}
+            />
           </p>
+
+          {state.expected !== null && expected.why !== null && (
+            <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-muted">
+              {`This exact transaction meets another rule first: ${expected.why}`}{" "}
+              <Tags names={[expected.name === "it goes through" ? null : expected.name]} />
+            </p>
+          )}
 
           {payingShort && (
             <p className="mt-3 font-mono text-[10px] uppercase leading-none tracking-[0.16em] text-accent">
@@ -252,7 +258,30 @@ export function AttackRow({
           )}
         </div>
       </div>
-    </li>
+    </div>
+  );
+}
+
+/**
+ * The program's own names, small and set apart, after the plain sentence they
+ * belong to. A reader who wants the code can find it; nobody has to read it.
+ */
+export function Tags({ names }: { names: readonly (string | null)[] }) {
+  const shown = names.filter((name): name is string => name !== null && name !== "");
+  if (shown.length === 0) {
+    return null;
+  }
+  return (
+    <span className="inline-flex flex-wrap gap-1.5 align-middle">
+      {shown.map((name) => (
+        <span
+          key={name}
+          className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] leading-none tracking-[0.04em] text-muted"
+        >
+          {name}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -286,14 +315,17 @@ function Verdict({
           ? "It went through"
           : result.outcome === "unseen"
             ? "Not seen"
-            : (result.errorName ?? "Refused, but not by the sale's rules")}
+            : result.errorName !== null
+              ? "Refused by the program"
+              : "Refused, but not by the sale's rules"}
       </p>
 
       {failure === null ? (
         <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed">
           {result.outcome === "allowed"
             ? "The pool paid out and the sale's counters moved. This is the one row that has to work."
-            : result.sentence}
+            : result.sentence}{" "}
+          <Tags names={[result.errorName]} />
         </p>
       ) : (
         <>

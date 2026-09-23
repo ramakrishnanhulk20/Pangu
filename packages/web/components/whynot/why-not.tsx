@@ -9,20 +9,20 @@ const ANSWERS = [
     title: "A plain launchpad",
     lines: [
       "With no rules program in front of it, the fastest bot or the biggest wallet can take most of a sale in the first block.",
-      "That is the outcome a stock token's first buyers should be protected from, and Pangu is that protection, built as the token's own transfer hook so no other app or wallet can skip it.",
+      "That is the outcome a stock token's first buyers should be protected from, and Pangu is that protection, built as a small program the token calls on every move, so no other app or wallet can skip it.",
     ],
   },
   {
     title: "Meteora Alpha Vault",
     lines: [
-      "Meteora's own fairness product is a good one, but it only sits in front of DLMM and DAMM pools, so it cannot attach to a bonding curve at all.",
+      "Meteora's own fairness product is a good one, but it only sits in front of Meteora's trading pools, so it cannot attach to a bonding curve at all.",
       "It also sells at one price decided in advance, while Pangu's rules run inside a live curve, which is exactly the moment first buyers need protecting.",
     ],
   },
   {
     title: "Meteora Presale Vault",
     lines: [
-      "The presale vault runs a capped, allowlisted sale before any market exists: a fixed price, first come, or a pro rata split, with no curve and no price discovery.",
+      "The presale vault runs a capped sale for wallets on the approved list before any market exists: a fixed price, first come, or a split in proportion, with no curve and no price discovery.",
       "Pangu's rules run inside the Meteora curve all the way to graduation, and selling back to the pool is always allowed.",
     ],
   },
