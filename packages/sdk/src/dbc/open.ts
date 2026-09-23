@@ -43,6 +43,12 @@ export interface OpenSaleInput {
   sale: SaleTerms;
   /** The new token's mint. Generated when not given. It signs this transaction. */
   baseMint?: Keypair;
+  /**
+   * DBC's badge for a paying token that needs one, such as a tokenized stock.
+   * Without it DBC refuses the pool with InvalidTokenBadge. The same badge the
+   * launch template was opened with.
+   */
+  tokenBadge?: PublicKey;
 }
 
 export interface OpenSale {
@@ -131,6 +137,7 @@ export async function openSaleTransaction(
     uri: input.uri,
     payer,
     poolCreator: creator,
+    tokenBadge: input.tokenBadge,
     transferHookProgram: FORCED.transferHookProgram,
   });
 
