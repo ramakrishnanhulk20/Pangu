@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
+    token::spl_token,
     token_2022::spl_token_2022::{
+        self,
         extension::{transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions},
         state::Mint as MintState,
     },
@@ -62,13 +64,22 @@ const PUBKEY_LEN: u8 = 32;
 /// against real bytes.
 const RULES_CREDENTIAL_OFFSET: u8 = 145;
 const RULES_SCHEMA_OFFSET: u8 = 177;
-// The same pinning, one step stronger: `layout_version` was carved out of the
-// spare bytes, so the size has to come out of this build unchanged or an account
-// opened by an earlier one would not even be the same length.
+// The same pinning, one step stronger: `layout_version`, then `quote_mint` and
+// `ends_at`, were carved out of the spare bytes, so the size has to come out of
+// this build unchanged or an account opened by an earlier one would not even be
+// the same length.
 const _: () = assert!(SaleRules::INIT_SPACE == 354);
 
+/// `swap_base_amount`, the number of sale tokens the curve sells before the pool
+/// graduates, sits 248 bytes into DBC's `PoolConfig`: right behind the one byte
+/// settings that follow `collect_fee_mode` (byte 232) and their seven bytes of
+/// padding. Byte 256 of the account. Checked against a real mainnet template,
+/// and against Meteora's own decoding of it, in the test at the bottom of this
+/// file. Source: Meteora's dynamic-bonding-curve source, state/config.rs.
+const CONFIG_SWAP_BASE_AMOUNT_OFFSET: usize = 256;
+
 #[derive(Accounts)]
-#[instruction(cap: u64, access_mode: u8, credential: Pubkey, schema: Pubkey, band: PriceBand)]
+#[instruction(cap: u64, access_mode: u8, credential: Pubkey, schema: Pubkey, band: PriceBand, ends_at: i64)]
 pub struct CreateSale<'info> {
     #[account(mut)]
     pub issuer: Signer<'info>,
@@ -93,14 +104,15 @@ pub struct CreateSale<'info> {
 
     /// CHECK: required in every mode. Proven in the handler to be the DBC launch
     /// template this pool names, owned by DBC and of the right kind. Its fee mode
-    /// decides whether the sale may open at all, and a banded sale also reads the
-    /// paying token it was configured with.
+    /// and the supply its curve sells decide whether the sale may open at all, and
+    /// it names the paying token.
     pub dbc_config: UncheckedAccount<'info>,
 
-    /// Band only, and required there. Must be the paying token the template names.
-    /// Its decimals are stored, so the hook can turn a curve price into dollars
+    /// Required in every mode. Must be the paying token the template names. It is
+    /// stored in the rules, its freeze authority is checked, and on a banded sale
+    /// its decimals are stored so the hook can turn a curve price into dollars
     /// without being handed a mint at buy time.
-    pub quote_mint: Option<InterfaceAccount<'info, Mint>>,
+    pub quote_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         init,
@@ -148,18 +160,23 @@ pub struct CreateSale<'info> {
 /// Token-2022 or its transfer hook is not this program. `MintAuthorityStillSet`
 /// when the mint can still be minted. `WrongLaunchTemplate` when the template is
 /// not the one the pool names. `FeesNotInQuoteToken` when that template collects
-/// fees in the sale token. `ZeroCap` when the cap is
-/// zero. `InvalidAccessMode` for an unknown mode, or for credential fields set
+/// fees in the sale token. `WrongMint` when the paying token passed is not the
+/// one the template names. `IssuerControlsPayingToken` when the issuer holds the
+/// paying token's freeze authority. `ZeroCap` when the cap is
+/// zero. `CapCoversWholeSale` when the cap is at or above the number of tokens
+/// the curve sells, which would make it no limit at all.
+/// `InvalidAccessMode` for an unknown mode, or for credential fields set
 /// outside mode 2. `CredentialInvalid` when mode 2 is asked for without a
 /// credential and schema, when either account is not the one named, not the
 /// service's, of the wrong kind, from another credential or paused, or when those
 /// accounts are passed in a mode that has no use for them.
 ///
-/// With a price band the caller also passes the paying token, proven here to be
-/// the one the template was configured with. Both mints' decimals are stored so
-/// the hook never has to be handed a mint. `InvalidBand` when any band
+/// With a price band both mints' decimals are stored so the hook never has to
+/// be handed a mint. `InvalidBand` when any band
 /// setting is missing or out of range, or when band settings are given on a sale
-/// with no band. `WrongPriceAccount` when the price account is not the address
+/// with no band. `BandNeedsDollarQuote` when a banded sale is priced in wrapped
+/// SOL. `EndInThePast` when `ends_at` is neither zero (no end) nor later than
+/// the chain clock. `WrongPriceAccount` when the price account is not the address
 /// this shard and this feed id produce under Pyth's price feed program. Running
 /// twice fails, because both accounts are created here.
 ///
@@ -171,6 +188,7 @@ pub fn handle_create_sale(
     credential: Pubkey,
     schema: Pubkey,
     band: PriceBand,
+    ends_at: i64,
 ) -> Result<()> {
     let mint_key = ctx.accounts.mint.key();
     let pool_key = ctx.accounts.pool.key();
@@ -221,21 +239,52 @@ pub fn handle_create_sale(
     // on every sale and not only on a banded one. With fees taken in the sale token
     // a trade would move the sale token to the fee claimer and the referral account
     // through the hook, on a path the cap was never written for.
-    let template = {
+    let (template, curve_supply) = {
         let config_info = ctx.accounts.dbc_config.to_account_info();
         require_keys_eq!(
             config_info.key(),
             pool.config,
             PanguError::WrongLaunchTemplate
         );
-        dbc::parse_hook_config(&config_info)?
+        let template = dbc::parse_hook_config(&config_info)?;
+        // parse_hook_config has just proven the owner, the exact length and the
+        // discriminator, so this offset is read against DBC's own bytes.
+        let data = config_info.try_borrow_data()?;
+        (template, read_swap_base_amount(&data))
     };
     require!(
         template.collect_fee_mode == dbc::COLLECT_FEE_MODE_QUOTE_TOKEN,
         PanguError::FeesNotInQuoteToken
     );
 
+    // The paying token is proven for every sale, not only a banded one, because
+    // the rules store it and the freeze check below reads the mint that was
+    // passed. A mint the caller picked would let every check here be aimed at a
+    // harmless token instead.
+    let quote_mint = &ctx.accounts.quote_mint;
+    require_keys_eq!(quote_mint.key(), template.quote_mint, PanguError::WrongMint);
+    // Whoever can freeze the paying token can freeze the pool's paying token vault
+    // or any seller's account, and a frozen account cannot pay out. The exit that
+    // C5 promises would then be the issuer's to close. Covers the issuer's own key
+    // only: an authority handed to another wallet the issuer controls cannot be
+    // told apart from a stablecoin issuer's, which the threat model names.
+    require!(
+        Option::<Pubkey>::from(quote_mint.freeze_authority) != Some(ctx.accounts.issuer.key()),
+        PanguError::IssuerControlsPayingToken
+    );
+
     require!(cap > 0, PanguError::ZeroCap);
+    // A cap at or above everything the curve sells lets one wallet buy the whole
+    // sale, which is the one outcome a per-wallet cap exists to stop. The curve's
+    // own supply is the bound rather than the mint's total, because the tokens
+    // held back for graduation never leave the vault through a buy.
+    require!(cap < curve_supply, PanguError::CapCoversWholeSale);
+    // An end that has already passed would open a sale whose rules are lifted
+    // from its first transfer, which reads as a capped sale and is not one.
+    require!(
+        ends_at == 0 || ends_at > Clock::get()?.unix_timestamp,
+        PanguError::EndInThePast
+    );
     require!(
         access_mode == ACCESS_OPEN
             || access_mode == ACCESS_ISSUER_LIST
@@ -292,12 +341,11 @@ pub fn handle_create_sale(
     }
 
     let decimals = if band.band_bps > 0 {
-        Some(check_band(&ctx, &band, &template, base_decimals)?)
+        Some(check_band(&ctx, &band, base_decimals)?)
     } else {
         // Every band field belongs to a band. Storing one on a sale that has none
         // would leave a rule that reads as set and is never enforced.
         require!(band.is_empty(), PanguError::InvalidBand);
-        require!(ctx.accounts.quote_mint.is_none(), PanguError::InvalidBand);
         None
     };
 
@@ -323,7 +371,9 @@ pub fn handle_create_sale(
     rules.total_net_bought = 0;
     rules.bump = ctx.bumps.rules;
     rules.layout_version = SALE_RULES_LAYOUT_VERSION;
-    rules.reserved = [0u8; 63];
+    rules.quote_mint = ctx.accounts.quote_mint.key();
+    rules.ends_at = ends_at;
+    rules.reserved = [0u8; 23];
 
     // Both buyer records are derived from the owner field inside a token account, so
     // the hook is handed the record of whoever really receives or sends the tokens,
@@ -444,6 +494,8 @@ pub fn handle_create_sale(
         cap,
         access_mode,
         band_bps: band.band_bps,
+        quote_mint: ctx.accounts.quote_mint.key(),
+        ends_at,
     });
 
     Ok(())
@@ -458,19 +510,24 @@ pub fn handle_create_sale(
 /// id, so an issuer cannot name a real, guardian-signed price for some other
 /// asset, and nobody else can create a rival account for this shard and feed.
 ///
-/// The decimals are read through the pool's own launch template: the template
-/// says which token buyers pay in, and the caller has to hand over that exact
-/// mint. Taking a mint on the caller's word would let a sale be opened against a
-/// six decimal reading of a nine decimal token, which moves the band by a
-/// thousand.
+/// The decimals are read from the paying token the handler has already proven
+/// to be the template's. Taking a mint on the caller's word would let a sale be
+/// opened against a six decimal reading of a nine decimal token, which moves the
+/// band by a thousand.
 ///
-/// Rejects `InvalidBand` for a missing or out of range setting, or a paying token
-/// that is not the template's. `WrongPriceAccount` when the price account is not
-/// the one this shard and this feed id produce.
+/// The band compares the curve price with a stock price in dollars, so it only
+/// means anything when buyers pay in dollars. Wrapped SOL is refused, both the
+/// classic token program's and Token-2022's, with the addresses taken from the
+/// two token crates rather than typed in. Covers wrapped SOL only: any other
+/// token that is not a dollar is not recognised here, which the threat model
+/// names.
+///
+/// Rejects `InvalidBand` for a missing or out of range setting.
+/// `BandNeedsDollarQuote` when buyers pay in wrapped SOL. `WrongPriceAccount`
+/// when the price account is not the one this shard and this feed id produce.
 fn check_band(
     ctx: &Context<CreateSale>,
     band: &PriceBand,
-    template: &dbc::HookConfig,
     base_decimals: u8,
 ) -> Result<(u8, u8)> {
     require!(band.band_bps <= price::MAX_BAND_BPS, PanguError::InvalidBand);
@@ -493,15 +550,11 @@ fn check_band(
         PanguError::WrongPriceAccount
     );
 
-    let quote_mint = ctx
-        .accounts
-        .quote_mint
-        .as_ref()
-        .ok_or(PanguError::InvalidBand)?;
-    require_keys_eq!(
-        quote_mint.key(),
-        template.quote_mint,
-        PanguError::InvalidBand
+    let quote_mint = &ctx.accounts.quote_mint;
+    let paying = quote_mint.key();
+    require!(
+        paying != spl_token::native_mint::ID && paying != spl_token_2022::native_mint::ID,
+        PanguError::BandNeedsDollarQuote
     );
 
     let quote_decimals = quote_mint.decimals;
@@ -511,4 +564,36 @@ fn check_band(
     );
 
     Ok((base_decimals, quote_decimals))
+}
+
+/// Reads `swap_base_amount` out of a launch template's bytes. The caller must
+/// already have proven the bytes are a DBC `ConfigWithTransferHook`, which fixes
+/// the length well past this offset.
+fn read_swap_base_amount(data: &[u8]) -> u64 {
+    let mut amount = [0u8; 8];
+    amount.copy_from_slice(
+        &data[CONFIG_SWAP_BASE_AMOUNT_OFFSET..CONFIG_SWAP_BASE_AMOUNT_OFFSET + 8],
+    );
+    u64::from_le_bytes(amount)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The same mainnet template dbc.rs is checked against.
+    const LIVE_MAINNET_CONFIG: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../feeds/live-config.bin"
+    ));
+
+    /// What Meteora's SDK reads as `swap_base_amount` out of the same bytes,
+    /// through its own IDL and Anchor's account coder, on 23 Sep 2026.
+    const SDK_SWAP_BASE_AMOUNT: u64 = 793_111_083_132_882;
+
+    #[test]
+    fn the_live_mainnet_template_reads_the_curve_supply_at_the_offset_we_use() {
+        assert_eq!(LIVE_MAINNET_CONFIG.len(), dbc::HOOK_CONFIG_LEN);
+        assert_eq!(read_swap_base_amount(LIVE_MAINNET_CONFIG), SDK_SWAP_BASE_AMOUNT);
+    }
 }

@@ -151,6 +151,32 @@
               }
             ]
           }
+        },
+        {
+          "name": "rules",
+          "docs": [
+            "offering period is over, and only when the bytes are a SaleRules in a",
+            "layout this build reads. Anything else, including rules written by an",
+            "older build, reads as \"not over\" and leaves the two older ways in exactly",
+            "as they were, so this account can never stop a close that worked before."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -205,18 +231,18 @@
           "name": "dbc_config",
           "docs": [
             "template this pool names, owned by DBC and of the right kind. Its fee mode",
-            "decides whether the sale may open at all, and a banded sale also reads the",
-            "paying token it was configured with."
+            "and the supply its curve sells decide whether the sale may open at all, and",
+            "it names the paying token."
           ]
         },
         {
           "name": "quote_mint",
           "docs": [
-            "Band only, and required there. Must be the paying token the template names.",
-            "Its decimals are stored, so the hook can turn a curve price into dollars",
+            "Required in every mode. Must be the paying token the template names. It is",
+            "stored in the rules, its freeze authority is checked, and on a banded sale",
+            "its decimals are stored so the hook can turn a curve price into dollars",
             "without being handed a mint at buy time."
-          ],
-          "optional": true
+          ]
         },
         {
           "name": "rules",
@@ -307,6 +333,10 @@
               "name": "PriceBand"
             }
           }
+        },
+        {
+          "name": "ends_at",
+          "type": "i64"
         }
       ]
     },
@@ -822,6 +852,26 @@
       "code": 6028,
       "name": "WrongLayoutVersion",
       "msg": "these sale rules were written by another layout of the program"
+    },
+    {
+      "code": 6029,
+      "name": "BandNeedsDollarQuote",
+      "msg": "a price band needs buyers to pay in a dollar token, not wrapped SOL"
+    },
+    {
+      "code": 6030,
+      "name": "IssuerControlsPayingToken",
+      "msg": "the issuer can freeze the paying token, which would let them stop sellers being paid"
+    },
+    {
+      "code": 6031,
+      "name": "CapCoversWholeSale",
+      "msg": "the cap is at or above everything the curve sells, so it limits nobody"
+    },
+    {
+      "code": 6032,
+      "name": "EndInThePast",
+      "msg": "the offering period would end at a time that has already passed"
     }
   ],
   "types": [
@@ -830,6 +880,10 @@
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
           {
             "name": "wallet",
             "type": "pubkey"
@@ -1043,6 +1097,18 @@
           {
             "name": "band_bps",
             "type": "u16"
+          },
+          {
+            "name": "quote_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "ends_at",
+            "docs": [
+              "Unix seconds when the offering period ends and every rule lifts. Zero",
+              "means the rules hold until graduation."
+            ],
+            "type": "i64"
           }
         ]
       }
@@ -1190,11 +1256,29 @@
             "type": "u8"
           },
           {
+            "name": "quote_mint",
+            "docs": [
+              "The token buyers pay in, read from the launch template at creation, at",
+              "byte 299. Layout 2 onwards; a version 1 account holds zeros here."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "ends_at",
+            "docs": [
+              "Unix seconds at which the offering period ends, at byte 331. From then on",
+              "every rule lifts and the token moves freely, so a curve that never fills",
+              "cannot hold the token in place for good. Zero means no end: the rules hold",
+              "until graduation. Fixed at creation like every other rule."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                63
+                23
               ]
             }
           }
@@ -1206,6 +1290,10 @@
       "type": {
         "kind": "struct",
         "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
           {
             "name": "wallet",
             "type": "pubkey"

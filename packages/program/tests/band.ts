@@ -18,7 +18,7 @@ import { assert } from "chai";
 import { Decimal } from "decimal.js";
 import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { getExtraAccountMetas } from "@solana/spl-token";
+import { NATIVE_MINT, getExtraAccountMetas } from "@solana/spl-token";
 import {
   TokenDecimal,
   getPriceFromSqrtPrice,
@@ -42,6 +42,7 @@ import {
   mustSucceed,
   openBuyerRecord,
   placeVerifier,
+  placeWrappedSolMint,
   readRules,
   sell,
   sendCreateSale,
@@ -91,6 +92,8 @@ describe("create_sale with a price band", () => {
     assert.equal(rules.maxConfBps, MAX_CONF_BPS);
     assert.equal(rules.baseDecimals, 6);
     assert.equal(rules.quoteDecimals, 6);
+    // A dollar stand-in: an ordinary six decimal SPL token, not wrapped SOL.
+    assert.isTrue(rules.quoteMint.equals(env.quoteMint), "the paying token was not stored");
 
     assert.equal(await extraAccountCount(env), 5);
   });
@@ -242,8 +245,21 @@ describe("create_sale with a price band", () => {
         band: band(),
         quoteMintAccount: imposter,
       }),
-      "InvalidBand"
+      "WrongMint"
     );
+  });
+
+  it("refuses a band on a sale priced in wrapped SOL", async () => {
+    // The band measures the curve against a stock price in dollars. With buyers
+    // paying in SOL the two numbers are in different units and the ceiling
+    // means nothing.
+    const env = await setupEnv({ quoteMint: NATIVE_MINT });
+    placeWrappedSolMint(env);
+    expectError(
+      await sendCreateSale(env, { band: band() }),
+      "BandNeedsDollarQuote"
+    );
+    assert.isNull(await accountAt(env, env.rules), "rules were written anyway");
   });
 
   it("refuses band settings on a sale that has no band", async () => {

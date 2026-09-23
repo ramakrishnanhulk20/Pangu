@@ -60,4 +60,12 @@ pub enum PanguError {
     MathOverflow,
     #[msg("these sale rules were written by another layout of the program")]
     WrongLayoutVersion,
+    #[msg("a price band needs buyers to pay in a dollar token, not wrapped SOL")]
+    BandNeedsDollarQuote,
+    #[msg("the issuer can freeze the paying token, which would let them stop sellers being paid")]
+    IssuerControlsPayingToken,
+    #[msg("the cap is at or above everything the curve sells, so it limits nobody")]
+    CapCoversWholeSale,
+    #[msg("the offering period would end at a time that has already passed")]
+    EndInThePast,
 }

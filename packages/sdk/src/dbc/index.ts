@@ -27,8 +27,8 @@ export type { GraduateInput, Graduate, SaleProgress } from "./graduate.js";
 export { hookAccounts, hookAccountsInfo } from "./hook.js";
 export type { HookAccountsInput, PendingTokenAccount } from "./hook.js";
 
-export { loadPool, requireSale, dbcProgram, DBC_POOL_AUTHORITY } from "./state.js";
-export type { PoolView } from "./state.js";
+export { loadPool, loadSellPool, requireSale, dbcProgram, DBC_POOL_AUTHORITY } from "./state.js";
+export type { PoolView, PoolMarket, SellView } from "./state.js";
 
 export {
   COMPUTE_LIMIT,

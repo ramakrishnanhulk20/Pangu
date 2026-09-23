@@ -34,8 +34,8 @@ const byName = new Map(PANGU_ERRORS.map((error) => [error.name as string, error]
 const PANGU = PANGU_PROGRAM_ID.toBase58();
 
 const INVOKE = /^Program (\S+) invoke \[\d+\]$/;
-const FAILED_CUSTOM = /^Program (\S+) failed: custom program error: (0x[0-9a-fA-F]+|\d+)/;
-const RESULT = /^Program (\S+) (?:success|failed)/;
+const SUCCESS = /^Program (\S+) success$/;
+const FAILED = /^Program (\S+) failed: (.*)$/;
 const ERROR_NAME = /Error Code: ([A-Za-z0-9_]+)/;
 const ERROR_NUMBER = /Error Number: (\d+)/;
 const CUSTOM = /custom program error: (0x[0-9a-fA-F]+|\d+)/;
@@ -46,18 +46,47 @@ function toCode(text: string): number {
     : Number.parseInt(text, 10);
 }
 
+/** The refusal a log line names, by name, then by number, then by bare code. */
+function refusalIn(line: string): PanguError | undefined {
+  const named = ERROR_NAME.exec(line);
+  const byThatName = named === null ? undefined : byName.get(named[1] ?? "");
+  if (byThatName !== undefined) {
+    return byThatName;
+  }
+  const numbered = ERROR_NUMBER.exec(line);
+  const byThatNumber =
+    numbered === null ? undefined : byCode.get(toCode(numbered[1] ?? ""));
+  if (byThatNumber !== undefined) {
+    return byThatNumber;
+  }
+  const custom = CUSTOM.exec(line);
+  return custom === null ? undefined : byCode.get(toCode(custom[1] ?? ""));
+}
+
 /**
  * Finds Pangu's own refusal in a transaction's logs.
  *
  * Covers the two shapes a refusal arrives in: the Anchor line that names the
- * error, and the bare code the runtime prints when the program fails. A numeric
- * code is only read as Pangu's when Pangu ran in that transaction, or when the
- * lines given name no program at all, so another program's code 6011 is not
- * reported as OverCap.
+ * error, and the bare code the runtime prints when the program fails.
+ *
+ * A code only means something next to the program that raised it: DBC's 6002
+ * is its slippage refusal, and Pangu's 6002 is WrongMint. So the lines are
+ * walked as the runtime prints them, each "invoke" opening a frame and each
+ * "success" or "failed" closing one, and the first "failed" names the program
+ * the transaction really stopped in. The runtime aborts on the innermost
+ * failure, so every later "failed" is only a caller passing it up. A refusal is
+ * Pangu's only when that program is Pangu, and only lines printed inside
+ * Pangu's own frame are read for its name. Pangu having run earlier in the same
+ * transaction, which it does on every first buy when it opens the buyer
+ * record, counts for nothing.
+ *
+ * A fragment that names no program at all is read as Pangu's, because there is
+ * nobody else it could belong to.
  *
  * Does not cover: errors Pangu never raises, such as Anchor's own account checks
- * or the token program's. Those come back as null and the caller should show the
- * raw message.
+ * or the token program's, and logs cut short before the failing line when the
+ * frame that failed is not Pangu's. Those come back as null and the caller should
+ * show the raw message.
  */
 export function panguErrorFromLogs(logs: string[]): PanguError | null {
   if (!Array.isArray(logs)) {
@@ -65,8 +94,11 @@ export function panguErrorFromLogs(logs: string[]): PanguError | null {
   }
 
   const stack: string[] = [];
-  let panguRan = false;
   let namedProgram = false;
+  let failedProgram: string | null = null;
+  let failedReason = "";
+  // The last refusal printed inside a Pangu frame that has not succeeded.
+  let panguSaid: PanguError | undefined;
 
   for (const entry of logs) {
     if (typeof entry !== "string") {
@@ -78,60 +110,52 @@ export function panguErrorFromLogs(logs: string[]): PanguError | null {
     if (invoke !== null) {
       namedProgram = true;
       stack.push(invoke[1] ?? "");
-      panguRan = panguRan || invoke[1] === PANGU;
       continue;
     }
 
-    const failed = FAILED_CUSTOM.exec(line);
+    const succeeded = SUCCESS.exec(line);
+    if (succeeded !== null) {
+      namedProgram = true;
+      stack.pop();
+      // A Pangu frame that succeeded refused nothing, whatever it logged.
+      if (succeeded[1] === PANGU) {
+        panguSaid = undefined;
+      }
+      continue;
+    }
+
+    const failed = FAILED.exec(line);
     if (failed !== null) {
       namedProgram = true;
-      const program = failed[1] ?? "";
-      panguRan = panguRan || program === PANGU;
-      const found = byCode.get(toCode(failed[2] ?? ""));
-      if (found !== undefined && panguRan) {
-        return found;
+      if (failedProgram === null) {
+        failedProgram = failed[1] ?? "";
+        failedReason = failed[2] ?? "";
       }
       stack.pop();
       continue;
     }
 
-    if (RESULT.test(line)) {
-      namedProgram = true;
-      stack.pop();
-      continue;
-    }
-
-    // A log line belongs to whichever program is running. With no invoke lines
-    // at all the caller has handed over a fragment, and there is nobody else it
-    // could belong to.
     const current = stack[stack.length - 1];
-    if (current !== undefined && current !== PANGU) {
-      continue;
-    }
-
-    const named = ERROR_NAME.exec(line);
-    const byThatName = named === null ? undefined : byName.get(named[1] ?? "");
-    if (byThatName !== undefined) {
-      return byThatName;
-    }
-
-    const numbered = ERROR_NUMBER.exec(line);
-    const byThatNumber =
-      numbered === null ? undefined : byCode.get(toCode(numbered[1] ?? ""));
-    if (byThatNumber !== undefined) {
-      return byThatNumber;
-    }
-
-    const custom = CUSTOM.exec(line);
-    if (custom !== null && (current === PANGU || !namedProgram || panguRan)) {
-      const found = byCode.get(toCode(custom[1] ?? ""));
-      if (found !== undefined) {
-        return found;
-      }
+    if (current === PANGU || !namedProgram) {
+      panguSaid = refusalIn(line) ?? panguSaid;
     }
   }
 
-  return null;
+  if (!namedProgram) {
+    return panguSaid ?? null;
+  }
+  if (failedProgram === null) {
+    // Cut short before any frame closed as failed. Only a refusal printed inside
+    // Pangu's own frame, still open, can be trusted as Pangu's.
+    return stack.includes(PANGU) ? panguSaid ?? null : null;
+  }
+  if (failedProgram !== PANGU) {
+    return null;
+  }
+  const custom = CUSTOM.exec(failedReason);
+  const byFailedCode =
+    custom === null ? undefined : byCode.get(toCode(custom[1] ?? ""));
+  return byFailedCode ?? panguSaid ?? null;
 }
 
 /**
@@ -190,6 +214,14 @@ const EXPLANATIONS = {
   MathOverflow: "The sale's counters cannot go any higher.",
   WrongLayoutVersion:
     "These sale rules were written by an older build of the program, so this build will not act on them.",
+  BandNeedsDollarQuote:
+    "A price band compares the curve with a stock price in dollars, so buyers have to pay in a dollar token. Pick a launch template priced in a dollar stablecoin, or open the sale without a band.",
+  IssuerControlsPayingToken:
+    "You hold the freeze authority of the token buyers pay in, which would let you stop sellers being paid. Pick a paying token whose freeze authority is not yours.",
+  CapCoversWholeSale:
+    "The per-wallet limit is as large as everything the curve sells, so one wallet could buy the whole sale. Set a limit below the curve's supply.",
+  EndInThePast:
+    "The end of the offering period has to be later than now. Pick a future time, or leave it at zero for no end.",
 } as const;
 
 export type PanguErrorName = keyof typeof EXPLANATIONS;

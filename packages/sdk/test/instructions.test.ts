@@ -114,6 +114,7 @@ const issuer = key();
 const pool = key();
 const mint = key();
 const dbcConfig = key();
+const payingToken = key();
 const wallet = key();
 /** Pyth's own Equity.US.AAPL/USD feed id. */
 const PRICE_FEED =
@@ -135,6 +136,7 @@ describe("instruction shape", () => {
       cap: 1_000n,
       accessMode: ACCESS_MODE.open,
       dbcConfig,
+      quoteMint: payingToken,
     });
     expect(ix.programId.equals(PANGU_PROGRAM_ID)).toBe(true);
     expect(Uint8Array.from(ix.data.subarray(0, 8))).toEqual(
@@ -147,9 +149,31 @@ describe("instruction shape", () => {
         pool,
         mint,
         dbc_config: dbcConfig,
+        quote_mint: payingToken,
         system_program: SystemProgram.programId,
       })
     );
+    const args = coder.instruction.decode(ix.data)?.data as {
+      ends_at: { toString(): string };
+    };
+    expect(args.ends_at.toString()).toBe("0");
+  });
+
+  it("carries the end of the offering period when one is given", () => {
+    const ix = createSaleInstruction({
+      issuer,
+      pool,
+      mint,
+      cap: 1_000n,
+      accessMode: ACCESS_MODE.open,
+      dbcConfig,
+      quoteMint: payingToken,
+      endsAt: 1_790_000_000,
+    });
+    const args = coder.instruction.decode(ix.data)?.data as {
+      ends_at: { toString(): string };
+    };
+    expect(args.ends_at.toString()).toBe("1790000000");
   });
 
   it("builds a mode 2 sale with a band and derives the price account itself", () => {
@@ -285,6 +309,7 @@ describe("what create_sale refuses before it builds anything", () => {
     cap: 1_000n,
     accessMode: ACCESS_MODE.open,
     dbcConfig,
+    quoteMint: payingToken,
   };
 
   it("refuses a cap of zero", () => {
@@ -361,10 +386,14 @@ describe("what create_sale refuses before it builds anything", () => {
     ).toThrow(/bps must be between 1 and 5000/);
   });
 
-  it("refuses a band without the paying token", () => {
-    expect(() => createSaleInstruction({ ...base, band })).toThrow(
-      /needs the quoteMint/
-    );
+  it("refuses a sale of any mode without the paying token", () => {
+    const { quoteMint: _left_out, ...noPayingToken } = base;
+    expect(() =>
+      createSaleInstruction(noPayingToken as typeof base)
+    ).toThrow(/quoteMint must be a PublicKey/);
+    expect(() =>
+      createSaleInstruction({ ...(noPayingToken as typeof base), band })
+    ).toThrow(/quoteMint must be a PublicKey/);
   });
 
   it("refuses a sale of any mode without the pool's launch template", () => {
@@ -374,10 +403,10 @@ describe("what create_sale refuses before it builds anything", () => {
     ).toThrow(/dbcConfig must be a PublicKey/);
   });
 
-  it("refuses the paying token on a sale with no band", () => {
-    expect(() => createSaleInstruction({ ...base, quoteMint: key() })).toThrow(
-      /price band/
-    );
+  it("refuses an end of the offering that is not a whole number of seconds", () => {
+    for (const endsAt of [-1, 1.5]) {
+      expect(() => createSaleInstruction({ ...base, endsAt })).toThrow(/endsAt/);
+    }
   });
 
   it("refuses a confidence limit the program would not take, zero included", () => {

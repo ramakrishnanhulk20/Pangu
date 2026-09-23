@@ -15,6 +15,7 @@ import {
 import {
   ExtensionType,
   MINT_SIZE,
+  NATIVE_MINT,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
@@ -67,6 +68,13 @@ export const HOOK_CONFIG_LEN = 1128;
 export const CONFIG_COLLECT_FEE_MODE_OFFSET = 232;
 export const COLLECT_FEE_MODE_QUOTE_TOKEN = 0;
 export const COLLECT_FEE_MODE_OUTPUT_TOKEN = 1;
+/** Where DBC's launch template carries `swap_base_amount`, the tokens the curve sells. */
+export const CONFIG_SWAP_BASE_AMOUNT_OFFSET = 256;
+/**
+ * What the stand-in template says its curve sells, unless a test says otherwise.
+ * Far above any cap the tests use, so only the tests about that bound meet it.
+ */
+export const DEFAULT_CURVE_SUPPLY = 1_000_000_000_000n;
 export const POOL_CONFIG_OFFSET = 72;
 export const POOL_SQRT_PRICE_OFFSET = 280;
 export const DECIMALS = 6;
@@ -222,8 +230,8 @@ export interface Env {
   extraMetas: PublicKey;
   /** The DBC launch template the stand-in pool names. */
   poolConfig: PublicKey;
-  /** The paying token that template was given, when the test asked for one. */
-  quoteMint: PublicKey | null;
+  /** The paying token the launch template names. Every sale has one. */
+  quoteMint: PublicKey;
   quoteDecimals: number;
   /** True when the test asked for a mint that can still be minted. */
   keepsMintAuthority: boolean;
@@ -249,13 +257,24 @@ export interface EnvOptions {
   /** Decimals of the sale token. Defaults to six. */
   baseDecimals?: number;
   /**
-   * When set, a paying-token mint with these decimals is created and named by the
-   * DBC launch template at the pool's config address. A price band cannot be
-   * opened without both.
+   * Decimals of the paying-token mint created for the launch template to name.
+   * Defaults to six, a dollar stablecoin's.
    */
   quoteDecimals?: number;
+  /**
+   * Freeze authority of that paying-token mint: a key, "issuer" for this
+   * sale's own issuer, or none, the default.
+   */
+  quoteFreezeAuthority?: PublicKey | "issuer" | null;
+  /**
+   * Names an existing paying-token mint instead of creating one, for wrapped
+   * SOL. The caller must have put a mint at this address.
+   */
+  quoteMint?: PublicKey;
   /** Fee side written into the launch template. Defaults to the paying token. */
   collectFeeMode?: number;
+  /** Tokens the launch template says its curve sells. */
+  curveSupply?: bigint;
   /**
    * Leaves the mint authority alive. DBC revokes it at pool creation, and
    * `create_sale` refuses a mint that still has one, so this is for that test.
@@ -288,8 +307,8 @@ export async function setupEnv(options: EnvOptions = {}): Promise<Env> {
     rules: PublicKey.default,
     extraMetas: PublicKey.default,
     poolConfig: options.poolConfig ?? Keypair.generate().publicKey,
-    quoteMint: null,
-    quoteDecimals: options.quoteDecimals ?? 0,
+    quoteMint: PublicKey.default,
+    quoteDecimals: options.quoteDecimals ?? DECIMALS,
     keepsMintAuthority: true,
   };
   for (const key of [payer, issuer, poolAuthority]) {
@@ -342,15 +361,22 @@ export async function setupEnv(options: EnvOptions = {}): Promise<Env> {
   base.rules = saleRulesPda(mint);
   base.extraMetas = extraMetasPda(mint);
 
-  if (options.quoteDecimals !== undefined) {
-    base.quoteMint = await createPlainMint(base, options.quoteDecimals);
-  }
-  // Every sale reads the template now, not only a banded one, so it is always there.
+  base.quoteMint =
+    options.quoteMint ??
+    (await createPlainMint(
+      base,
+      base.quoteDecimals,
+      options.quoteFreezeAuthority === "issuer"
+        ? issuer.publicKey
+        : options.quoteFreezeAuthority ?? null
+    ));
+  // Every sale reads the template and the paying token it names.
   placeDbcConfig(
     base,
     base.poolConfig,
-    base.quoteMint ?? PublicKey.default,
-    options.collectFeeMode
+    base.quoteMint,
+    options.collectFeeMode,
+    options.curveSupply
   );
 
   await placeVault(base, poolAuthority.publicKey);
@@ -393,12 +419,14 @@ export function placeDbcConfig(
   env: Env,
   config: PublicKey,
   quoteMint: PublicKey,
-  collectFeeMode: number = COLLECT_FEE_MODE_QUOTE_TOKEN
+  collectFeeMode: number = COLLECT_FEE_MODE_QUOTE_TOKEN,
+  curveSupply: bigint = DEFAULT_CURVE_SUPPLY
 ) {
   const data = Buffer.alloc(HOOK_CONFIG_LEN);
   HOOK_CONFIG_DISCRIMINATOR.copy(data, 0);
   quoteMint.toBuffer().copy(data, 8);
   data.writeUInt8(collectFeeMode, CONFIG_COLLECT_FEE_MODE_OFFSET);
+  data.writeBigUInt64LE(curveSupply, CONFIG_SWAP_BASE_AMOUNT_OFFSET);
   env.ctx.setAccount(config, {
     lamports: 10_000_000,
     data,
@@ -501,8 +529,10 @@ export interface CreateSaleArgs {
   band?: BandArgs;
   /** Overrides which account is passed for the launch template. Null means none. */
   dbcConfigAccount?: PublicKey | null;
-  /** Overrides which account is passed for the paying token. Null means none. */
-  quoteMintAccount?: PublicKey | null;
+  /** Overrides which account is passed for the paying token. */
+  quoteMintAccount?: PublicKey;
+  /** Unix seconds when the offering period ends. Zero, the default, means never. */
+  endsAt?: bigint;
   signer?: Keypair;
 }
 
@@ -522,17 +552,17 @@ export async function sendCreateSale(env: Env, args: CreateSaleArgs = {}) {
   const credential = args.credential ?? PublicKey.default;
   const schema = args.schema ?? PublicKey.default;
   const band = bandArgs(args.band);
-  // A sale that names a credential or a band passes the matching accounts,
-  // unless a test asks for something else on purpose.
+  // A sale that names a credential passes the matching accounts, unless a test
+  // asks for something else on purpose.
   const named = !credential.equals(PublicKey.default);
-  const banded = band.bandBps > 0;
   const ix: TransactionInstruction = await env.program.methods
     .createSale(
       new BN((args.cap ?? 1_000n).toString()),
       args.accessMode ?? ACCESS_OPEN,
       credential,
       schema,
-      band
+      band,
+      new BN((args.endsAt ?? 0n).toString())
     )
     .accountsPartial({
       issuer: signer.publicKey,
@@ -554,12 +584,7 @@ export async function sendCreateSale(env: Env, args: CreateSaleArgs = {}) {
         args.dbcConfigAccount !== undefined
           ? args.dbcConfigAccount
           : env.poolConfig,
-      quoteMint:
-        args.quoteMintAccount !== undefined
-          ? args.quoteMintAccount
-          : banded
-            ? env.quoteMint
-            : null,
+      quoteMint: args.quoteMintAccount ?? env.quoteMint,
       rules: env.rules,
       extraAccountMetaList: env.extraMetas,
       systemProgram: SystemProgram.programId,
@@ -626,6 +651,7 @@ export async function closeBuyerRecord(env: Env, wallet: Keypair) {
       wallet: wallet.publicKey,
       mint: env.mint,
       record: buyerRecordPda(env.mint, wallet.publicKey),
+      rules: env.rules,
     })
     .instruction();
   return send(env, [ix], [wallet]);
@@ -1273,7 +1299,8 @@ async function createHookMint(
 /** A paying-token mint: an ordinary SPL token, the way a dollar stablecoin is. */
 export async function createPlainMint(
   env: Env,
-  decimals: number
+  decimals: number,
+  freezeAuthority: PublicKey | null = null
 ): Promise<PublicKey> {
   const mint = Keypair.generate();
   const ixs = [
@@ -1288,12 +1315,125 @@ export async function createPlainMint(
       mint.publicKey,
       decimals,
       env.issuer.publicKey,
-      null,
+      freezeAuthority,
       TOKEN_PROGRAM_ID
     ),
   ];
   mustSucceed(await send(env, ixs, [mint]));
   return mint.publicKey;
+}
+
+/**
+ * Puts the classic token program's wrapped SOL mint at its real address, laid
+ * out the way the token program keeps it: no mint authority, nine decimals,
+ * initialized, no freeze authority.
+ */
+export function placeWrappedSolMint(env: Env) {
+  const data = Buffer.alloc(MINT_SIZE);
+  data.writeUInt8(9, 44);
+  data.writeUInt8(1, 45);
+  env.ctx.setAccount(NATIVE_MINT, {
+    lamports: 1_000_000_000,
+    data,
+    owner: TOKEN_PROGRAM_ID,
+    executable: false,
+    rentEpoch: 0,
+  });
+}
+
+/** The fields a SaleRules account held under layout version 1. */
+export interface RulesV1 {
+  mint: PublicKey;
+  pool: PublicKey;
+  baseVault: PublicKey;
+  issuer: PublicKey;
+  cap: bigint;
+  accessMode: number;
+  credential: PublicKey;
+  schema: PublicKey;
+  priceAccount: PublicKey;
+  priceFeedId: number[];
+  priceShard: number;
+  bandBps: number;
+  maxPriceAgeSecs: number;
+  maxConfBps: number;
+  baseDecimals: number;
+  quoteDecimals: number;
+  buyers: number;
+  totalNetBought: bigint;
+  bump: number;
+}
+
+/**
+ * Writes a SaleRules account byte by byte in layout version 1, the layout the
+ * sales already open on devnet were written in: 362 bytes, the version at byte
+ * 298 and nothing but zeros behind it. Built by hand, not by the IDL coder, so
+ * the test cannot quietly pick up the new layout's fields.
+ */
+export function encodeRulesV1(fields: RulesV1, discriminator: Buffer): Buffer {
+  const data = Buffer.alloc(8 + 354);
+  discriminator.copy(data, 0);
+  fields.mint.toBuffer().copy(data, 8);
+  fields.pool.toBuffer().copy(data, 40);
+  fields.baseVault.toBuffer().copy(data, 72);
+  fields.issuer.toBuffer().copy(data, 104);
+  data.writeBigUInt64LE(fields.cap, 136);
+  data.writeUInt8(fields.accessMode, 144);
+  fields.credential.toBuffer().copy(data, 145);
+  fields.schema.toBuffer().copy(data, 177);
+  fields.priceAccount.toBuffer().copy(data, 209);
+  Buffer.from(fields.priceFeedId).copy(data, 241);
+  data.writeUInt16LE(fields.priceShard, 273);
+  data.writeUInt16LE(fields.bandBps, 275);
+  data.writeUInt32LE(fields.maxPriceAgeSecs, 277);
+  data.writeUInt16LE(fields.maxConfBps, 281);
+  data.writeUInt8(fields.baseDecimals, 283);
+  data.writeUInt8(fields.quoteDecimals, 284);
+  data.writeUInt32LE(fields.buyers, 285);
+  data.writeBigUInt64LE(fields.totalNetBought, 289);
+  data.writeUInt8(fields.bump, 297);
+  data.writeUInt8(1, RULES_LAYOUT_VERSION_OFFSET);
+  return data;
+}
+
+/** Replaces a sale's rules account with version 1 bytes carrying the same rules. */
+export async function rewriteRulesAsV1(env: Env) {
+  const account = await env.client.getAccount(env.rules);
+  assert.isNotNull(account, "the rules account is missing");
+  const current = Buffer.from(account!.data);
+  const rules = await readRules(env);
+  const data = encodeRulesV1(
+    {
+      mint: rules.mint,
+      pool: rules.pool,
+      baseVault: rules.baseVault,
+      issuer: rules.issuer,
+      cap: BigInt(rules.cap.toString()),
+      accessMode: rules.accessMode,
+      credential: rules.credential,
+      schema: rules.schema,
+      priceAccount: rules.priceAccount,
+      priceFeedId: Array.from(rules.priceFeedId),
+      priceShard: rules.priceShard,
+      bandBps: rules.bandBps,
+      maxPriceAgeSecs: rules.maxPriceAgeSecs,
+      maxConfBps: rules.maxConfBps,
+      baseDecimals: rules.baseDecimals,
+      quoteDecimals: rules.quoteDecimals,
+      buyers: rules.buyers,
+      totalNetBought: BigInt(rules.totalNetBought.toString()),
+      bump: rules.bump,
+    },
+    current.subarray(0, 8)
+  );
+  assert.equal(data.length, current.length);
+  env.ctx.setAccount(env.rules, {
+    lamports: account!.lamports,
+    data,
+    owner: account!.owner,
+    executable: account!.executable,
+    rentEpoch: account!.rentEpoch,
+  });
 }
 
 /**

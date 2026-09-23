@@ -4,7 +4,7 @@ import {
   swapQuoteExactOut,
   swapQuotePartialFill,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import type { PoolView } from "./state.js";
+import type { PoolMarket } from "./state.js";
 
 /**
  * The numbers Meteora's quote functions really return.
@@ -31,7 +31,7 @@ export interface SwapNumbers {
 
 /** What this much of the paying token, or of the sale token, would return. */
 export function quoteExactIn(
-  view: PoolView,
+  view: PoolMarket,
   swapBaseForQuote: boolean,
   amountIn: bigint,
   slippageBps: number
@@ -52,7 +52,7 @@ export function quoteExactIn(
 
 /** What it would take to end up with this many tokens, and where that lands the curve. */
 export function quoteExactOut(
-  view: PoolView,
+  view: PoolMarket,
   swapBaseForQuote: boolean,
   amountOut: bigint,
   slippageBps: number
@@ -77,7 +77,7 @@ export function quoteExactOut(
  * that trade outright, which is why the last buyer of every sale needs this.
  */
 export function quotePartialFill(
-  view: PoolView,
+  view: PoolMarket,
   swapBaseForQuote: boolean,
   amountIn: bigint,
   slippageBps: number

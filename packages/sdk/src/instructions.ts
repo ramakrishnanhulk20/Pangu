@@ -60,8 +60,17 @@ export interface CreateSaleInput {
    * program reads the fee mode off it before it will open a sale at all.
    */
   dbcConfig: PublicKey;
-  /** Band only: the token buyers pay in, whose decimals the rules store. */
-  quoteMint?: PublicKey;
+  /**
+   * The token buyers pay in, the one the launch template names. Needed in every
+   * mode: the program stores it, refuses one the issuer can freeze, and on a
+   * banded sale reads its decimals and refuses wrapped SOL.
+   */
+  quoteMint: PublicKey;
+  /**
+   * Unix seconds at which the offering period ends and every rule lifts. Zero,
+   * the default, means no end: the rules hold until graduation.
+   */
+  endsAt?: number;
 }
 
 export interface OpenBuyerRecordInput {
@@ -165,10 +174,11 @@ function bandFields(band: PriceBandInput, field: string) {
  * transfer hook will be called with.
  *
  * The pool must already exist and the signer must be its creator. The pool's
- * launch template is needed in every mode, because the program refuses a
- * template that collects fees in the sale token. Access mode 2 needs a
- * credential and a schema; a band needs the feed and the token buyers pay in.
- * Every input that could never pass on chain is refused here, with the same
+ * launch template and the token buyers pay in are needed in every mode,
+ * because the program reads the fee mode, the curve's supply and the paying
+ * token before it will open a sale at all. Access mode 2 needs a credential and
+ * a schema; a band needs the feed. Every input that could never pass on chain
+ * and can be judged without reading the chain is refused here, with the same
  * limits the program holds.
  *
  * Throws PanguInputError. Sends nothing.
@@ -207,23 +217,15 @@ export function createSaleInstruction(input: CreateSaleInput): TransactionInstru
 
   const dbcConfig = requireRealPublicKey(input.dbcConfig, "dbcConfig");
 
-  let band = NO_BAND;
-  let quoteMint: PublicKey | null = null;
-  if (input.band !== undefined && input.band !== null) {
-    band = bandFields(input.band, "band");
-    if (input.quoteMint === undefined) {
-      throw new PanguInputError(
-        "a band needs the quoteMint as well, because the program reads both mints' decimals at creation"
-      );
-    }
-    quoteMint = requireRealPublicKey(input.quoteMint, "quoteMint");
-  } else {
-    requireAbsent(
-      input.quoteMint,
-      "quoteMint",
-      "is only read by a sale with a price band, and the program refuses it otherwise"
-    );
-  }
+  const quoteMint = requireRealPublicKey(input.quoteMint, "quoteMint");
+  const band =
+    input.band !== undefined && input.band !== null
+      ? bandFields(input.band, "band")
+      : NO_BAND;
+  const endsAt =
+    input.endsAt === undefined
+      ? 0
+      : requireWholeNumber(input.endsAt, "endsAt", 0, Number.MAX_SAFE_INTEGER);
 
   const keys: AccountMeta[] = [
     meta(issuer, true, true),
@@ -232,7 +234,7 @@ export function createSaleInstruction(input: CreateSaleInput): TransactionInstru
     wantsCredential ? meta(credential, false, false) : absentAccount(),
     wantsCredential ? meta(schema, false, false) : absentAccount(),
     meta(dbcConfig, false, false),
-    quoteMint === null ? absentAccount() : meta(quoteMint, false, false),
+    meta(quoteMint, false, false),
     meta(saleRulesAddress(mint), false, true),
     meta(extraAccountListAddress(mint), false, true),
     meta(SystemProgram.programId, false, false),
@@ -244,6 +246,7 @@ export function createSaleInstruction(input: CreateSaleInput): TransactionInstru
     credential,
     schema,
     band,
+    ends_at: new BN(endsAt),
   });
 }
 
@@ -322,8 +325,9 @@ export function revokeBuyerInstruction(
  * A record with nothing left in it closes at any time, mid-sale included, since
  * it holds no count anybody could lose. A record that still counts tokens waits
  * for the sale to finish, which is the moment the mint stops naming Pangu as its
- * hook; until then the program answers SaleStillRunning. Reopening later is
- * safe, and in the issuer-list mode the wallet has to be approved again.
+ * hook or the offering period in the rules ends; until then the program answers
+ * SaleStillRunning. Reopening later is safe, and in the issuer-list mode the
+ * wallet has to be approved again.
  */
 export function closeBuyerRecordInstruction(
   input: CloseBuyerRecordInput
@@ -336,6 +340,7 @@ export function closeBuyerRecordInstruction(
       meta(wallet, true, true),
       meta(mint, false, false),
       meta(buyerRecordAddress(mint, wallet), false, true),
+      meta(saleRulesAddress(mint), false, false),
     ],
     {}
   );

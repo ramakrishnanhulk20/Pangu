@@ -89,3 +89,60 @@ describe("a buy that breaks two rules at once", () => {
     expect(answer.ceiling).toBe(105n * DOLLAR);
   });
 });
+
+describe("a first buy, with no record yet", () => {
+  beforeEach(() => {
+    vi.mocked(getBuyerRecord).mockResolvedValue(null);
+  });
+
+  it("is refused for the missing record when the caller does not open one", async () => {
+    const answer = await preflightBuy({ connection: NO_CHAIN, buyer, mint, amountOut: 1_000n });
+
+    expect(answer.error).toBe("BuyerRecordMissing");
+    expect(answer.recordOpensInThisBuy).toBe(false);
+    expect(answer.curvePrice).toBeNull();
+  });
+
+  it("gets the band answer when the buy opens the record itself", async () => {
+    const answer = await preflightBuy({
+      connection: NO_CHAIN,
+      buyer,
+      mint,
+      amountOut: 1_000n,
+      openingRecord: true,
+    });
+
+    expect(answer.error).toBe("PriceOutsideBand");
+    expect(answer.recordOpensInThisBuy).toBe(true);
+    expect(answer.capRoom).toBe(1_000_000n);
+    expect(answer.ceiling).toBe(105n * DOLLAR);
+  });
+
+  it("passes inside the band with the whole cap as room, and says the record opens here", async () => {
+    // A square root price of 10 is 100 dollars a share, under the 105 ceiling.
+    vi.mocked(quoteExactOut).mockReturnValue({
+      outputAmount: 0n,
+      nextSqrtPrice: 10n << 64n,
+    });
+    const answer = await preflightBuy({
+      connection: NO_CHAIN,
+      buyer,
+      mint,
+      amountOut: 1_000n,
+      openingRecord: true,
+    });
+
+    expect(answer.ok).toBe(true);
+    expect(answer.capRoom).toBe(1_000_000n);
+    expect(answer.recordOpensInThisBuy).toBe(true);
+    expect(
+      (await preflightBuy({
+        connection: NO_CHAIN,
+        buyer,
+        mint,
+        amountOut: 1_000_001n,
+        openingRecord: true,
+      })).error
+    ).toBe("OverCap");
+  });
+});

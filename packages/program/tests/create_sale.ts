@@ -2,9 +2,11 @@
 // Does NOT cover: the verifier-credential mode (see credential.ts), price bands, a
 // real DBC pool account (the pool here is a stand-in with the same owner, length,
 // discriminator and field offsets), or what happens to a sale after graduation.
-// The launch template is a stand-in too, except in the last test but one, which
-// reads a template dumped from mainnet and compares the program's offset with
-// Meteora's own decoding of the same bytes.
+// The launch template is a stand-in too, except in the test that reads a
+// template dumped from mainnet and compares the program's offsets with Meteora's
+// own decoding of the same bytes. The freeze rule is proven for the issuer's own
+// key only; an authority held by another wallet the issuer controls is a named
+// non-goal in the threat model.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -19,6 +21,7 @@ import {
   COLLECT_FEE_MODE_OUTPUT_TOKEN,
   COLLECT_FEE_MODE_QUOTE_TOKEN,
   CONFIG_COLLECT_FEE_MODE_OFFSET,
+  CONFIG_SWAP_BASE_AMOUNT_OFFSET,
   HOOK_CONFIG_DISCRIMINATOR,
   HOOK_CONFIG_LEN,
   accountAt,
@@ -60,6 +63,8 @@ describe("create_sale", () => {
     assert.equal(rules.quoteDecimals, 0);
     assert.equal(rules.buyers, 0);
     assert.equal(rules.totalNetBought.toString(), "0");
+    assert.isTrue(rules.quoteMint.equals(env.quoteMint), "the paying token was not stored");
+    assert.equal(rules.endsAt.toString(), "0");
 
     const metas = await accountAt(env, env.extraMetas);
     assert.isNotNull(metas, "the extra account meta list was not created");
@@ -132,6 +137,40 @@ describe("create_sale", () => {
     mustSucceed(await sendCreateSale(env));
   });
 
+  it("refuses a paying token that is not the one the template names", async () => {
+    const env = await setupEnv();
+    const other = await setupEnv();
+    expectError(
+      await sendCreateSale(env, { quoteMintAccount: other.quoteMint }),
+      "WrongMint"
+    );
+  });
+
+  it("refuses a paying token the issuer can freeze", async () => {
+    // A frozen pool vault or seller account cannot be paid, which would turn the
+    // always-open exit into a switch the issuer holds.
+    const env = await setupEnv({ quoteFreezeAuthority: "issuer" });
+    expectError(await sendCreateSale(env), "IssuerControlsPayingToken");
+    assert.isNull(await accountAt(env, env.rules), "rules were written anyway");
+  });
+
+  it("opens on the same kind of paying token with no freeze authority", async () => {
+    const env = await setupEnv({ quoteFreezeAuthority: null });
+    mustSucceed(await sendCreateSale(env));
+    assert.isTrue((await readRules(env)).quoteMint.equals(env.quoteMint));
+  });
+
+  it("refuses a cap equal to everything the curve sells", async () => {
+    const env = await setupEnv({ curveSupply: 5_000n });
+    expectError(await sendCreateSale(env, { cap: 5_000n }), "CapCoversWholeSale");
+  });
+
+  it("opens with a cap one unit below what the curve sells", async () => {
+    const env = await setupEnv({ curveSupply: 5_000n });
+    mustSucceed(await sendCreateSale(env, { cap: 4_999n }));
+    assert.equal((await readRules(env)).cap.toString(), "4999");
+  });
+
   it("refuses a cap of zero", async () => {
     const env = await setupEnv();
     expectError(await sendCreateSale(env, { cap: 0n }), "ZeroCap");
@@ -172,6 +211,11 @@ describe("create_sale", () => {
     assert.equal(decoded.collect_fee_mode, COLLECT_FEE_MODE_QUOTE_TOKEN);
     assert.isTrue(
       new PublicKey(bytes.subarray(8, 40)).equals(decoded.quote_mint)
+    );
+    // The cap is held under the curve's own supply, read at this offset.
+    assert.equal(
+      bytes.readBigUInt64LE(CONFIG_SWAP_BASE_AMOUNT_OFFSET).toString(),
+      decoded.swap_base_amount.toString()
     );
   });
 

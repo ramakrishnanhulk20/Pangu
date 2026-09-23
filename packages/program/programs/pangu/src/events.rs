@@ -9,6 +9,10 @@ pub struct SaleCreated {
     pub cap: u64,
     pub access_mode: u8,
     pub band_bps: u16,
+    pub quote_mint: Pubkey,
+    /// Unix seconds when the offering period ends and every rule lifts. Zero
+    /// means the rules hold until graduation.
+    pub ends_at: i64,
 }
 
 #[event]
@@ -37,6 +41,7 @@ pub struct BuyerRecordClosed {
 
 #[event]
 pub struct Bought {
+    pub mint: Pubkey,
     pub wallet: Pubkey,
     pub amount: u64,
     pub net_bought: u64,
@@ -44,6 +49,7 @@ pub struct Bought {
 
 #[event]
 pub struct SoldBack {
+    pub mint: Pubkey,
     pub wallet: Pubkey,
     pub amount: u64,
     pub net_bought: u64,

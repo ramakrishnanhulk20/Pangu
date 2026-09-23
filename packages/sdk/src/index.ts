@@ -10,7 +10,7 @@ export {
   LIMITS,
   SEEDS,
   PANGU_IDL,
-  SALE_RULES_LAYOUT_VERSION,
+  SALE_RULES_LAYOUT_VERSIONS,
 } from "./constants.js";
 export type { AccessMode } from "./constants.js";
 

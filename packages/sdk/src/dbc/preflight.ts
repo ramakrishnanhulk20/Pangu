@@ -26,6 +26,12 @@ export interface BuyPreflight {
   ceiling: bigint | null;
   /** The sale's live stock price, when it has a band. */
   price: PriceReading | null;
+  /**
+   * True when the wallet has no record yet and the caller said the buy opens
+   * one in the same transaction, so every answer above assumes a fresh record:
+   * unapproved, nothing bought. `buyTransaction` always does that.
+   */
+  recordOpensInThisBuy: boolean;
 }
 
 function refused(
@@ -41,6 +47,7 @@ function refused(
     curvePrice: null,
     ceiling: null,
     price: null,
+    recordOpensInThisBuy: false,
     ...extra,
   };
 }
@@ -51,6 +58,14 @@ export interface PreflightBuyInput {
   mint: PublicKey;
   /** Raw units of the sale token the buyer wants to end up with. */
   amountOut: bigint;
+  /**
+   * Set when the buy will open the wallet's record in the same transaction, as
+   * `buyTransaction` does on a first buy. A missing record is then judged as
+   * the fresh one that transaction creates instead of being refused, so a first
+   * buyer gets the band and the cap answers. Off by default, which refuses a
+   * missing record with BuyerRecordMissing as the hook would on its own.
+   */
+  openingRecord?: boolean;
 }
 
 /**
@@ -68,6 +83,11 @@ export interface PreflightBuyInput {
  * dropped. The answer is one of the program's error names with its plain
  * sentence, so the app can say the same thing before and after a refusal.
  *
+ * With `openingRecord` a wallet with no record is judged as the record the buy
+ * opens would leave it: not approved, nothing bought, so an issuer-list sale
+ * still answers NotApproved and every other sale goes on to the band and the
+ * cap with the whole cap as room.
+ *
  * What it cannot see: the Wormhole guardian signatures behind the price, which
  * only Pyth's receiver program can check, and anything that changes between
  * this read and the buy landing. A "pass" here is the state now, not a promise.
@@ -83,21 +103,28 @@ export async function preflightBuy(
     throw new PanguInputError("amountOut must be above zero");
   }
 
+  const openingRecord = input.openingRecord === true;
+
   const view = await loadPool(input.connection, input.mint);
   const sale = view.sale;
-  const record = await getBuyerRecord(input.connection, sale.mint, buyer);
-  const capRoom = record === null ? sale.cap : max(sale.cap - record.netBought, 0n);
+  const existing = await getBuyerRecord(input.connection, sale.mint, buyer);
 
-  if (record === null) {
+  if (existing === null && !openingRecord) {
     return refused("BuyerRecordMissing", sale.cap);
   }
+  const recordOpensInThisBuy = existing === null;
+  // What open_buyer_record writes: this wallet, not approved, nothing bought.
+  const record = existing ?? { approved: false, netBought: 0n };
+  const capRoom = max(sale.cap - record.netBought, 0n);
+  const opened = { recordOpensInThisBuy };
+
   if (sale.accessMode === ACCESS_MODE.issuerList && !record.approved) {
-    return refused("NotApproved", capRoom);
+    return refused("NotApproved", capRoom, opened);
   }
   if (sale.accessMode === ACCESS_MODE.verifierCredential) {
     const refusal = await credentialCheck(input.connection, sale, buyer);
     if (refusal !== null) {
-      return refused(refusal, capRoom);
+      return refused(refusal, capRoom, opened);
     }
   }
 
@@ -108,7 +135,7 @@ export async function preflightBuy(
   if (sale.hasBand) {
     price = await readPrice(input.connection, sale);
     if (!price.usable) {
-      return refused(price.error ?? "PriceStale", capRoom, { price });
+      return refused(price.error ?? "PriceStale", capRoom, { price, ...opened });
     }
 
     // Where this buy would leave the curve, from Meteora's own exact-out quote,
@@ -121,15 +148,24 @@ export async function preflightBuy(
     );
     ceiling = priceCeiling(sale, price.price);
     if (curvePrice > ceiling) {
-      return refused("PriceOutsideBand", capRoom, { curvePrice, ceiling, price });
+      return refused("PriceOutsideBand", capRoom, { curvePrice, ceiling, price, ...opened });
     }
   }
 
   if (amountOut > capRoom) {
-    return refused("OverCap", capRoom, { curvePrice, ceiling, price });
+    return refused("OverCap", capRoom, { curvePrice, ceiling, price, ...opened });
   }
 
-  return { ok: true, error: null, reason: null, capRoom, curvePrice, ceiling, price };
+  return {
+    ok: true,
+    error: null,
+    reason: null,
+    capRoom,
+    curvePrice,
+    ceiling,
+    price,
+    recordOpensInThisBuy,
+  };
 }
 
 function max(a: bigint, b: bigint): bigint {

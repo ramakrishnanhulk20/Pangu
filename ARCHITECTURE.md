@@ -204,8 +204,10 @@ flowchart TD
 | `buyers` | u32 | wallets with a record above zero bought |
 | `total_net_bought` | u64 | sum of all records, for the largest-holder share |
 | `bump` | u8 | |
-| `layout_version` | u8 | 1 today. Every reader refuses another value, so an account written by an older build can never decode into nonsense; the sell path treats it as "no record" and still passes |
-| `reserved` | [u8; 63] | room to grow without a migration |
+| `layout_version` | u8 | at byte 298. 2 today, and 1 is still read: version 2 only filled spare bytes, so every field before this one sits where version 1 put it and the two new fields read as zero on a version 1 account. Every reader refuses any other value, so an account written by an older build can never decode into nonsense; the sell path treats it as "no record" and still passes |
+| `quote_mint` | Pubkey | at byte 299, version 2 onwards. The token buyers pay in, read from the launch template at creation for every sale. `create_sale` refuses one the issuer can freeze, and on a banded sale refuses wrapped SOL |
+| `ends_at` | i64 | at byte 331, version 2 onwards. Unix seconds at which the offering period ends. From then on the hook lets every transfer through untouched, as after graduation, and a buyer may close a record that still counts tokens. Zero means no end, which is what every version 1 account holds |
+| `reserved` | [u8; 23] | room to grow without a migration. The account stays 362 bytes in every version |
 
 Rules are set once at creation and never change. There is no update instruction.
 
@@ -263,7 +265,7 @@ A record account that does not exist yet is still passed. The program treats an 
 
 ## Errors
 
-`NotTransferring`, `ReceivingAccountOwnerCanChange`, `InvalidBand`, `WrongMint`, `WrongBuyerRecord`, `BuyerRecordMissing`, `NotApproved`, `CredentialInvalid`, `CredentialExpired`, `CredentialSignerNotAuthorized`, `OverCap`, `WalletToWalletDuringSale`, `PriceStale`, `PriceNotFullyVerified`, `PriceTooUncertain`, `PriceOutsideBand`, `WrongPriceAccount`, `NotPoolCreator`, `NotAHookPool`, `WrongLaunchTemplate`, `FeesNotInQuoteToken`, `MintAuthorityStillSet`, `HookProgramMismatch`, `ZeroCap`, `InvalidAccessMode`, `SaleStillRunning`, `NotIssuer`, `MathOverflow`.
+`NotTransferring`, `ReceivingAccountOwnerCanChange`, `InvalidBand`, `WrongMint`, `WrongBuyerRecord`, `BuyerRecordMissing`, `NotApproved`, `CredentialInvalid`, `CredentialExpired`, `CredentialSignerNotAuthorized`, `OverCap`, `WalletToWalletDuringSale`, `PriceStale`, `PriceNotFullyVerified`, `PriceTooUncertain`, `PriceOutsideBand`, `WrongPriceAccount`, `NotPoolCreator`, `NotAHookPool`, `WrongLaunchTemplate`, `FeesNotInQuoteToken`, `MintAuthorityStillSet`, `HookProgramMismatch`, `ZeroCap`, `InvalidAccessMode`, `SaleStillRunning`, `NotIssuer`, `MathOverflow`, `WrongLayoutVersion`, `BandNeedsDollarQuote` (a banded sale priced in wrapped SOL), `IssuerControlsPayingToken` (the issuer holds the paying token's freeze authority), `CapCoversWholeSale` (the cap is at or above the `swap_base_amount` the launch template's curve sells), `EndInThePast` (an offering end that is not later than the chain clock). The last five were added at the end of the list, so every older code still means what it did.
 
 ## Events
 

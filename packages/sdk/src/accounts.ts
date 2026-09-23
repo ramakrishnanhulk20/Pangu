@@ -5,7 +5,7 @@ import { getTransferHook, unpackMint } from "@solana/spl-token";
 import { buyerRecordAddress, feedIdHex, saleRulesAddress } from "./addresses.js";
 import {
   PANGU_PROGRAM_ID,
-  SALE_RULES_LAYOUT_VERSION,
+  SALE_RULES_LAYOUT_VERSIONS,
   TOKEN_2022_PROGRAM_ID,
 } from "./constants.js";
 import { panguCoder } from "./coder.js";
@@ -65,6 +65,18 @@ export interface Sale {
   buyers: number;
   totalNetBought: bigint;
   bump: number;
+  /** Which layout wrote this account: 1 or 2. */
+  layoutVersion: number;
+  /**
+   * The token buyers pay in, stored by layout 2 onwards. Null on a version 1
+   * sale, which never recorded it; its launch template still names it.
+   */
+  quoteMint: PublicKey | null;
+  /**
+   * Unix seconds at which the offering period ends and every rule lifts. Null
+   * when the sale has no end, which includes every version 1 sale.
+   */
+  endsAt: number | null;
   /** Spare bytes the program keeps so the account can grow later. */
   reserved: Uint8Array;
   /** True when this sale has a price band, matching SaleRules::has_band. */
@@ -102,6 +114,8 @@ interface RawSale {
   total_net_bought: BN;
   bump: number;
   layout_version: number;
+  quote_mint: PublicKey;
+  ends_at: BN;
   reserved: number[];
 }
 
@@ -134,7 +148,9 @@ function decodeAccount<T>(name: string, data: Uint8Array): T {
  * Reads a SaleRules account's bytes.
  *
  * The discriminator says these are a SaleRules, then the length and the layout
- * version say which build wrote them. Both of those throw a `PanguLayoutError`,
+ * version say which build wrote them. Versions 1 and 2 are read; on version 1
+ * the paying token and the end of the offering come back as null, because
+ * those bytes were spare zeros then. Anything else throws a `PanguLayoutError`,
  * because an account from another build sits at the same address behind the
  * same discriminator: Anchor reads it without complaint and hands back fields
  * taken from the wrong offsets.
@@ -149,11 +165,13 @@ export function decodeSale(data: Uint8Array): Sale {
       `a SaleRules account is ${size} bytes and these are ${data.length}, so they were written by another build of the program`
     );
   }
-  if (raw.layout_version !== SALE_RULES_LAYOUT_VERSION) {
+  if (!SALE_RULES_LAYOUT_VERSIONS.has(raw.layout_version)) {
     throw new PanguLayoutError(
-      `these are layout version ${raw.layout_version} and this package reads version ${SALE_RULES_LAYOUT_VERSION}, so they were written by another build of the program`
+      `these are layout version ${raw.layout_version} and this package reads versions ${[...SALE_RULES_LAYOUT_VERSIONS].join(" and ")}, so they were written by another build of the program`
     );
   }
+  const newFields = raw.layout_version >= 2;
+  const endsAt = newFields ? Number(big(raw.ends_at)) : 0;
   return {
     mint: raw.mint,
     pool: raw.pool,
@@ -174,6 +192,9 @@ export function decodeSale(data: Uint8Array): Sale {
     buyers: raw.buyers,
     totalNetBought: big(raw.total_net_bought),
     bump: raw.bump,
+    layoutVersion: raw.layout_version,
+    quoteMint: newFields ? raw.quote_mint : null,
+    endsAt: endsAt === 0 ? null : endsAt,
     reserved: Uint8Array.from(raw.reserved),
     hasBand: raw.band_bps > 0,
   };

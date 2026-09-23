@@ -4,14 +4,14 @@
 //
 // The byte is rewritten by hand here, because create_sale only ever writes the
 // current version, so an account from another build cannot be made any other
-// way inside one test run.
+// way inside one test run. A version 1 account is written out byte by byte from
+// the old layout for the same reason.
 //
-// Does NOT cover: an account from the real earlier build on devnet, a second
-// version ever being added, or the SDK's own refusal, which is proven in
-// packages/sdk/test/accounts.test.ts.
+// Does NOT cover: an account copied from the real earlier build on devnet, or
+// the SDK's own reading, which is proven in packages/sdk/test/accounts.test.ts.
 
 import { assert } from "chai";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   ACCESS_ISSUER_LIST,
   RULES_LAYOUT_VERSION_OFFSET,
@@ -26,17 +26,18 @@ import {
   readRecord,
   readRules,
   revokeBuyer,
+  rewriteRulesAsV1,
   sell,
   setRulesLayoutVersion,
   setupSale,
   tokenBalance,
 } from "./sale-fixture";
 
-/** The eight byte discriminator plus SaleRules::INIT_SPACE, pinned in create_sale.rs. */
+/** The eight byte discriminator plus SaleRules::INIT_SPACE, pinned in create_sale.rs and state.rs. */
 const RULES_ACCOUNT_LEN = 8 + 354;
 
 describe("the SaleRules layout version", () => {
-  it("writes version 1 at byte 298 without changing the account's size", async () => {
+  it("writes version 2 at byte 298 without changing the account's size", async () => {
     const env = await setupSale({ cap: 1_000n });
 
     const account = await accountAt(env, env.rules);
@@ -45,8 +46,38 @@ describe("the SaleRules layout version", () => {
     // grew or the byte moved, an account written by either build would be read
     // by the other at the wrong offsets, which is the whole thing this stops.
     assert.equal(bytes.length, RULES_ACCOUNT_LEN);
-    assert.equal(bytes.readUInt8(RULES_LAYOUT_VERSION_OFFSET), 1);
-    assert.equal((await readRules(env)).layoutVersion, 1);
+    assert.equal(bytes.readUInt8(RULES_LAYOUT_VERSION_OFFSET), 2);
+    assert.equal((await readRules(env)).layoutVersion, 2);
+    assert.isTrue(
+      new PublicKey(bytes.subarray(299, 331)).equals(env.quoteMint),
+      "the paying token is not at byte 299"
+    );
+    assert.equal(bytes.readBigInt64LE(331), 0n, "ends_at is not at byte 331");
+  });
+
+  it("buys and sells on a version 1 account written by the old layout", async () => {
+    // The sales already open on devnet carry version 1. They have to keep
+    // working under this build without being rewritten.
+    const env = await setupSale({ cap: 1_000n });
+    const buyer = Keypair.generate();
+    fund(env, buyer.publicKey);
+    mustSucceed(await openBuyerRecord(env, buyer));
+    const account = await createTokenAccount(env, buyer.publicKey);
+    await rewriteRulesAsV1(env);
+
+    const before = Buffer.from((await accountAt(env, env.rules))!.data);
+    assert.equal(before.readUInt8(RULES_LAYOUT_VERSION_OFFSET), 1);
+    assert.isTrue(before.subarray(299).equals(Buffer.alloc(63)), "spare bytes are not zero");
+
+    mustSucceed(await buy(env, account, 400n));
+    mustSucceed(await sell(env, account, buyer, 100n));
+
+    assert.equal(await tokenBalance(env, account), 300n);
+    assert.equal((await readRecord(env, buyer.publicKey)).netBought.toString(), "300");
+    const rules = await readRules(env);
+    assert.equal(rules.totalNetBought.toString(), "300");
+    assert.equal(rules.layoutVersion, 1);
+    assert.isTrue(rules.quoteMint.equals(PublicKey.default));
   });
 
   it("buys and sells as before on a sale this build opened", async () => {

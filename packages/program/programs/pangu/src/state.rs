@@ -7,10 +7,16 @@ pub const ACCESS_ISSUER_LIST: u8 = 1;
 /// Only wallets a named verifier has attested may buy.
 pub const ACCESS_VERIFIER_CREDENTIAL: u8 = 2;
 
-/// The layout this build writes and reads. A SaleRules account carrying any
-/// other number was written by a different build, where the fields behind this
-/// byte may sit somewhere else entirely.
-pub const SALE_RULES_LAYOUT_VERSION: u8 = 1;
+/// The layout this build writes. Version 2 added `quote_mint` and `ends_at` in
+/// what used to be spare bytes, so a version 1 account is the same length with
+/// every older field in the same place, and zeros where the two new ones would
+/// be. A zero `ends_at` means no end, so a version 1 sale keeps its rules until
+/// graduation exactly as it did before.
+pub const SALE_RULES_LAYOUT_VERSION: u8 = 2;
+
+/// The oldest layout this build still reads. Anything below it, or above the
+/// version this build writes, may keep its fields somewhere else entirely.
+pub const SALE_RULES_OLDEST_READABLE_VERSION: u8 = 1;
 
 pub const SALE_SEED: &[u8] = b"sale";
 pub const BUYER_SEED: &[u8] = b"buyer";
@@ -98,7 +104,15 @@ pub struct SaleRules {
     /// before this byte existed reads as version 0, which is how a reader tells
     /// the two apart instead of reading one layout's bytes as the other's.
     pub layout_version: u8,
-    pub reserved: [u8; 63],
+    /// The token buyers pay in, read from the launch template at creation, at
+    /// byte 299. Layout 2 onwards; a version 1 account holds zeros here.
+    pub quote_mint: Pubkey,
+    /// Unix seconds at which the offering period ends, at byte 331. From then on
+    /// every rule lifts and the token moves freely, so a curve that never fills
+    /// cannot hold the token in place for good. Zero means no end: the rules hold
+    /// until graduation. Fixed at creation like every other rule.
+    pub ends_at: i64,
+    pub reserved: [u8; 23],
 }
 
 impl SaleRules {
@@ -106,11 +120,27 @@ impl SaleRules {
         self.band_bps > 0
     }
 
-    /// True when this account was written by the layout this build reads. One
-    /// predicate rather than a comparison repeated in each instruction, so a
-    /// second version can never be added to some readers and missed by others.
+    /// True once the offering period is over. Only a layout this build reads can
+    /// answer: in any other the bytes behind `ends_at` may be some other field,
+    /// and reading them as a time could lift the rules on a guess.
+    pub fn offering_is_over(&self, now: i64) -> bool {
+        self.is_readable() && self.ends_at != 0 && now >= self.ends_at
+    }
+
+    /// True when this account was written by a layout this build reads: 1 or 2.
+    /// One predicate rather than a comparison repeated in each instruction, so a
+    /// new version can never be added to some readers and missed by others.
+    /// Every field a buy, a sell or an approval reads sits at the same offset in
+    /// both, and nothing on those paths reads `quote_mint`.
+    pub fn is_readable(&self) -> bool {
+        (SALE_RULES_OLDEST_READABLE_VERSION..=SALE_RULES_LAYOUT_VERSION)
+            .contains(&self.layout_version)
+    }
+
+    /// The name the admin instructions call. Kept so they read exactly the
+    /// versions `is_readable` does, rather than a second rule of their own.
     pub fn layout_is_current(&self) -> bool {
-        self.layout_version == SALE_RULES_LAYOUT_VERSION
+        self.is_readable()
     }
 }
 
@@ -125,4 +155,85 @@ pub struct BuyerRecord {
     /// Tokens received from the pool minus tokens sold back to it.
     pub net_bought: u64,
     pub bump: u8,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn marked_rules() -> SaleRules {
+        SaleRules {
+            mint: Pubkey::new_from_array([1; 32]),
+            pool: Pubkey::new_from_array([2; 32]),
+            base_vault: Pubkey::new_from_array([3; 32]),
+            issuer: Pubkey::new_from_array([4; 32]),
+            cap: 5,
+            access_mode: ACCESS_OPEN,
+            credential: Pubkey::new_from_array([6; 32]),
+            schema: Pubkey::new_from_array([7; 32]),
+            price_account: Pubkey::new_from_array([8; 32]),
+            price_feed_id: [9; 32],
+            price_shard: 10,
+            band_bps: 11,
+            max_price_age_secs: 12,
+            max_conf_bps: 13,
+            base_decimals: 14,
+            quote_decimals: 15,
+            buyers: 16,
+            total_net_bought: 17,
+            bump: 18,
+            layout_version: 0xAB,
+            quote_mint: Pubkey::new_from_array([0xCD; 32]),
+            ends_at: 0x0102_0304_0506_0708,
+            reserved: [0; 23],
+        }
+    }
+
+    /// The bytes are what the chain holds, so the offsets are read off a real
+    /// serialisation rather than worked out by hand.
+    #[test]
+    fn the_account_stays_362_bytes_with_the_new_fields_where_readers_expect() {
+        let mut bytes = Vec::new();
+        marked_rules().try_serialize(&mut bytes).unwrap();
+
+        assert_eq!(bytes.len(), 362);
+        assert_eq!(8 + SaleRules::INIT_SPACE, 362);
+        assert_eq!(bytes[145..177], [6; 32], "credential moved");
+        assert_eq!(bytes[177..209], [7; 32], "schema moved");
+        assert_eq!(bytes[298], 0xAB, "layout_version is not at byte 298");
+        assert_eq!(bytes[299..331], [0xCD; 32], "quote_mint is not at byte 299");
+        assert_eq!(
+            bytes[331..339],
+            0x0102_0304_0506_0708i64.to_le_bytes(),
+            "ends_at is not at byte 331"
+        );
+        assert_eq!(bytes[339..362], [0; 23]);
+    }
+
+    #[test]
+    fn versions_one_and_two_are_readable_and_nothing_else_is() {
+        let mut rules = marked_rules();
+        for (version, readable) in [(0u8, false), (1, true), (2, true), (3, false), (255, false)] {
+            rules.layout_version = version;
+            assert_eq!(rules.is_readable(), readable, "version {version}");
+            assert_eq!(rules.layout_is_current(), readable, "version {version}");
+        }
+    }
+
+    #[test]
+    fn the_offering_is_over_only_from_a_real_end_time_on_a_readable_layout() {
+        let mut rules = marked_rules();
+        rules.layout_version = SALE_RULES_LAYOUT_VERSION;
+        rules.ends_at = 1_000;
+        assert!(!rules.offering_is_over(999));
+        assert!(rules.offering_is_over(1_000));
+        assert!(rules.offering_is_over(5_000));
+
+        rules.ends_at = 0;
+        assert!(!rules.offering_is_over(i64::MAX), "zero must mean no end");
+
+        rules.ends_at = 1_000;
+        rules.layout_version = 0;
+        assert!(!rules.offering_is_over(5_000), "an unreadable layout lifted the rules");
+    }
 }

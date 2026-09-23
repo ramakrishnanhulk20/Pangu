@@ -66,7 +66,10 @@ function bandedSale(over: Partial<Sale> = {}): Sale {
     buyers: 0,
     totalNetBought: 0n,
     bump: 255,
-    reserved: new Uint8Array(63),
+    layoutVersion: 2,
+    quoteMint: PublicKey.default,
+    endsAt: null,
+    reserved: new Uint8Array(23),
     hasBand: true,
     ...over,
   };

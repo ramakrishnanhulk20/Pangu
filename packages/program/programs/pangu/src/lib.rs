@@ -29,6 +29,7 @@ pub mod pangu {
         credential: Pubkey,
         schema: Pubkey,
         band: PriceBand,
+        ends_at: i64,
     ) -> Result<()> {
         instructions::create_sale::handle_create_sale(
             ctx,
@@ -37,6 +38,7 @@ pub mod pangu {
             credential,
             schema,
             band,
+            ends_at,
         )
     }
 

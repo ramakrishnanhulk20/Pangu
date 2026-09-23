@@ -27,6 +27,8 @@ export interface SaleTerms {
   credential?: PublicKey;
   schema?: PublicKey;
   band?: PriceBandInput;
+  /** Unix seconds at which the offering ends and every rule lifts. Leave out for no end. */
+  endsAt?: number;
 }
 
 export interface OpenSaleInput {
@@ -137,7 +139,8 @@ export async function openSaleTransaction(
       schema: accessMode === ACCESS_MODE.verifierCredential ? input.sale.schema : undefined,
       band,
       dbcConfig: config,
-      quoteMint: band === undefined ? undefined : quoteMint,
+      quoteMint,
+      endsAt: input.sale.endsAt,
     })
   );
 

@@ -20,7 +20,14 @@ import { PanguInputError, requireBigint, requireRealPublicKey, requireWholeNumbe
 import { COMPUTE_LIMIT, computeLimit, requireOneTransaction } from "./budget.js";
 import { quoteExactIn, quotePartialFill } from "./quote.js";
 import { hookAccounts, hookAccountsInfo, type PendingTokenAccount } from "./hook.js";
-import { DBC_POOL_AUTHORITY, dbcProgram, loadPool, readyToSign, type PoolView } from "./state.js";
+import {
+  DBC_POOL_AUTHORITY,
+  dbcProgram,
+  loadPool,
+  loadSellPool,
+  readyToSign,
+  type PoolMarket,
+} from "./state.js";
 
 /** A trade, built but not signed. */
 export interface TradeTransaction {
@@ -73,7 +80,7 @@ const DEFAULT_SLIPPAGE_BPS = 100;
  */
 async function buildSwap(options: {
   connection: Connection;
-  view: PoolView;
+  view: PoolMarket;
   owner: PublicKey;
   swapBaseForQuote: boolean;
   amountIn: bigint;
@@ -249,15 +256,18 @@ export async function buyTransaction(input: BuyInput): Promise<TradeTransaction>
  *
  * The exit reads nothing that can be missing, which is C5 in the threat model,
  * so a seller who is no longer approved, or whose sale's price feed has gone
- * stale, still gets out. Nothing is signed or sent.
+ * stale, still gets out. That includes a sale whose rules this package cannot
+ * read, because an older build wrote them: the program lets that sell through,
+ * so the pool is found from the mint instead and the sell is built all the
+ * same. Nothing is signed or sent.
  *
- * Throws PanguInputError for a mint with no Pangu sale, an amount of zero, or a
- * transaction that would not fit.
+ * Throws PanguInputError when no transfer hook pool sells the mint, for an
+ * amount of zero, or for a transaction that would not fit.
  */
 export async function sellTransaction(input: SellInput): Promise<TradeTransaction> {
   const seller = requireRealPublicKey(input.seller, "seller");
   const amountIn = amountOf(input.amountIn, "amountIn");
-  const view = await loadPool(input.connection, input.mint);
+  const view = await loadSellPool(input.connection, input.mint);
   return buildSwap({
     connection: input.connection,
     view,

@@ -15,6 +15,12 @@ export interface SaleStanding {
   largestShare: number;
   /** What one wallet's cap is worth as a share of everything sold, 0 to 1 and above. */
   capShare: number;
+  /**
+   * True once the sale's offering period has ended: from then on the hook
+   * counts nothing and the token moves freely. Always false for a sale with no
+   * end, which includes every version 1 sale.
+   */
+  offeringOver: boolean;
 }
 
 /** Nine decimal places is far past what any share bar in the app can show. */
@@ -34,8 +40,17 @@ function share(part: bigint, whole: bigint): number {
  * totals, so what the app shows is the sum of the accounts a judge can open.
  * Records belonging to another sale are refused rather than ignored: silently
  * dropping them would understate the largest holder.
+ *
+ * `now` is the Unix second to judge the offering period against. Pass the
+ * chain's clock when you have it, because that is the clock the hook reads and
+ * a browser's can be minutes out; without it this machine's clock stands in,
+ * which can only misjudge the end within that drift.
  */
-export function saleStanding(sale: Sale, records: BuyerRecord[]): SaleStanding {
+export function saleStanding(
+  sale: Sale,
+  records: BuyerRecord[],
+  now: number = Math.floor(Date.now() / 1000)
+): SaleStanding {
   if (!Array.isArray(records)) {
     throw new PanguInputError("records must be an array of buyer records");
   }
@@ -68,5 +83,6 @@ export function saleStanding(sale: Sale, records: BuyerRecord[]): SaleStanding {
     largestNetBought,
     largestShare: share(largestNetBought, total),
     capShare: share(sale.cap, total),
+    offeringOver: sale.endsAt !== null && now >= sale.endsAt,
   };
 }

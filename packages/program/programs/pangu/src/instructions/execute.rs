@@ -95,6 +95,11 @@ pub struct Execute<'info> {
 /// clear the list and the cap. Anything else is one wallet handing tokens to
 /// another, which is how a cap gets dodged, so it is refused.
 ///
+/// Once the offering period in the rules has ended, none of that applies: every
+/// transfer goes through as it is, no record moves and no event is emitted, the
+/// same as after graduation. Rules from a layout this build cannot read never
+/// count as ended.
+///
 /// Rejects: `NotTransferring` outside a real transfer, `WrongMint` when a token
 /// account belongs to another token, `ReceivingAccountOwnerCanChange` when a buy
 /// lands in an account whose owner could later be handed over,
@@ -120,6 +125,17 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
 
     let rules = &mut ctx.accounts.rules;
 
+    // The offering is over, so the rules are too. This comes before every read
+    // of a record, an approval, a price or the cap, so a sale whose curve never
+    // filled does not hold its buyers in place for good. Nothing is written: the
+    // counters stay where the offering left them. A clock that cannot be read
+    // counts as not over, which keeps the rules on a buy and still cannot stop a
+    // sell, so C5 holds either way.
+    let now = Clock::get().map(|clock| clock.unix_timestamp).ok();
+    if now.is_some_and(|now| rules.offering_is_over(now)) {
+        return Ok(());
+    }
+
     if destination.key == rules.base_vault {
         // The exit. Past this point nothing may fail, so every step saturates and a
         // record that is missing or not the one we expect is simply left alone. A
@@ -131,7 +147,7 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
         // missing record, so the sell still goes through and the exit keeps its
         // no-failure property. Refusing here would trap every holder of a sale
         // opened by an earlier build.
-        let found = if rules.layout_is_current() {
+        let found = if rules.is_readable() {
             load_record(&ctx.accounts.source_record, &expected, &mint_key, &source.owner)
         } else {
             None
@@ -149,6 +165,7 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
 
             write_record(&ctx.accounts.source_record, &record)?;
             emit!(SoldBack {
+                mint: mint_key,
                 wallet: source.owner,
                 amount,
                 net_bought: after,
@@ -162,7 +179,7 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
         // A buy reads the cap, the access mode and the band out of this account
         // at fixed offsets, so rules from another layout would be read as rules
         // they are not. Nothing on this path has to succeed, so it refuses.
-        require!(rules.layout_is_current(), PanguError::WrongLayoutVersion);
+        require!(rules.is_readable(), PanguError::WrongLayoutVersion);
 
         // Handing over ownership of a whole token account is not a transfer, so no
         // hook ever sees it. Without this rule a buyer could pass a full account to
@@ -214,6 +231,7 @@ pub fn handle_execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
 
         write_record(&ctx.accounts.destination_record, &record)?;
         emit!(Bought {
+            mint: mint_key,
             wallet: destination.owner,
             amount,
             net_bought: after,

@@ -24,7 +24,7 @@ import {
   saleStanding,
   PanguLayoutError,
   PANGU_IDL,
-  SALE_RULES_LAYOUT_VERSION,
+  SALE_RULES_LAYOUT_VERSIONS,
   PANGU_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
 } from "../src/index.js";
@@ -53,8 +53,19 @@ const openRules = {
   buyers: 0,
   total_net_bought: new BN(0),
   bump: 254,
-  layout_version: SALE_RULES_LAYOUT_VERSION,
-  reserved: Array<number>(63).fill(0),
+  layout_version: 2,
+  quote_mint: key(),
+  ends_at: new BN(1_790_000_000),
+  reserved: Array<number>(23).fill(0),
+};
+
+/** What the program wrote before the paying token and the end existed: zeros. */
+const versionOneRules = {
+  ...openRules,
+  mint: key(),
+  layout_version: 1,
+  quote_mint: PublicKey.default,
+  ends_at: new BN(0),
 };
 
 const bandedRules = {
@@ -136,8 +147,42 @@ describe("decoding", () => {
     expect(sale.buyers).toBe(0);
     expect(sale.totalNetBought).toBe(0n);
     expect(sale.bump).toBe(254);
-    expect(sale.reserved).toHaveLength(63);
+    expect(sale.reserved).toHaveLength(23);
     expect(sale.hasBand).toBe(false);
+  });
+
+  it("reads the paying token and the end of the offering on version 2", async () => {
+    const sale = decodeSale(await coder.accounts.encode("SaleRules", openRules));
+    expect(sale.layoutVersion).toBe(2);
+    expect(sale.quoteMint?.equals(openRules.quote_mint)).toBe(true);
+    expect(sale.endsAt).toBe(1_790_000_000);
+  });
+
+  it("reads a version 2 sale with no end as no end", async () => {
+    const sale = decodeSale(
+      await coder.accounts.encode("SaleRules", { ...openRules, ends_at: new BN(0) })
+    );
+    expect(sale.endsAt).toBeNull();
+    expect(sale.quoteMint?.equals(openRules.quote_mint)).toBe(true);
+  });
+
+  it("reads a version 1 sale, with no paying token and no end", async () => {
+    const data = await coder.accounts.encode("SaleRules", versionOneRules);
+    // The same 362 bytes the sales already open on devnet hold.
+    expect(data).toHaveLength(362);
+    expect(data.readUInt8(298)).toBe(1);
+    expect(data.subarray(299).equals(Buffer.alloc(63))).toBe(true);
+
+    const sale = decodeSale(data);
+    expect(sale.layoutVersion).toBe(1);
+    expect(sale.quoteMint).toBeNull();
+    expect(sale.endsAt).toBeNull();
+    expect(sale.cap).toBe(18446744073709551615n);
+    expect(sale.mint.equals(versionOneRules.mint)).toBe(true);
+  });
+
+  it("accepts exactly versions 1 and 2", () => {
+    expect([...SALE_RULES_LAYOUT_VERSIONS]).toEqual([1, 2]);
   });
 
   it("reads back a banded sale that also needs a credential", async () => {
@@ -208,8 +253,13 @@ describe("decoding", () => {
     });
     expect(() => decodeSale(data)).toThrow(PanguLayoutError);
     expect(() => decodeSale(data)).toThrow(
-      new RegExp(`layout version 0 and this package reads version ${SALE_RULES_LAYOUT_VERSION}`)
+      /layout version 0 and this package reads versions 1 and 2/
     );
+    const newer = await coder.accounts.encode("SaleRules", {
+      ...openRules,
+      layout_version: 3,
+    });
+    expect(() => decodeSale(newer)).toThrow(PanguLayoutError);
   });
 });
 
@@ -424,6 +474,15 @@ describe("standing", () => {
     expect(standing.largestShare).toBe(0);
     expect(standing.capShare).toBe(0);
     expect(standing.largestWallet).toBeNull();
+  });
+
+  it("calls the offering over from its end time on, by the clock it is given", async () => {
+    expect(sale.endsAt).toBe(1_790_000_000);
+    expect(saleStanding(sale, [], 1_789_999_999).offeringOver).toBe(false);
+    expect(saleStanding(sale, [], 1_790_000_000).offeringOver).toBe(true);
+
+    const noEnd = decodeSale(await coder.accounts.encode("SaleRules", versionOneRules));
+    expect(saleStanding(noEnd, [], Number.MAX_SAFE_INTEGER).offeringOver).toBe(false);
   });
 
   it("refuses a record from another sale", () => {
