@@ -9,29 +9,28 @@ there. Every number below was read back off the chain, not copied from a plan.
 | --- | --- |
 | Program id | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
 | Program data account | `58UAoZWuoMpnV4HzydaVUai9U7DFzapFtN5KtAzkzDpY` |
-| Running since slot | 502476730 |
-| Running since | 2026-09-22 14:53:26 UTC |
+| Running since slot | 502899538 |
+| Running since | 2026-09-23 10:21:01 UTC |
 | Upgrade authority (public key) | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L` |
-| Build running there | `pangu.so`, the one binary, with the SaleRules layout version |
-| Build size | 358,248 bytes |
+| Build running there | `pangu.so`, the one binary, with the rules v2 layout |
+| Build size | 363,720 bytes |
 | Program account size | 442,320 bytes (the first build plus 20 percent headroom) |
 | Rent locked | 2.24786444 SOL |
-| sha256 of the deployed build | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` |
-| sha256 of the IDL clients build against | `0b69e9d123c17266353293dce7627ec25493f7561bf6fc9a6522a6a98ddb5031` |
+| sha256 of the deployed build | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` |
+| sha256 of the IDL clients build against | `48836ab193d10b8a58321a9f6777640bc43873f207a6210f2de18c1a47032772`, as the build writes it. The SDK's copy holds the same JSON with different whitespace |
 | Loader | BPF upgradeable loader, SBPF v0 bytecode |
 | Toolchain | Anchor 1.2.0, solana-cli 4.2.2 |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 
-The bytes running on devnet were checked against the local build again on 22
-September at 14:55 UTC:
+The bytes running on devnet were checked against the local build again on 23
+September, straight after the fifth deploy:
 
 ```
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/program-info.sh devnet
-DEPLOYED SLOT: 502476730
-LOCAL SHA256:    a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb
-ON-CHAIN SHA256: a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb
+DEPLOYED SLOT: 502899538
+PROGRAM DATA LENGTH: 442320 bytes
+ON-CHAIN SHA256: 191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731
 HASH MATCH: YES
-INFO-OK
 ```
 
 ## One build, not two
@@ -48,7 +47,7 @@ build on mainnet could have priced itself off a devnet queue where anyone can
 stand up their own oracles. Moving the band to Pyth took that whole problem away
 along with the second binary.
 
-## The four deploys
+## The five deploys
 
 Same address every time. An upgrade replaces the code in the account that is
 already there, so nothing a client or a saved account points at ever moves.
@@ -59,12 +58,14 @@ already there, so nothing a client or a saved account points at ever moves.
 | 2 | 502373496 | 2026-09-22 10:08:31 | The program and SDK review fixes | `2cXwvQZAGirGzY11ydL5aWKuF8WDogFCTXrobrnHNR9k7nHpbcfRvnpdus8E66EyJMkDB4JcBgT5xeeBsHaeDgMr` |
 | 3 | 502436678 | 2026-09-22 13:02:53 | The price band moved from Switchboard to Pyth | `4RdQw1FvbULYtnyjY2mxBoj8Q9XpGCwygnJuDz7qXVwLSLqbVd8tp8BvHoxDwJKd3qVsBegt76PB3MiWHtm5pq7L` |
 | 4 | 502476730 | 2026-09-22 14:53:26 | The SaleRules layout version, so a reader refuses rules written by another layout | `fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7` |
+| 5 | 502899538 | 2026-09-23 10:21:01 | Rules v2: the paying token is stored and checked, banded sales must be dollar priced, the cap stays below the curve's supply, every sale carries an offering period, and events name the sale's mint | `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
 
 | # | Build | sha256 | Size |
 | --- | --- | --- | --- |
 | 1 and 2 | `pangu-devnet.so`, built with `--features devnet` | `58f22ae2136edc6f6fd35edc5aec1bb27f3a5548d39fb94b4c530c8dbad0eb34` | 371,488 bytes |
 | 3 | `pangu.so`, the one binary | `08746faa7b4ac83ada7bfa0cd2fcf0b04aabc9c335ebfc310fd2a06d486d3a7c` | 356,200 bytes |
 | 4 | `pangu.so`, with the layout version | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` | 358,248 bytes |
+| 5 | `pangu.so`, rules v2 | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` | 363,720 bytes |
 
 What each one cost:
 
@@ -87,13 +88,24 @@ What each one cost:
   the buffer's SOL came back in the same transaction: the wallet went from
   10.93970508 SOL to 10.93792008 SOL across both attempts, and the closing check
   found no buffer holding SOL.
+- **Fifth, about 0.0018 SOL**, fees only, no new rent: the payer went from
+  9.93791008 SOL to 9.93609508 SOL. WSL was dropping its connection to the
+  devnet node straight after heavy builds, so this one deployed a build already
+  made and hash checked (`REUSE_BUILD=1` with `BUILD_SHA256`, through
+  `scripts/wsl/deploy-reuse.sh`) from a fresh WSL session. The upgrade landed,
+  and then the balance read inside `deploy.sh` failed on the same drop, which is
+  why the facts above were read back with `program-info.sh` on its own.
+
+The rules v2 build reads version 1 rules as well as its own, so the sales
+already open on devnet before it (PBAND, and the list sales) keep working. They
+simply have no offering period and read as never ending.
 
 The account was created 20 percent larger than the first build so a later,
 bigger build can still be upgraded in place at the same address. That headroom
 costs 0.37449760 SOL of extra rent, locked for as long as the program exists.
 Without it a bigger build would need a brand new address, and every client and
 every saved account would have to be pointed somewhere else. The build on chain now is
-13,240 bytes smaller than the Switchboard one it replaced, so the headroom is
+7,768 bytes smaller than the Switchboard one it replaced, so the headroom is
 wider than it was.
 
 ## Commands
