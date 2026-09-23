@@ -69,7 +69,8 @@
     "issuer": "9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW",
     "priceAccount": null,
     "templateSignature": "5q3d9eHZzFAC8nQGG2Uqb4XUJJgwMCnmu9wsMcC1TzSaQMpDV6wCP2GDpR8r7AuseJ7bHNwxQm4wCh5sGP3ncJhD",
-    "saleSignature": "5fsSjFcL1sCebXZYSx5D947QbMziHstXv5KhABoGMQeU5S7RoMvCnuJT5J6cmkQjzKb4pMoDwG43whyQbJoR2hMx"
+    "saleSignature": "5fsSjFcL1sCebXZYSx5D947QbMziHstXv5KhABoGMQeU5S7RoMvCnuJT5J6cmkQjzKb4pMoDwG43whyQbJoR2hMx",
+    "retiredAt": "2026-09-23T08:58:45.053Z"
   },
   {
     "network": "devnet",

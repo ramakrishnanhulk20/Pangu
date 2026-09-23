@@ -19,8 +19,13 @@ export interface OpenedSale {
   // A sale with no band has no price feed, and the scripts write that as null.
   feed?: string | null;
   openedAt: string;
+  retiredAt?: string;
 }
 
 export function openedSales(): OpenedSale[] {
-  return (record as OpenedSale[]).filter((sale) => sale.network === "devnet");
+  // A retired entry stays in the file as history but never becomes a default
+  // or a picker choice: the scripts mark it with retiredAt.
+  return (record as OpenedSale[]).filter(
+    (sale) => sale.network === "devnet" && sale.retiredAt === undefined
+  );
 }
