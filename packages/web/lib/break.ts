@@ -525,8 +525,14 @@ export interface TargetWire {
 
 type SaleKey = "mint" | "pool" | "baseVault" | "issuer" | "credential" | "schema" | "priceAccount";
 
-type SaleWire = Omit<Sale, SaleKey | "cap" | "totalNetBought" | "reserved"> &
-  Record<SaleKey, string> & { cap: string; totalNetBought: string; reserved: number[] };
+/** quoteMint is kept apart from the other keys because a version 1 sale has none. */
+type SaleWire = Omit<Sale, SaleKey | "quoteMint" | "cap" | "totalNetBought" | "reserved"> &
+  Record<SaleKey, string> & {
+    quoteMint: string | null;
+    cap: string;
+    totalNetBought: string;
+    reserved: number[];
+  };
 
 const SALE_KEYS: readonly SaleKey[] = [
   "mint",
@@ -549,6 +555,7 @@ export function targetToWire(target: Target): TargetWire {
     sale: {
       ...sale,
       ...keys,
+      quoteMint: sale.quoteMint === null ? null : sale.quoteMint.toBase58(),
       cap: sale.cap.toString(),
       totalNetBought: sale.totalNetBought.toString(),
       reserved: Array.from(sale.reserved),
@@ -572,6 +579,7 @@ export function targetFromWire(wire: TargetWire): Target {
     sale: {
       ...sale,
       ...keys,
+      quoteMint: sale.quoteMint === null ? null : new PublicKey(sale.quoteMint),
       cap: BigInt(sale.cap),
       totalNetBought: BigInt(sale.totalNetBought),
       reserved: Uint8Array.from(sale.reserved),
@@ -847,12 +855,18 @@ const SIZE_TRIES = 6;
  * Close enough to tell a visitor whether their wallet can run the row at all:
  * an honest buy takes a fifth of the cap, and a buy past the cap or the ceiling
  * pays a little over the cap's worth, because the price climbs through the buy.
+ * Once the offering is over the ceiling is never read, so the buy above it is
+ * sized as an honest one.
  */
 export function payingNeeded(attack: Attack, target: Target): bigint {
   if (!attack.needsPayingToken) {
     return 0n;
   }
-  if (attack.id === "honest-buy" || attack.id === "changeable-owner") {
+  if (
+    attack.id === "honest-buy" ||
+    attack.id === "changeable-owner" ||
+    (attack.id === "above-ceiling" && target.offeringOver)
+  ) {
     return target.capWorth / HONEST_PART;
   }
   return target.capWorth + target.capWorth / 20n;
@@ -1189,13 +1203,17 @@ class CannotCross extends Error {
  *
  * Measured with the very functions that size and build the row, so the demo
  * dollar grant covers the row it is meant to cover. Zero when the sale has no
- * band to cross, or no buy it can fill crosses it.
+ * band to cross, or no buy it can fill crosses it, or the offering is over and
+ * the row is only a fifth of the cap, which the grant already covers.
  */
 export async function crossingCost(
   connection: Connection,
   target: Target,
   wallet: PublicKey
 ): Promise<bigint> {
+  if (target.offeringOver) {
+    return 0n;
+  }
   const context: BuildContext = { connection, target, wallet };
   let shares: bigint | null;
   try {
@@ -1335,6 +1353,12 @@ export async function buildAttack(
   });
 
   if (id === "honest-buy") {
+    // After the offering the hook returns before it reads the record, the
+    // ceiling or the cap, so there is no room to measure and none to run out of.
+    if (target.offeringOver) {
+      const buy = await buyShares(context, target.cap / HONEST_PART, "atMost");
+      return promised(buy.built.transaction, buy.built.expectedAmountOut);
+    }
     const left = await capRoom(connection, target, wallet);
     if (left === 0n) {
       throw new Error("your wallet is already at this sale's cap, so there is no honest buy left");
@@ -1358,7 +1382,9 @@ export async function buildAttack(
 
   if (id === "second-buy") {
     const left = await capRoom(connection, target, wallet);
-    if (left === target.cap) {
+    // A first buy is only needed so the second one crosses the cap, and after
+    // the offering the cap is never read.
+    if (left === target.cap && !target.offeringOver) {
       throw new Error(
         "this one needs a first buy behind it. Run the buy under the cap above, then come back."
       );
@@ -1474,9 +1500,10 @@ export async function buildAttack(
     if (!target.sale.hasBand) {
       throw new Error("this sale has no price ceiling, so there is nothing to buy above");
     }
-    const shares = await aboveCeilingShares(context);
     // With no usable price every buy meets the price refusal first, whatever
-    // its size, so a fifth of the cap asks the question as well as any.
+    // its size, so a fifth of the cap asks the question as well as any. After
+    // the offering the ceiling is never read, so the same fifth goes through.
+    const shares = target.offeringOver ? null : await aboveCeilingShares(context);
     const buy = await buyShares(context, shares ?? target.cap / HONEST_PART, "atLeast");
     return promised(buy.built.transaction, buy.built.expectedAmountOut);
   }

@@ -9,6 +9,30 @@ const CURVE =
   "M -60 890 C 280 878, 600 822, 812 664 C 1004 520, 1140 316, 1240 60";
 const CAP_Y = 300;
 const SHARE = { x: 1093, y: 354 };
+/** The phone's tighter frame on the same drawing. */
+const PHONE_VIEW = { x: 598, y: -30, width: 740, height: 930 };
+
+/** How far above the title the phone's curve starts to fade out, in pixels. */
+const FADE_PX = 32;
+
+/**
+ * The phone's curve is hidden from the title down to the foot of the hero's
+ * words, so it never crosses a letter or the button. Stops are set by the
+ * placing effect; until it runs they sit at the bottom and the curve shows whole.
+ */
+const PHONE_FADE =
+  "linear-gradient(to bottom, #000 var(--fade-start, 100%), transparent var(--fade-clear, 100%), transparent var(--fade-end, 100%), #000 var(--fade-end, 100%))";
+
+/** How far down the hero an element's box starts, ignoring any entrance still moving it. */
+function depthIn(element: HTMLElement, hero: HTMLElement): number | null {
+  let depth = 0;
+  let at: Element | null = element;
+  while (at instanceof HTMLElement && at !== hero) {
+    depth += at.offsetTop;
+    at = at.offsetParent;
+  }
+  return at === hero ? depth : null;
+}
 
 function Drawing({ drawn }: { drawn: boolean }) {
   return (
@@ -146,6 +170,68 @@ export function HeroMotif() {
     };
   }, [reduced]);
 
+  // On a phone the live numbers above the title run as tall as the sale makes
+  // them, so a share dot fixed in the drawing lands on whichever line of them
+  // reaches it. Here the phone's drawing, curve and dot together, is slid so
+  // the dot sits level with the top of the title, to its right: clear of the
+  // numbers above and the sentence below, however many lines the numbers take.
+  useEffect(() => {
+    const element = frame.current;
+    const hero = element?.parentElement;
+    const title = hero?.querySelector("h1");
+    if (element === null || hero === null || hero === undefined || title === null || title === undefined) {
+      return;
+    }
+
+    const place = () => {
+      const titleTop = depthIn(title, hero);
+      if (titleTop === null) {
+        return;
+      }
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      const scale = Math.max(width / PHONE_VIEW.width, height / PHONE_VIEW.height);
+      const drawingTop = (height - PHONE_VIEW.height * scale) / 2;
+      const dot = drawingTop + (SHARE.y - PHONE_VIEW.y) * scale;
+      const shift = titleTop - dot;
+      element.style.setProperty("--share-shift", `${shift.toFixed(1)}px`);
+
+      // The fade is drawn on the slid drawing, so its stops are taken back by
+      // the same slide. It runs to the foot of the block that holds the title,
+      // which also holds the sentence, the button and the facts line.
+      const block = words();
+      const blockTop = block === null ? null : depthIn(block, hero);
+      const wordsEnd =
+        block === null || blockTop === null ? height : blockTop + block.offsetHeight;
+      const local = (y: number) => `${(y - shift).toFixed(1)}px`;
+      element.style.setProperty("--fade-start", local(titleTop - FADE_PX));
+      element.style.setProperty("--fade-clear", local(titleTop));
+      element.style.setProperty("--fade-end", local(wordsEnd));
+    };
+
+    // The title's column is found by what it contains, not by offsetParent:
+    // the entrance's transform makes each rising wrapper an offsetParent too.
+    const holding = (parent: Element): Element | undefined =>
+      Array.from(parent.children).find((child) => child !== element && child.contains(title));
+    const column = holding(hero);
+    const words = (): HTMLElement | null => {
+      const holder = column === undefined ? undefined : holding(column);
+      return holder instanceof HTMLElement ? holder : null;
+    };
+
+    place();
+    const watcher = new ResizeObserver(place);
+    watcher.observe(hero);
+    // The title moves when anything above it in its column changes height,
+    // which does not always change the hero's own height.
+    if (column !== undefined) {
+      for (const block of Array.from(column.children)) {
+        watcher.observe(block);
+      }
+    }
+    return () => watcher.disconnect();
+  }, []);
+
   const rising = {
     transform: "translate3d(0, calc(var(--hero-rise, 0) * -90px), 0)",
   } as const;
@@ -159,7 +245,7 @@ export function HeroMotif() {
       <svg
         viewBox="0 0 1440 900"
         preserveAspectRatio="xMidYMid slice"
-        className="hidden h-full w-full sm:block"
+        className="hidden h-full w-full md:block"
       >
         <g style={rising}>
           <Drawing drawn={reduced} />
@@ -170,15 +256,29 @@ export function HeroMotif() {
 
       {/* Same paths, a tighter frame, so the share stays on screen on a phone
           rather than being cropped off the right edge. The two mono labels are
-          dropped there: at 390px they would land on the title. */}
+          dropped there: at 390px they would land on the title. The curve and
+          the dot are two layers so the curve can fade behind the words while
+          the dot, beside the title, stays whole. */}
       <svg
-        viewBox="598 -30 740 930"
+        viewBox={`${PHONE_VIEW.x} ${PHONE_VIEW.y} ${PHONE_VIEW.width} ${PHONE_VIEW.height}`}
         preserveAspectRatio="xMidYMid slice"
-        className="h-full w-full sm:hidden"
+        className="absolute inset-0 h-full w-full md:hidden"
+        style={{
+          transform: "translate3d(0, var(--share-shift, 0px), 0)",
+          maskImage: PHONE_FADE,
+          WebkitMaskImage: PHONE_FADE,
+        }}
       >
         <g style={rising}>
           <Drawing drawn={reduced} />
         </g>
+      </svg>
+      <svg
+        viewBox={`${PHONE_VIEW.x} ${PHONE_VIEW.y} ${PHONE_VIEW.width} ${PHONE_VIEW.height}`}
+        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 h-full w-full md:hidden"
+        style={{ transform: "translate3d(0, var(--share-shift, 0px), 0)" }}
+      >
         <Share still={reduced} labelled={false} />
       </svg>
 
