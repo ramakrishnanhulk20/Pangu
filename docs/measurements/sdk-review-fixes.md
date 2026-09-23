@@ -1,6 +1,6 @@
 # The SDK side of the code review fixes
 
-Work order WO-11, 22 Sep 2026. Five changes to `pangu-sdk` so the package says
+The SDK review fixes, 22 Sep 2026. Five changes to `pangu-sdk` so the package says
 the same thing the program now says, plus one reader fix found by the scripts
 package. Every offset and code below was read out of a source file or the
 regenerated IDL, not remembered.
@@ -105,7 +105,7 @@ is untouched.
 
 ## 6. Decimals for a sale with no band
 
-Found by the scripts package in WO-8: the program only stores `base_decimals`
+Found while building the devnet scripts in `packages/scripts`: the program only stores `base_decimals`
 and `quote_decimals` on a sale with a price band (`create_sale.rs`,
 `decimals.unwrap_or((0, 0))`), so `getSale` was handing back zero decimals for
 every open or issuer-list sale, and anything dividing by it showed a wrong

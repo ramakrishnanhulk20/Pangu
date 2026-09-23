@@ -88,7 +88,7 @@ update, or any tag that is neither, is refused outright.
 
 ## The crate, tried first and kept
 
-WO-3 had to parse the oracle account by hand because that vendor's crate would
+The price band build had to parse the oracle account by hand because that vendor's crate would
 not build next to anchor-lang 1.2.0. Pyth's does. A scratch crate depending on
 `anchor-lang =1.2.0` and `pyth-solana-receiver-sdk =2.0.0`, with a module that
 really calls `get_price_no_older_than_with_custom_verification_level`, built for
@@ -259,10 +259,10 @@ the real program and its bytes are read back through Pangu's own
 `the_live_devnet_price_reads_through_this_code`, against the real feed id and the
 real derived address.
 
-## Two things outside the work order's file list
+## Two things outside the planned file list
 
 `packages/program/package.json` and its lockfile had to change: they named the
-Switchboard packages, which the work order's own acceptance grep refuses. They now
+Switchboard packages, which the move's own acceptance grep refuses. They now
 name `@pythnetwork/pyth-solana-receiver` 0.16.0 and `@coral-xyz/anchor` 0.29.0,
 which that package requires.
 

@@ -1,4 +1,4 @@
-# WO-3 price band: progress
+# The price band build: progress
 
 Working notes so an interrupted run loses nothing. The finished write-up is
 `price-band.md`, which carries all of this in its final form.

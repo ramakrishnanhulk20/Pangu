@@ -1,6 +1,6 @@
 # Can anyone write a forged stock price into the account a Pangu sale reads?
 
-Work order WO-3b. This file is written as the work runs, so an interrupted run
+The forged-quote hardening. This file is written as the work runs, so an interrupted run
 loses nothing. Each attempt is recorded with what was sent and what came back.
 
 Status: attack done and refused on devnet, both defence checks implemented and
@@ -18,9 +18,9 @@ No forgery landed. The deployed quote program refuses a quote signed by a key
 that is not a queue oracle, a quote whose bytes were altered after signing, a
 genuine quote for a different feed aimed at our address, and a genuine quote
 replayed once it is old. Every attempt left the account unchanged and cost 0
-lamports, because each was refused at simulation and never sent. So WO-3's claim
-was right: the owner check plus the canonical address is enough to trust the
-bytes, and the two checks WO-3b adds in Part B are defence in depth against a
+lamports, because each was refused at simulation and never sent. So the price band
+build's claim was right: the owner check plus the canonical address is enough to trust the
+bytes, and the two checks the forged-quote hardening adds in Part B are defence in depth against a
 future upgrade of the quote program, not the only thing standing between a buyer
 and a forged price.
 
@@ -114,7 +114,7 @@ real Switchboard quote program.
 
 ## Progress log
 
-- Read the work order, the spike write-up Q4 and Q8, the crate source
+- Read the spike write-up Q4 and Q8, the crate source
   (`quote_verifier.rs`, `queue.rs`, `sysvar/ed25519_sysvar.rs`), `price.rs`,
   `execute.rs`, `create_sale.rs`, `tests/band.ts`, `tests/quote.ts`,
   `fork-tests/band-accounts.ts` and the fork scripts.

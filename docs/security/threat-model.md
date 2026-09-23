@@ -64,7 +64,7 @@ Does not apply: web session handling, databases, user-supplied URLs. Server-side
 
 ## C. Defensive-programming standards (definition of done)
 
-Each line is an outcome the code must uphold. A work order carries the relevant ones, and the builder's report names the file and function that enforces each.
+Each line is an outcome the code must uphold. Each piece of work carries the relevant ones, and the builder's report names the file and function that enforces each.
 
 | # | Invariant |
 |---|---|

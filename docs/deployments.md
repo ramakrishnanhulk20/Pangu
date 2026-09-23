@@ -56,7 +56,7 @@ already there, so nothing a client or a saved account points at ever moves.
 | # | Slot | When (UTC) | What went on chain | Signature |
 | --- | --- | --- | --- | --- |
 | 1 | 502338042 | 2026-09-22 08:30:39 | First deploy, the Switchboard build | `5eR1vqbvD7jU2GEVerPoseofDFGiudGkdcP94o6Zx6xJJFmjHBVuZK1uAyjptZWNqV9hKchAFgm9CSCJjrFY9RoJ` |
-| 2 | 502373496 | 2026-09-22 10:08:31 | The WO-10 and WO-11 review fixes | `2cXwvQZAGirGzY11ydL5aWKuF8WDogFCTXrobrnHNR9k7nHpbcfRvnpdus8E66EyJMkDB4JcBgT5xeeBsHaeDgMr` |
+| 2 | 502373496 | 2026-09-22 10:08:31 | The program and SDK review fixes | `2cXwvQZAGirGzY11ydL5aWKuF8WDogFCTXrobrnHNR9k7nHpbcfRvnpdus8E66EyJMkDB4JcBgT5xeeBsHaeDgMr` |
 | 3 | 502436678 | 2026-09-22 13:02:53 | The price band moved from Switchboard to Pyth | `4RdQw1FvbULYtnyjY2mxBoj8Q9XpGCwygnJuDz7qXVwLSLqbVd8tp8BvHoxDwJKd3qVsBegt76PB3MiWHtm5pq7L` |
 | 4 | 502476730 | 2026-09-22 14:53:26 | The SaleRules layout version, so a reader refuses rules written by another layout | `fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7` |
 

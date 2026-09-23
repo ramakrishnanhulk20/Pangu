@@ -2,7 +2,7 @@
 
 Date: 22 September 2026. Every number here came out of a command that ran.
 
-WO-13 moved the program's price band from Switchboard to Pyth. This is the same
+The program's price band moved from Switchboard to Pyth first. This is the same
 move on the package side: `pangu-sdk` and `packages/scripts` now speak Pyth,
 and the word Switchboard is gone from both.
 
@@ -117,7 +117,7 @@ verified  : Full, two thirds of the Wormhole guardians
 cost      : 35,180 lamports, 131,813 compute units, 1,606 bytes over two transactions
 ```
 
-35,180 lamports is the number WO-13 measured after `closeUpdateAccounts` was
+35,180 lamports is the number the move to Pyth measured after `closeUpdateAccounts` was
 turned on, and the SDK sets it the same way, so a refresh leaves no rent behind.
 
 ### The banded sale

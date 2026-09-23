@@ -182,7 +182,7 @@ transaction is landed on purpose rather than stopped by the node's dry run.
 
 # The second run, on the upgraded program (slot 502373496)
 
-Program slot **502373496**, the build carrying every WO-10 and WO-11 fix, put
+Program slot **502373496**, the build carrying every program and SDK review fix, put
 on chain by `deploy.sh devnet` on 22 September 2026 (see `docs/deployments.md`).
 The same five commands were run again from scratch against it. Everything below
 is a transaction that landed on devnet after the upgrade.
@@ -267,11 +267,11 @@ happened to be 63 percent full when `graduate` was called, where the price was
 high enough that the unsized buy stayed under the cap by luck. This time the
 curve was at 26 percent, the same 0.01 SOL bought far more tokens, and the cap
 refused it. The rule the hook applied is right. The fix belongs in the script,
-and it was not part of this work order.
+and fixing it was outside this run.
 
 ## The price refresh, three days before Switchboard shuts down
 
-`npm run refresh-price`, run before the banded launch, answered the way WO-8 saw
+`npm run refresh-price`, run before the banded launch, answered the way the first devnet run saw
 on the morning of 22 September:
 
 ```

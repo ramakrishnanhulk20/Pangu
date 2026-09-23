@@ -1,6 +1,6 @@
 # Code review fixes: what was found, and where the numbers come from
 
-Work order WO-10, 22 Sep 2026. Six fixes to the on-chain program and its tests.
+The program review fixes, 22 Sep 2026. Six fixes to the on-chain program and its tests.
 Every offset and id below was read out of a source file or a real account, not
 remembered. This file is written as the work goes, so it doubles as the progress
 note.

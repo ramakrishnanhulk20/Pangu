@@ -30,9 +30,9 @@ than the sale allows or signed for a slot the chain has not reached, reads both
 feeds by id and never by position, and refuses a quote carrying fewer signatures
 than the sale's quorum or than either feed's own minimum.
 
-On top of that, and this is what WO-3b added, the hook now does by hand the two
-checks Switchboard's own `QuoteVerifier` does, which WO-3 had left to the quote
-program:
+On top of that, and this is what the forged-quote hardening added, the hook now does by
+hand the two checks Switchboard's own `QuoteVerifier` does, which the price band
+build had left to the quote program:
 
 - **Every signing key is an oracle.** For each signature in the quote, the public
   key that signed must equal the key the queue account lists for the oracle index
@@ -64,11 +64,11 @@ signer check against the real devnet queue bytes, proven in the Rust test
 Whole transactions on the local fork, sent through DBC's own
 `swap2WithTransferHook`. The hook is one part of what these numbers cover.
 
-The numbers below for a banded buy are the WO-3 fork measurements plus the exact
-change WO-3b makes: one more account, the SlotHashes sysvar, at 32 bytes, and the
-two extra checks. The fork whole transaction could not be re-run in the WO-3b
-session because the local validator would not stay alive across the harness's tool
-calls, so the fork compute is the WO-3 figure plus the litesvm delta for the two
+The numbers below for a banded buy are the price band build's fork measurements
+plus the exact change the forged-quote hardening makes: one more account, the SlotHashes sysvar, at 32 bytes, and the
+two extra checks. The fork whole transaction could not be re-run in the
+forged-quote hardening session because the local validator would not stay alive across the harness's tool
+calls, so the fork compute is the price band build's figure plus the litesvm delta for the two
 checks, and it is marked as such.
 
 | Action | Bytes of 1232 | Accounts | Compute units |
@@ -82,12 +82,12 @@ checks, and it is marked as such.
 
 The band now adds four accounts to a buy: the DBC pool, the Switchboard quote
 account, its queue, and the SlotHashes sysvar. That is 128 bytes over an unbanded
-buy. The extra SlotHashes account WO-3b adds is 32 of those bytes and one account.
+buy. The extra SlotHashes account the forged-quote hardening adds is 32 of those bytes and one account.
 
 The two new checks were measured in the litesvm suite, where they can be isolated.
-A banded buy with no credential went from 60,581 units (WO-3) to **65,901**, so the
+A banded buy with no credential went from 60,581 units (price band build) to **65,901**, so the
 signer and slot hash checks together cost about **5,300 units**. That is why the
-fork banded buy, measured at 124,282 to 129,579 in WO-3, is given above as about
+fork banded buy, measured at 124,282 to 129,579 in the price band build, is given above as about
 129,600 to 135,000. The sell path reads none of the band accounts, so it is
 unchanged.
 
@@ -101,8 +101,8 @@ so they are good for a difference and not for an absolute.
 
 ## Does a banded sale still open in one transaction?
 
-Yes. Create pool plus `create_sale` with a band measured 1,003 bytes in WO-3.
-WO-3b passes the queue account to `create_sale` so its owner can be proven once at
+Yes. Create pool plus `create_sale` with a band measured 1,003 bytes in the price band
+build. The forged-quote hardening passes the queue account to `create_sale` so its owner can be proven once at
 creation, which is one more account, 32 bytes, for **1,035 bytes and 197 to
 spare**. The credential mode adds the credential and the schema accounts to
 `create_sale`, 64 bytes, for about **1,099 bytes and 133 to spare**.
