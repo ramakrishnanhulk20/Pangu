@@ -1,0 +1,80 @@
+network  : devnet
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
+site     : http://127.0.0.1:3460/launch
+issuer   : 9evqZa7FL1gWQRrB8g8vtAbX5eRWDDrHwLufHVGCHtoN, a throwaway made for this run
+funded   : 0.1 SOL from the demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+           https://explorer.solana.com/tx/4KqqAFGBwLJRvo1yRzuzoz92etzoKBzcYQ44CwrhqaNt8CMTdecsu2H6iNtQuaLKoYBPQAZ2dgxYehmqPgTE8WmE?cluster=devnet
+dollars  : 1788.24542 demo dollars of 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5, https://explorer.solana.com/tx/2RJXu7CFgnDLBEwHusH1PKLfmurr8t5PwPEtoHxQ2PDhmfimo5hJADXRoCTwy8tRsxnvz2DCWukaW149Jm1ctvuf?cluster=devnet
+ok    demo dollars granted through the app's route
+
+launch 1 : PLAUNCH, demo dollar, open, 5 percent over AAPLx, cap 10 percent, 14 days
+preview  : opens at $275.95, AAPLx, trades all week: $338.91
+ok    launch 1 reached the done state
+mint     : 4HFYeRrCmPER6T1LcKWaThF4MNejzzRfLFsRdv5GDt1d
+           https://explorer.solana.com/address/4HFYeRrCmPER6T1LcKWaThF4MNejzzRfLFsRdv5GDt1d?cluster=devnet
+page says: THE LAUNCH COST
+page says: 0.019294 SOL
+cost     : 0.019294 SOL, the wallet's balance read off devnet before and after
+ok    launch 1: the sale's rules read back from devnet
+ok    launch 1: issuer is the throwaway wallet: 9evqZa7FL1gWQRrB8g8vtAbX5eRWDDrHwLufHVGCHtoN
+ok    launch 1: paid in the demo dollar: 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5
+ok    launch 1: sale records the same paying token
+ok    launch 1: tokens on the curve match 20 shares, 3710 to raise, 45 percent kept: 10999999996
+ok    launch 1: cap is 10 percent of the curve: 1099999999 raw units
+ok    launch 1: access is open: 0
+ok    launch 1: ceiling 5 percent: 500
+ok    launch 1: ceiling follows AAPLx: 978e6cc68a119ce066aa830017318563a9ed04ec3a0a6439010fc11296a58675
+ok    launch 1: offering ends 14 days after launch: 2026-10-07T14:12:52.000Z
+FAIL  the run stopped: TimeoutError: locator.waitFor: Timeout 60000ms exceeded.
+Call log:
+[2m  - waiting for getByTestId('launch-balance').filter({ hasText: 'devnet SOL' }) to be visible[22m
+ 
+
+returned : 0.080701 SOL to the demo wallet
+
+1 checks failed; mints 4HFYeRrCmPER6T1LcKWaThF4MNejzzRfLFsRdv5GDt1d and null; neither is in sales.json
+
+Second run, launch 2 alone: the first run above proved launch 1 and was cut short opening the page for launch 2 when the wallet balance did not read in time.
+
+network  : devnet
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
+site     : http://127.0.0.1:3460/launch
+issuer   : 2FXS7oaWKqSCSA9fNahZXnXrDTSVmyBrvAh9dNjAfSy1, a throwaway made for this run
+funded   : 0.1 SOL from the demo wallet 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW
+           https://explorer.solana.com/tx/2Xvw2y6EJwASbUS5NmUwkKCdWcoGdkdBrsmfU4hyP5LrURbPJRKDVnyMqzsYnDGEysQKDKF2sWxoWsNpgnd78QK3?cluster=devnet
+dollars  : 1788.24542 demo dollars of 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5, https://explorer.solana.com/tx/4VdQepurBqwdBFcVBSHGFoN65eUbFg3biaL7FyJB6dxwbWAr11JUAyKQtvacE9NMvU4UCbvtHFquDB8Gmn1M5Egx?cluster=devnet
+ok    demo dollars granted through the app's route
+
+launch 2 : PLAUNCHL, devnet SOL, approved list, no ceiling, no end
+ok    launch 2, first press: the sale step stops when the wallet turns it down: launch-failure-sale
+ok    launch 2, first press: the template landed before it
+page says: You turned this down in your wallet, so it was not sent. / The launch template is on chain. No pool and no sale yet. see it on the explorer / Press Launch again to finish; the curve template already exists and will be reused.
+ok    launch 2, first press: sessionStorage holds the template's address and no secret
+ok    launch 2, first press: the button now offers to finish
+ok    launch 2, second press: the template step says reused
+ok    launch 2 reached the done state on the second press
+ok    launch 2: the wallet was asked three times in all, template, refused sale, sale: 3
+mint     : CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1
+           https://explorer.solana.com/address/CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1?cluster=devnet
+cost     : 0.018943 SOL across both presses, the refused one included
+ok    launch 2: the sale's rules read back from devnet
+ok    launch 2: issuer is the throwaway wallet: 2FXS7oaWKqSCSA9fNahZXnXrDTSVmyBrvAh9dNjAfSy1
+ok    launch 2: paid in wrapped SOL: So11111111111111111111111111111111111111112
+ok    launch 2: sale records the same paying token
+ok    launch 2: tokens on the curve match 1000000000 shares, 0.1 to raise, 20 percent kept: 799999670721719
+ok    launch 2: cap is 10 percent of the curve: 79999967072171 raw units
+ok    launch 2: access is the issuer's list: 1
+ok    launch 2: no price ceiling
+ok    launch 2: no end to the offering: null
+ok    launch 2: the pool was opened on the template the first press made, so it was reused: 8mf9GitBRW6vq5WM95tKcN16BJGHbSjyXpRH7SqdZR3m
+ok    no uncaught errors on the page: 
+
+returned : 0.081052 SOL to the demo wallet
+
+every check passed; mints null and CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1; neither is in sales.json
+
+Summary
+launch 1 : 4HFYeRrCmPER6T1LcKWaThF4MNejzzRfLFsRdv5GDt1d, demo dollar, open, 5 percent over AAPLx, cap 10 percent, 14 days, every term read back equal. 0.019294 SOL.
+launch 2 : CbqVFjNMJndSfVy36DR9uPZBSTfNvVf5LSbNeqX9qpG1, devnet SOL, approved list, no ceiling, no end, every term read back equal. Sale signature refused once, Launch pressed again, template 8mf9GitBRW6vq5WM95tKcN16BJGHbSjyXpRH7SqdZR3m reused. 0.018943 SOL across both presses.
+the page : LAUNCH_COST_LAMPORTS in lib/launch.ts is 19,294,000, the larger of the two.
+lost     : an earlier attempt's 0.1 SOL funding transfer outlived its blockhash timer, landed anyway, and the process exited with the throwaway's key in memory only, so that 0.1 devnet SOL sits at EMZhwQBgTVkHgEk5sKMbgMH1vqGqvbK5xGo8NU2PkyUE for good. The driver now waits on signature status and always sweeps back in a finally block.

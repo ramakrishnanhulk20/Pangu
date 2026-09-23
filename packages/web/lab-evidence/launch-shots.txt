@@ -1,0 +1,4 @@
+light 1440: opening $275.95; AAPLx, trades all week: $344.31; sideways overflow 0px; page errors 0
+light 375: opening $275.95; AAPLx, trades all week: $344.31; sideways overflow 0px; page errors 0
+dark 1440: opening $275.95; AAPLx, trades all week: $344.31; sideways overflow 0px; page errors 0
+dark 375: opening $275.95; AAPLx, trades all week: $344.31; sideways overflow 0px; page errors 0

@@ -1,0 +1,35 @@
+(node:35608) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/Projects/Meteora/packages/web/lib/launch-curve.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\D:\Projects\Meteora\packages\web\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+PLIST: --mode list --cap-share-bps 1000
+note  the terminal's price line for this launch was not kept; the page computes 3.125000000000001e-11
+ok    PLIST tokens on the curve, built here against the template on devnet: 799999670721719
+ok    PLIST opening price, builder's rounding against the template on devnet: 3.125002572488162e-11 against 3.125002572488162e-11, within 3.1250025724881616e-23
+ok    PLIST opening price, the page's formula against the template on devnet: 3.125000000000001e-11 against 3.125002572488162e-11, within 3.1250025724881615e-17
+ok    PLIST cap at 10 percent, page against sales.json: 79999967072171
+
+PBAND2: --supply 20 --threshold 3710 --migration-percent 45 --base-decimals 9, paid in the demo dollar
+ok    PBAND2 opening price, page against what the launch printed: 275.95041322314046
+ok    PBAND2 tokens on the curve, built here against the template on devnet: 10999999996
+ok    PBAND2 opening price, builder's rounding against the template on devnet: 275.9504134461307 against 275.9504134461307, within 2.759504134461307e-10
+ok    PBAND2 opening price, the page's formula against the template on devnet: 275.95041322314046 against 275.9504134461307, within 0.0002759504134461307
+ok    PBAND2 cap at 10 percent, page against sales.json: 1099999999
+
+PAAPLX: --supply 20 --threshold 3710 --migration-percent 45 --base-decimals 9, paid in the demo dollar
+ok    PAAPLX opening price, page against what the launch printed: 275.95041322314046
+ok    PAAPLX tokens on the curve, built here against the template on devnet: 10999999996
+ok    PAAPLX opening price, builder's rounding against the template on devnet: 275.9504134461307 against 275.9504134461307, within 2.759504134461307e-10
+ok    PAAPLX opening price, the page's formula against the template on devnet: 275.95041322314046 against 275.9504134461307, within 0.0002759504134461307
+ok    PAAPLX cap at 10 percent, page against sales.json: 1099999999
+
+ok    billion share curve opens at 400: 400 against 400, within 0.000001
+ok    billion share curve ends at 900: 899.9999999999998 against 900, within 0.000001
+ok    a 362.25 ceiling bites 70 percent into the twenty share curve: 0.6996376948328618 against 0.7, within 0.005
+ok    a ceiling under the opening price is below zero: true
+ok    the drawing's price at a share inverts shareSoldAtPrice: 362.25 against 362.25, within 1e-9
+ok    the drawing ends at the graduation price: 412.2222222222221 against 412.22222222222223, within 1e-9
+
+20 passed, 0 failed
