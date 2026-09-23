@@ -1,0 +1,70 @@
+# Verifier console, driven on devnet from the page
+
+run      : 2026-09-23T14:19:35Z
+page     : http://localhost:3000/verify
+verifier : EMUv1wHAVUT68JKjympVM2j2hRotSJWN9XZjXffben79 (throwaway, signs in Node through the injected wallet)
+buyer    : 12Zgxbsy15vuEGozqjhuBfDL6CtXiSeST8aKYjU7gcpX (throwaway, lends its address only)
+funder   : 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW (the demo wallet)
+node     : the keyed devnet endpoint, for the funding, the sweep and every chain cross-check
+fund     : 0.050000000 SOL to the verifier, 387S8wp7syGSECgxPGgj1mhQTzsvHDE5UR9uo7WoJa4RKRhXcismQs77kSod2bis4uDuxtpZtXm4VvtriGVvhNpa
+
+page connected the injected wallet and found no verifier for it: the setup form is shown
+
+## 1. Set up as a verifier, name "proof 2026-09-23 14:19"
+credential : AJs6VH4uWU7sku7ZuVxWFLyaoesYTtGc9XWaH94qSNdH
+schema     : 9EQNgQtUhzLUCeZx7HpWAp3tpaAmEYXksdaAYJqpYAkr
+signature  : 3otsEu8xkdGuCpnDgiyFmfvNTUjrVP5bHyDZqfRwhJvoNhPNoQgh4dwftLZ4k115jaw3W2dGeBNAEkxDef5beXZa
+             https://explorer.solana.com/tx/3otsEu8xkdGuCpnDgiyFmfvNTUjrVP5bHyDZqfRwhJvoNhPNoQgh4dwftLZ4k115jaw3W2dGeBNAEkxDef5beXZa?cluster=devnet
+chain      : credential 95 bytes, schema 142 bytes, both owned by 22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG
+
+## 2. Issue a credential to the buyer, expiring at the end of 2027-09-23 UTC
+attestation: GxKEhaeTqH8hQ6fNfQyB9H7jSs8UcApVvktxeP3wEGVG
+signature  : 31Agch8kdKxXkQxDjBarD14TeaarAhapazDWk1Ew69aNaMa39nP9bvTbaVCDR95uYTN4i8gvZUn53bYNjkZNYUnd
+             https://explorer.solana.com/tx/31Agch8kdKxXkQxDjBarD14TeaarAhapazDWk1Ew69aNaMa39nP9bvTbaVCDR95uYTN4i8gvZUn53bYNjkZNYUnd?cluster=devnet
+page list  : 1 row for the buyer, state valid
+chain list : 1 issued; 12Zgxbsy15vuEGozqjhuBfDL6CtXiSeST8aKYjU7gcpX valid, expiry 1821743999, issued 1790173212
+
+## 3. Check the buyer
+page       : valid
+chain      : valid
+
+## 4. Revoke the buyer's credential
+signature  : 3RPKRwM4E7dh3FbJsgLQLKEW51ECGb1jr7opta1rv2cor5uf4btSrHkpvcx8maWzkyLRqssQeaNQrZS2edLTxR1G
+             https://explorer.solana.com/tx/3RPKRwM4E7dh3FbJsgLQLKEW51ECGb1jr7opta1rv2cor5uf4btSrHkpvcx8maWzkyLRqssQeaNQrZS2edLTxR1G?cluster=devnet
+page list  : the buyer's row struck through, then gone once devnet agreed
+chain      : attestation account closed
+
+## 5. Check the buyer again
+page       : absent
+chain      : absent
+
+## A sale that checks this verifier
+none: no credential-mode sale in packages/scripts/sales.json names this credential and schema, so no buy was tried. Opening one is left for the launch page proof.
+
+## Result
+PASS  setup landed and both accounts exist
+PASS  issued: page row valid
+PASS  issued: chain lists the buyer
+PASS  check before revoke: page valid
+PASS  check before revoke: chain valid
+PASS  revoke closed the attestation
+PASS  check after revoke: page absent
+PASS  check after revoke: chain absent
+PASS  no uncaught page errors
+
+9 passed, 0 failed, at 2026-09-23T14:20:50Z
+
+## Cost
+sweep      : 0.047475560 SOL back to the demo wallet, 4zRenPovzbcHHoh5G7e6imDUJFanXhQs8dUkSinfeVPedTbMZkPNrwVn7zKJorJbvD4NpHDLpTHpp2RpPTJ2fXS1
+page spent : 0.002519440 SOL from the verifier: the credential and schema deposits, which stay, and the fees; the attestation deposit came back on revoke
+run cost   : 0.002529440 SOL to the demo wallet, the two transfer fees included
+
+## Lost in an earlier run
+An earlier run of this script, at 2026-09-23T14:02:56Z, funded its throwaway
+verifier D3xZHtpqwz5gV2R9MRCrvbw4JNDgFkuHpezd2Xciph5X with 0.05 devnet SOL
+(3ZVfJLiMuyeTHAZxyymXRxmdSNgKBfwtKg3jAQw8PNJQsZtTQTtn2xpnKFLeu5cPyJUWDuvHopEYSbdEFXLvyFH4,
+finalized in slot 502979881). Its confirmation timed out on this machine's link
+to devnet, the script stopped, and the key, held only in memory then, went with
+it. The account held 50000000 lamports when read afterwards. Nothing can move
+them: 0.05 devnet SOL recorded as lost. The script now keeps a throwaway key in a
+scratch folder outside the repository until its sweep lands.

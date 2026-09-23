@@ -87,6 +87,46 @@ band: {
 The Pyth price account is derived for you from the feed id and the shard, which
 defaults to Pangu's own, so there is no address to get wrong.
 
+## Verify buyers
+
+A sale in credential mode sells only to wallets a verifier has attested on the
+Solana Attestation Service. These four are everything a verifier does; the app
+runs them at `/verify`.
+
+### Set up
+
+```ts
+const credential = credentialAddress(verifier, "Acme KYC");
+const schema = schemaAddress(credential, "pangu-buyer");
+tx.add(createCredentialInstruction({ payer: verifier, authority: verifier, name: "Acme KYC", signers: [verifier] }));
+tx.add(createSchemaInstruction({ payer: verifier, authority: verifier, credential, name: "pangu-buyer", description: "checked buyers" }));
+```
+
+### Issue
+
+```ts
+tx.add(createAttestationInstruction({ payer: verifier, authorizedSigner: verifier, credential, schema, wallet: buyer, expiry }));
+```
+
+`expiry` is unix seconds, or zero for never. The buyer's wallet is the nonce,
+which is the one address Pangu's hook looks at.
+
+### Check
+
+```ts
+const standing = await credentialStatus(connection, credential, schema, buyer); // "valid" | "expired" | "absent"
+const issued = await listAttestations(connection, credential, schema); // wallet, expiry, created, standing
+```
+
+### Revoke
+
+```ts
+tx.add(closeAttestationInstruction({ payer: verifier, authorizedSigner: verifier, credential, schema, wallet: buyer }));
+```
+
+Closing is the service's only revocation. The deposit returns to the payer and
+the wallet's next buy is refused with `CredentialInvalid`.
+
 ## Run a sale on Meteora
 
 `pangu-sdk/dbc` is the second entry point. It pulls in Meteora's Dynamic Bonding
