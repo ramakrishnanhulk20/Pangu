@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Spinner } from "@/components/break/strike";
 import { clock, explorerAddress, money, shortAddress } from "@/components/readout/format";
 import { DirectoryMotif } from "@/components/sales/directory-motif";
+import { useNow } from "@/components/sale/use-now";
 import { useLenis } from "@/components/smooth-scroll";
 import { CHAIN } from "@/lib/network";
 import type { Portfolio } from "@/lib/portfolio";
@@ -237,6 +238,7 @@ function Reading({ wallet }: { wallet: string }) {
  */
 export function PortfolioView() {
   const still = useReducedMotion() === true;
+  const now = useNow();
   const { publicKey, connecting } = useWallet();
   const wallet = publicKey?.toBase58() ?? null;
 
@@ -381,7 +383,7 @@ export function PortfolioView() {
                 </Note>
               </div>
             ) : (
-              <HoldingsLedger holdings={portfolio.holdings} still={still} />
+              <HoldingsLedger holdings={portfolio.holdings} still={still} now={now ?? portfolio.readAt} />
             )}
           </div>
 
@@ -400,7 +402,7 @@ export function PortfolioView() {
                 </div>
               </Note>
             ) : (
-              <IssuedLedger issued={portfolio.issued} still={still} />
+              <IssuedLedger issued={portfolio.issued} still={still} now={now ?? portfolio.readAt} />
             )}
           </div>
         </div>

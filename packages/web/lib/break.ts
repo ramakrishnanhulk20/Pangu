@@ -296,6 +296,21 @@ export function liftedByOffering(attack: Attack): boolean {
 }
 
 /**
+ * Why this row is only ever simulated against this sale, or null when it may
+ * be sent.
+ *
+ * Row 06 sends shares to a key that is thrown away as soon as it is made.
+ * While the offering runs the program refuses it and nothing moves. Once the
+ * offering is over the program lets it through, so a real send would give the
+ * shares away for good, which the row's stated cost of fees never covered.
+ */
+export function simulateOnlyWhy(attack: Attack, target: Target): string | null {
+  return attack.id === "wallet-to-wallet" && target.offeringOver
+    ? "Simulated only: the offering is over, so the program would let this through, and a real send would hand your shares to a key nobody holds."
+    : null;
+}
+
+/**
  * What rows 03, 06 and 09 say to a wallet with no shares. Each needs a buy that
  * really landed behind it, and in simulate mode row 01 lands nothing, so the
  * ledger offers the real buy beside this line.

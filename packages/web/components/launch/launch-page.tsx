@@ -24,7 +24,6 @@ import {
   storesMetadata,
   resumeState,
   runLaunch,
-  type FeedChoice,
   type LaunchForm as Form,
   type LaunchResult,
   type Progress,
@@ -34,6 +33,7 @@ import {
   type UploadRecord,
 } from "@/lib/launch";
 import { CHAIN, PAYING_TOKENS, browserRpcUrl, isListedDollar, payingToken } from "@/lib/network";
+import { readFeedPrices, type FeedPrices } from "@/lib/price-feed";
 import { LogoRefused, prepareLogo, storagePrice } from "@/lib/token-metadata";
 
 import { RefusalLine } from "./fields";
@@ -61,12 +61,6 @@ export type StorageState =
   | { state: "ready"; lamports: number }
   | { state: "missing" };
 
-interface StockAnswer {
-  feed: FeedChoice;
-  reading: StockReading | null;
-  reason: string | null;
-}
-
 const IDLE_STEPS: Record<StepId, StepState> = {
   metadata: { status: "waiting", signature: null, failure: null },
   template: { status: "waiting", signature: null, failure: null },
@@ -89,12 +83,12 @@ const FACTS = ["Meteora's Dynamic Bonding Curve", "Pangu's rules on every transf
  * The launch page: the offering and its rules on one side, the sale they make
  * on the other, and the two transactions that open it.
  *
- * `feedMints` names, for each feed, one of the app's own banded sales whose
- * price the existing price route already reads, so the ceiling in the preview
- * is worked out from the same live Pyth account a buyer's transfer is checked
- * against.
+ * `initialPrices` is the stock price for each feed the form offers, read on
+ * the server from Pyth's own price accounts as the page was rendered, and read
+ * again from there while the form is open. The preview's ceiling is worked out
+ * from it.
  */
-export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string | null> }) {
+export function LaunchPage({ initialPrices }: { initialPrices: FeedPrices }) {
   const still = useReducedMotion() === true;
   const connection = useMemo(() => breakConnection(browserRpcUrl()), []);
   const { publicKey, signTransaction, signAllTransactions, signMessage, sendTransaction } = useWallet();
@@ -103,7 +97,7 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
   const [form, setForm] = useState<Form>(DEFAULT_FORM);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [balance, setBalance] = useState<{ wallet: string; lamports: number } | null>(null);
-  const [stockAnswer, setStockAnswer] = useState<StockAnswer | null>(null);
+  const [prices, setPrices] = useState<FeedPrices>(initialPrices);
   const [steps, setSteps] = useState<Record<StepId, StepState>>(IDLE_STEPS);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<LaunchResult | null>(null);
@@ -338,70 +332,41 @@ export function LaunchPage({ feedMints }: { feedMints: Record<FeedChoice, string
       return;
     }
     const feed = form.feed;
-    const mint = feedMints[feed];
     let alive = true;
     let timer: number | undefined;
     // A missed read is asked again soon; a good one is kept for a minute.
-    const again = (ms: number) => {
-      if (alive) {
-        timer = window.setTimeout(read, ms);
-      }
-    };
     const read = () => {
-      if (mint === null) {
-        setStockAnswer({ feed, reading: null, reason: "This app has no sale on that feed to read its price through yet." });
-        return;
-      }
-      fetch(`/api/price/${mint}`, { cache: "no-store" })
-        .then(async (answer) => {
-          const body = (await answer.json().catch(() => null)) as {
-            priceDollars?: number;
-            publishTime?: number;
-            stale?: boolean;
-            error?: string;
-          } | null;
-          if (!alive) {
-            return;
-          }
-          if (!answer.ok || body === null || typeof body.priceDollars !== "number" || body.priceDollars <= 0) {
-            setStockAnswer({
-              feed,
-              reading: null,
-              reason: body?.error ?? "The stock price did not read. The ceiling is still set; the preview places it once the price reads.",
-            });
-            again(STOCK_RETRY_MS);
-            return;
-          }
-          setStockAnswer({
-            feed,
-            reading: { price: body.priceDollars, publishTime: body.publishTime ?? null, stale: body.stale === true },
-            reason: null,
-          });
-          again(STOCK_POLL_MS);
-        })
-        .catch(() => {
+      readFeedPrices().then(
+        (next) => {
           if (alive) {
-            setStockAnswer({ feed, reading: null, reason: "This page could not reach its own server for the stock price." });
-            again(STOCK_RETRY_MS);
+            setPrices(next);
+            timer = window.setTimeout(read, next[feed].reading === null ? STOCK_RETRY_MS : STOCK_POLL_MS);
           }
-        });
+        },
+        () => {
+          if (alive) {
+            setPrices((current) => ({
+              ...current,
+              [feed]: { reading: current[feed].reading, reason: "This page could not reach its own server for the stock price." },
+            }));
+            timer = window.setTimeout(read, STOCK_RETRY_MS);
+          }
+        }
+      );
     };
-    read();
+    timer = window.setTimeout(read, STOCK_POLL_MS);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [wantsStock, form.feed, feedMints]);
+  }, [wantsStock, form.feed]);
 
-  const stock = useMemo<StockState>(
-    () =>
-      stockAnswer === null || stockAnswer.feed !== form.feed
-        ? { state: "reading" }
-        : stockAnswer.reading !== null
-          ? { state: "ready", reading: stockAnswer.reading }
-          : { state: "missing", reason: stockAnswer.reason ?? "The stock price did not read." },
-    [stockAnswer, form.feed]
-  );
+  const stock = useMemo<StockState>(() => {
+    const answer = prices[form.feed];
+    return answer.reading !== null
+      ? { state: "ready", reading: answer.reading }
+      : { state: "missing", reason: answer.reason ?? "The stock price did not read." };
+  }, [prices, form.feed]);
 
   const lamports = balance !== null && balance.wallet === wallet ? balance.lamports : null;
   const plan = useMemo(

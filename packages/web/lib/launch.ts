@@ -1,11 +1,14 @@
 import {
+  ComputeBudgetProgram,
   LAMPORTS_PER_SOL,
   PublicKey,
   SYSVAR_CLOCK_PUBKEY,
   VersionedTransaction,
+  type AccountMeta,
   type Connection,
   type SendOptions,
   type Transaction,
+  type TransactionInstruction,
 } from "@solana/web3.js";
 import { getMint } from "@solana/spl-token";
 import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk";
@@ -39,6 +42,8 @@ import {
   MAX_DESCRIPTION,
   checkWebsite,
   checkX,
+  MAX_STORAGE_LAMPORTS,
+  StorageTooDear,
   unsentFundOf,
   uploadMetadata,
   type StoredMetadata,
@@ -457,6 +462,16 @@ export function planLaunch(form: LaunchForm, context: PlanContext): LaunchPlan {
     }
   }
 
+  if (context.storageLamports !== null && context.storageLamports > MAX_STORAGE_LAMPORTS) {
+    refuse(
+      "logo",
+      `Irys prices storing these files at ${(context.storageLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL, more than the ${
+        MAX_STORAGE_LAMPORTS / LAMPORTS_PER_SOL
+      } SOL this page will pay.`,
+      "Use a smaller logo, or wait a while and launch again."
+    );
+  }
+
   const needed = LAUNCH_COST_LAMPORTS + (context.storageLamports ?? 0);
   if (context.lamports !== null && context.lamports < needed) {
     refuse(
@@ -657,6 +672,8 @@ export interface StepState {
   status: StepStatus;
   signature: string | null;
   failure: StepFailure | null;
+  /** The storage step only: what Irys priced the files at for this press, in lamports, before the wallet pays. */
+  lamports?: number;
 }
 
 /** The sale as the chain holds it once both transactions landed. */
@@ -1076,10 +1093,15 @@ async function storeMetadata(
   const owner = wallet.publicKey;
   const record: UploadRecord = loadUpload(owner) ?? { stored: null, unsentFund: null };
   let fundSignature: string | null = null;
-  const show = (status: StepStatus) => onStep("metadata", { status, signature: fundSignature, failure: null });
+  let priced: number | undefined;
+  const show = (status: StepStatus) =>
+    onStep("metadata", { status, signature: fundSignature, failure: null, lamports: priced });
 
   const onStage = (stage: UploadStage) => {
     if (stage.stage === "pricing") {
+      show("pricing");
+    } else if (stage.stage === "priced") {
+      priced = stage.lamports;
       show("pricing");
     } else if (stage.stage === "funding") {
       show("funding");
@@ -1142,7 +1164,7 @@ async function storeMetadata(
       "metadata",
       {
         sentence:
-          error instanceof LogoRefused
+          error instanceof LogoRefused || error instanceof StorageTooDear
             ? error.message
             : error instanceof WalletCannot
               ? `${error.message}, and Irys needs it to store the logo. Connect Phantom, Solflare or Backpack.`
@@ -1256,12 +1278,81 @@ async function templateMatches(
 }
 
 /**
+ * Lighthouse, the guard program Phantom adds instructions for on some mainnet
+ * transactions. The address is LIGHTHOUSE_PROGRAM_ADDRESS in lighthouse-sdk
+ * 2.1.0 on npm, and an executable program on devnet and mainnet.
+ */
+export const LIGHTHOUSE_PROGRAM_ID = new PublicKey("L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95");
+
+const CHANGED_OURS =
+  "The wallet changed, reordered or dropped one of the instructions this page built, so the launch did not sign it. Nothing was sent.";
+
+/** The only programs a wallet may add its own instructions for. */
+const WALLET_MAY_ADD: readonly PublicKey[] = [ComputeBudgetProgram.programId, LIGHTHOUSE_PROGRAM_ID];
+
+function sameMeta(returned: AccountMeta, built: AccountMeta): boolean {
+  // The message merges every instruction's account flags, so an account the
+  // wallet's own instruction writes to can come back writable here. Gaining a
+  // flag changes nothing this instruction asked for; losing one would.
+  return (
+    returned.pubkey.equals(built.pubkey) &&
+    (returned.isSigner || !built.isSigner) &&
+    (returned.isWritable || !built.isWritable)
+  );
+}
+
+function sameInstruction(returned: TransactionInstruction, built: TransactionInstruction): boolean {
+  return (
+    returned.programId.equals(built.programId) &&
+    returned.data.equals(built.data) &&
+    returned.keys.length === built.keys.length &&
+    returned.keys.every((meta, place) => sameMeta(meta, built.keys[place]!))
+  );
+}
+
+/**
+ * Why the transaction a wallet handed back must not be signed for the launch,
+ * or null when it may.
+ *
+ * It must still carry every instruction the page built, byte for byte and in
+ * the order built, with the same fee payer. Anything the wallet added may only
+ * be for the compute budget or for Lighthouse, whose instructions check an
+ * account's state and fail the transaction when it is not what was expected.
+ * Any other change is refused with a sentence the launch shows.
+ */
+export function walletChangeRefusal(
+  built: readonly TransactionInstruction[],
+  returned: Transaction,
+  payer: PublicKey
+): string | null {
+  if (returned.feePayer === undefined || !returned.feePayer.equals(payer)) {
+    return "The wallet changed who pays for this transaction, so the launch did not sign it. Nothing was sent.";
+  }
+  let next = 0;
+  for (const instruction of returned.instructions) {
+    const ours = built[next];
+    if (ours !== undefined && sameInstruction(instruction, ours)) {
+      next += 1;
+    } else if (!WALLET_MAY_ADD.some((program) => program.equals(instruction.programId))) {
+      return next < built.length && built.some((own) => own.programId.equals(instruction.programId))
+        ? CHANGED_OURS
+        : `The wallet added an instruction for a program this page does not accept, ${instruction.programId.toBase58()}, so the launch did not sign it. Nothing was sent.`;
+    }
+  }
+  if (next < built.length) {
+    return CHANGED_OURS;
+  }
+  return null;
+}
+
+/**
  * Simulates, signs and sends one step's transaction, and waits for it.
  *
- * The step's own new account signs first, then the wallet, the order the
- * wallet adapter itself uses. The wallet's copy is checked before it goes out:
- * a wallet that changed the transaction would leave the account's signature
- * over a message that is not the one being sent.
+ * The wallet signs first and the step's own new account second, over the
+ * message the wallet handed back. A wallet such as Phantom may add its own
+ * guard instructions while signing, which would leave a signature made before
+ * it over a message that is no longer the one sent. The returned message is
+ * checked by walletChangeRefusal before the account signs it.
  */
 async function simulateSignSend(
   connection: Connection,
@@ -1287,7 +1378,7 @@ async function simulateSignSend(
   const latest = await connection.getLatestBlockhash("confirmed");
   transaction.recentBlockhash = latest.blockhash;
   transaction.feePayer = wallet.publicKey;
-  transaction.partialSign(account);
+  const built = [...transaction.instructions];
 
   let signed: Transaction;
   try {
@@ -1308,11 +1399,16 @@ async function simulateSignSend(
       null
     );
   }
+  const changed = walletChangeRefusal(built, signed, wallet.publicKey);
+  if (changed !== null) {
+    return fail(onStep, step, say(changed), null);
+  }
+  signed.partialSign(account);
   if (!signed.verifySignatures()) {
     return fail(
       onStep,
       step,
-      say("The wallet changed the transaction while signing it, so the launch's own signature no longer matches. Nothing was sent."),
+      say("The wallet's signature does not match the transaction it handed back. Nothing was sent."),
       null
     );
   }
@@ -1334,7 +1430,8 @@ async function simulateSignSend(
   let landedError: unknown = null;
   try {
     const confirmation = await connection.confirmTransaction(
-      { signature, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight },
+      // The wallet's blockhash, in case it set a newer one while signing.
+      { signature, blockhash: signed.recentBlockhash ?? latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight },
       "confirmed"
     );
     landedError = confirmation.value.err;

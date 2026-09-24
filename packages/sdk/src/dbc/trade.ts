@@ -56,6 +56,14 @@ export interface BuyInput {
    * run out before the paying side does, and an exact-in swap is refused.
    */
   fill?: "exactIn" | "partial";
+  /**
+   * The fewest sale tokens, in raw units, the buy may return before the chain
+   * refuses it. Set it from the quote the buyer was shown, less their slippage,
+   * so the floor is what they agreed to and not a fresh quote taken at build
+   * time. When given it replaces `slippageBps`, and the build throws if its own
+   * fresh quote already returns less.
+   */
+  minimumAmountOut?: bigint;
 }
 
 export interface SellInput {
@@ -65,6 +73,11 @@ export interface SellInput {
   /** Raw units of the sale token to sell back to the pool. */
   amountIn: bigint;
   slippageBps?: number;
+  /**
+   * The fewest paying tokens, in raw units, the sell may return before the
+   * chain refuses it. The same rule as `minimumAmountOut` on a buy.
+   */
+  minimumQuoteOut?: bigint;
 }
 
 const DEFAULT_SLIPPAGE_BPS = 100;
@@ -87,17 +100,26 @@ async function buildSwap(options: {
   slippageBps: number;
   action: string;
   fill?: "exactIn" | "partial";
+  /** The caller's own floor, which wins over the one worked out here. */
+  floor?: bigint;
 }): Promise<TradeTransaction> {
   const { connection, view, owner, swapBaseForQuote, amountIn } = options;
   const partial = options.fill === "partial";
   const quote = partial
     ? quotePartialFill(view, swapBaseForQuote, amountIn, options.slippageBps)
     : quoteExactIn(view, swapBaseForQuote, amountIn, options.slippageBps);
+  const quoted = BigInt(quote.outputAmount.toString());
+  if (options.floor !== undefined && quoted < options.floor) {
+    throw new PanguInputError(
+      `the market moved: ${options.action} now returns ${quoted} raw units, below the floor of ${options.floor}. Take a fresh quote`
+    );
+  }
   // A partial fill takes an unknown share of the input, so a floor worked out
-  // from the whole of it would refuse the trade. The curve itself is the floor.
-  const minimumAmountOut = partial
-    ? 0n
-    : BigInt((quote.minimumAmountOut ?? 0n).toString());
+  // from the whole of it would refuse the trade. The curve itself is the floor,
+  // unless the caller set one from the partial quote it showed.
+  const minimumAmountOut =
+    options.floor ??
+    (partial ? 0n : BigInt((quote.minimumAmountOut ?? 0n).toString()));
 
   const quoteAta = getAssociatedTokenAddressSync(
     view.quoteMint,
@@ -202,7 +224,7 @@ async function buildSwap(options: {
   await readyToSign(connection, transaction, owner);
   return {
     transaction,
-    expectedAmountOut: BigInt(quote.outputAmount.toString()),
+    expectedAmountOut: quoted,
     minimumAmountOut,
     bytes: requireOneTransaction(transaction, options.action),
     computeUnitLimit: COMPUTE_LIMIT.swap,
@@ -213,6 +235,17 @@ function slippageOf(value: number | undefined): number {
   return value === undefined
     ? DEFAULT_SLIPPAGE_BPS
     : requireWholeNumber(value, "slippageBps", 0, 10_000);
+}
+
+function floorOf(value: unknown, field: string): bigint | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const floor = requireBigint(value, field);
+  if (floor < 0n) {
+    throw new PanguInputError(`${field} must not be below zero`);
+  }
+  return floor;
 }
 
 function amountOf(value: unknown, field: string): bigint {
@@ -232,12 +265,14 @@ function amountOf(value: unknown, field: string): bigint {
  * list, so a credential sale and a banded sale carry their extra accounts
  * without the caller knowing they exist. Nothing is signed or sent.
  *
- * Throws PanguInputError for a mint with no Pangu sale, an amount of zero, or a
- * transaction that would not fit.
+ * Throws PanguInputError for a mint with no Pangu sale, an amount of zero, a
+ * transaction that would not fit, or a `minimumAmountOut` the market has
+ * already moved past.
  */
 export async function buyTransaction(input: BuyInput): Promise<TradeTransaction> {
   const buyer = requireRealPublicKey(input.buyer, "buyer");
   const amountIn = amountOf(input.amountIn, "amountIn");
+  const floor = floorOf(input.minimumAmountOut, "minimumAmountOut");
   const view = await loadPool(input.connection, input.mint);
   return buildSwap({
     connection: input.connection,
@@ -248,6 +283,7 @@ export async function buyTransaction(input: BuyInput): Promise<TradeTransaction>
     slippageBps: slippageOf(input.slippageBps),
     action: "the buy",
     fill: input.fill ?? "exactIn",
+    floor,
   });
 }
 
@@ -262,11 +298,13 @@ export async function buyTransaction(input: BuyInput): Promise<TradeTransaction>
  * same. Nothing is signed or sent.
  *
  * Throws PanguInputError when no transfer hook pool sells the mint, for an
- * amount of zero, or for a transaction that would not fit.
+ * amount of zero, for a transaction that would not fit, or for a
+ * `minimumQuoteOut` the market has already moved past.
  */
 export async function sellTransaction(input: SellInput): Promise<TradeTransaction> {
   const seller = requireRealPublicKey(input.seller, "seller");
   const amountIn = amountOf(input.amountIn, "amountIn");
+  const floor = floorOf(input.minimumQuoteOut, "minimumQuoteOut");
   const view = await loadSellPool(input.connection, input.mint);
   return buildSwap({
     connection: input.connection,
@@ -276,5 +314,6 @@ export async function sellTransaction(input: SellInput): Promise<TradeTransactio
     amountIn,
     slippageBps: slippageOf(input.slippageBps),
     action: "the sell",
+    floor,
   });
 }

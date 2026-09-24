@@ -8,6 +8,7 @@ import {
   OFFERING_OVER_LINE,
   liftedByOffering,
   plainFailure,
+  simulateOnlyWhy,
   type FundingWords,
 } from "@/lib/break";
 import { tokenAmount } from "@/lib/format";
@@ -134,6 +135,7 @@ export function AttackRow({
   const running = state.status === "building" || state.status === "waiting";
   const exit = attack.kind === "pass" && attack.id === "sell-back";
   const lifted = target !== null && target.offeringOver && liftedByOffering(attack);
+  const onlySimulated = LEDGER_SENDS && target !== null ? simulateOnlyWhy(attack, target) : null;
   const gatedMessage = state.status === "unavailable" && state.message === NEEDS_REAL_BUY;
   const offerRealBuy = connected && ready && !running && (realBuy || gatedMessage);
 
@@ -187,6 +189,12 @@ export function AttackRow({
               ]}
             />
           </p>
+
+          {onlySimulated !== null && (
+            <p data-testid="break-simulate-only-row" className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-muted">
+              {onlySimulated}
+            </p>
+          )}
 
           {state.expected !== null && expected.why !== null && (
             <p className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-muted">

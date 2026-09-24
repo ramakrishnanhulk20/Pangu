@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 
 import { clock, explorerAddress, money, shortAddress } from "@/components/readout/format";
+import { useNow } from "@/components/sale/use-now";
 import type { Directory, DirectorySale } from "@/lib/directory";
 import { CHAIN } from "@/lib/network";
 
@@ -58,8 +59,18 @@ function RaisedBar({ sale, still }: { sale: DirectorySale; still: boolean }) {
 
 const LABEL = "font-mono text-[10px] uppercase tracking-[0.18em] text-muted";
 
-function Row({ sale, index, still }: { sale: DirectorySale; index: number; still: boolean }) {
-  const state = stateWords(sale);
+function Row({
+  sale,
+  index,
+  still,
+  now,
+}: {
+  sale: DirectorySale;
+  index: number;
+  still: boolean;
+  now: number;
+}) {
+  const state = stateWords(sale, now);
   const who = whoMayBuy(sale.accessMode);
   const ceiling = ceilingWords(sale);
 
@@ -133,6 +144,11 @@ function Row({ sale, index, still }: { sale: DirectorySale; index: number; still
                   state.detail
                 )}
               </span>
+              {state.short !== null && (
+                <span data-testid="sales-row-short" className="mt-1.5 block max-w-[34ch] text-[12px] leading-snug text-pending">
+                  {state.short}
+                </span>
+              )}
             </dd>
           </div>
 
@@ -189,6 +205,7 @@ export function SalesLedger({ initial, all }: { initial: Directory; all: boolean
   const [reading, setReading] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
   const ticket = useRef(0);
+  const now = useNow() ?? directory.readAt;
 
   const tryAgain = useCallback(() => {
     ticket.current += 1;
@@ -273,7 +290,7 @@ export function SalesLedger({ initial, all }: { initial: Directory; all: boolean
       ) : (
         <ol className="relative">
           {directory.sales.map((sale, index) => (
-            <Row key={sale.mint} sale={sale} index={index} still={still} />
+            <Row key={sale.mint} sale={sale} index={index} still={still} now={now} />
           ))}
         </ol>
       )}

@@ -1,0 +1,47 @@
+network  : devnet
+program  : 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
+site     : http://127.0.0.1:3461
+demo     : 9QTJCGx2TLSre7dnjxn3hDs2EJznxr5F84DqrnU1n4FW holds 1.5850 SOL
+buyer    : 9fujXyeqCLZZHwj8U7rbbA7dtYBYz871PZke2c8XiFMh, a throwaway: issuer, then buyer on its own sale
+rival    : 2dNcbAhzqqX53m3dUqQYNZPjrJyi3a3Mmjmk5saeoDhR, a throwaway: the second wallet that moves the price
+ok    funded 9fujXy to 0.08 SOL: https://explorer.solana.com/tx/2xZW5NdMnGhF1Bi4mN1cicoDSnCS1fM5uFaAaayFtGvXcSgyKHjBogWesBYrvKUwqpSZ6h1EhwAjb3AcBp8owwXo?cluster=devnet
+ok    funded 2dNcbA to 0.08 SOL: https://explorer.solana.com/tx/559ew7M5GRAaui4h19MtzhM3aRnr8fwhrbbHw2C4yWhvz5x9A2RDVh3kjQQQW6eiFefqJAM8L6SLo7gpEemFCPAF?cluster=devnet
+
+1. launch, the wallet adding its own compute unit price while it signs
+ok    the launch landed through the new signing order: F6iJZLRtES8AFUDyPPcLTL4hMEvAjHUMr4oJBfs3jgc3
+mint     : https://explorer.solana.com/address/F6iJZLRtES8AFUDyPPcLTL4hMEvAjHUMr4oJBfs3jgc3?cluster=devnet
+ok    the wallet added its own instruction to both launch transactions: 2
+ok    the done state links the template and sale transactions: 2
+ok    landed with the wallet's compute unit price in it: https://explorer.solana.com/tx/hyRKmKkv4rVPdmnMbCUv8YurmgNKVMFxcALBod48MxEndRTYBUGpX7nVTURAma4msuMm2C54uYrXLWBtPXeBb89?cluster=devnet
+ok    landed with the wallet's compute unit price in it: https://explorer.solana.com/tx/5ZJErjyrPxySt3VJ2o2LPwCB4oMfmiQsGRnFkRiC25SCAGPrh2vd5vQvMkkNo5DE6egx98pS7CnJX6EcNVVTYDNQ?cluster=devnet
+ok    the sale's rules read back, issuer the throwaway
+
+2. an ordinary buy and sell
+page says: SLIPPAGE 1%You get at least 59,632,542 shares, or the buy does not happen.
+ok    the stated floor is 1 percent under the shares shown: 60234891188038 shown, 59632542276157 floor
+ok    the ordinary buy landed: https://explorer.solana.com/tx/5DzEa6MoF2dGwE8KgSs6fwEFymPFhWqnZt7jLkiGHm2p6VQAckgwCkkP3EnXZeSTQUP99CWceDK93zgjZkVwgYqL?cluster=devnet
+page says: SLIPPAGE 1%You get at least 0.0019 SOL back, or the sell does not happen.
+ok    the sell landed: https://explorer.solana.com/tx/5jZkhZGvuezazQxjca2L5UHB1wBsiNGqk9V3fox8efi3FPEob51ZTeMK8Qqe9yisjZ69ZcaUgiHMXPNsAXaqeAFx?cluster=devnet
+
+3. the market moves after the quote is shown, before Buy is pressed
+ok    the rival's buy landed first: https://explorer.solana.com/tx/5o3dLeweLZMrkxzuxRsoiLhvwVcBag8XHV8eYGN5sWZ9K9M3uvXDwMMcryg4XcHejET8AbAbUzBmecY3CzL1vkPH?cluster=devnet
+page says: The market moved since this page showed its quote: the trade now returns less than the least you were shown, so it was not sent. Take a fresh quote.
+ok    the page said the market moved and asked nobody to sign: failed, 0 signing requests
+ok    it offers a fresh quote
+ok    the fresh quote is lower than the one the market moved past: 60234891188038 then 43668146275513
+
+4. the market moves after the buy is built and signed, before it lands
+page says: SLIPPAGE 1%You get at least 43,231,465 shares, or the buy does not happen.
+page says: Simulation failed. Message: Transaction simulation failed: This transaction has already been processed. Logs: []. Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+ok    the wallet was asked, and the rival bought in between: https://explorer.solana.com/tx/4wsSLXsVMDjrp6zDCvctaLx9LURxTMvaxpRjPcYv7PL8oAYaQJajsJERR7c34jkg8FAZjQmXydmXYq44qhmkb3QD?cluster=devnet
+ok    the signed buy carries the floor the page showed: 43231464812757 on chain, 43231464812757 on the page
+ok    the buy reached the chain and DBC refused it on that floor: https://explorer.solana.com/tx/3CRjWnZY8QnAfRPV5jpWbXtVyYvdjnPVNngxKGncsmvARp8kip9x6yq6iaqP3A34UoY2gv3rzHWJURWnBR82pq7b?cluster=devnet
+chain    : {"InstructionError":[4,{"Custom":6002}]}
+log      : Program log: AnchorError thrown in programs/dynamic-bonding-curve/src/instructions/swap/swap_exact_in.rs:38. Error Code: ExceededSlippage. Error Number: 6002. Error Message: Exceeded slippage tolerance.
+ok    no uncaught errors on the page: 
+
+rival    : sold its 281833375193101 back, landed, https://explorer.solana.com/tx/2QLL3yYAc4T7istCz8LoPkDmzwsLQC5teiVqP9dHLB88wTPaiRTjdwtqKnVDenZzZjRujgUAYhWL1nEkrCBSpABV?cluster=devnet
+returned : 0.058649 SOL from 9fujXy, landed
+returned : 0.077309 SOL from 2dNcbA, landed
+
+every check passed; mint F6iJZLRtES8AFUDyPPcLTL4hMEvAjHUMr4oJBfs3jgc3, not in sales.json

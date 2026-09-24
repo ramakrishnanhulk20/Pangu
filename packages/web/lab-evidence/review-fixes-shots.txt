@@ -1,0 +1,24 @@
+ok    ten minutes left, creation unknown: exact end: 24 Sep 2026, 09:10 UTC
+ok    ten minutes left: time left: 10 minutes left
+ok    ten minutes left, creation unknown: flagged short: Short offering: at 24 Sep 2026, 09:10 UTC every rule lifts and anyone can buy without a cap.
+ok    ten minutes left of a 30 day offering: not flagged
+ok    a seven hour offering: flagged: Short offering: at 24 Sep 2026, 15:00 UTC every rule lifts and anyone can buy without a cap.
+ok    a fourteen day offering: not flagged: 14 days left
+ok    an offering that has ended: no time left, no flag
+ok    before the visitor's clock is known: the exact end only
+ok    1440: a directory row shows the exact end and time left: 01 / Pangu Priced Share, second offering / PBAND2 / → / STATE / Running / offering ends 7 Oct 2026, 10:38 UTC, 13 days 5 hours left / WHO MAY BUY / Anyone / PRI
+ok    1440: the sale's title shows the exact end: offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left
+ok    1440: the trade panel shows the exact end and time left: The offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left. Then every rule lifts.
+ok    1440: the note beside it shows the exact end: The offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left, and every rule lifts then.
+ok    1440: a portfolio row shows the exact end and time left: offering ends 7 Oct 2026, 10:38 UTC, 13 days 5 hours left 
+ok    1440: no sideways scroll on the portfolio: 0
+ok    1440: no uncaught errors: 
+ok    375: a directory row shows the exact end and time left: 01 / Pangu Priced Share, second offering / PBAND2 / → / STATE / Running / offering ends 7 Oct 2026, 10:38 UTC, 13 days 5 hours left / WHO MAY BUY / Anyone / PRI
+ok    375: the sale's title shows the exact end: offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left
+ok    375: the trade panel shows the exact end and time left: The offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left. Then every rule lifts.
+ok    375: the note beside it shows the exact end: The offering ends 30 Sep 2026, 14:58 UTC, 6 days 10 hours left, and every rule lifts then.
+ok    375: a portfolio row shows the exact end and time left: offering ends 7 Oct 2026, 10:38 UTC, 13 days 5 hours left 
+ok    375: no sideways scroll on the portfolio: 0
+ok    375: no uncaught errors: 
+
+every check passed

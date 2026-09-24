@@ -5,7 +5,8 @@ import { PublicKey } from "@solana/web3.js";
 import { motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { explorerAddress, shortAddress, utcDay } from "@/components/readout/format";
+import { explorerAddress, shortAddress } from "@/components/readout/format";
+import { offeringEnd } from "@/components/sales/words";
 import type { DirectorySale, SaleTermsWire } from "@/lib/directory";
 import { CHAIN } from "@/lib/network";
 import { messageOf, readMarket, tradeConnection } from "@/lib/trade";
@@ -13,6 +14,7 @@ import type { PoolView } from "pangu-sdk/dbc";
 
 import { IssuerPanel } from "./issuer-panel";
 import { TradePanel } from "./trade-panel";
+import { useNow } from "./use-now";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const MARKET_POLL_MS = 20_000;
@@ -173,6 +175,8 @@ function Graduated({ sale }: { sale: DirectorySale }) {
 
 /** What a visitor who is not the issuer sees where the issuer's controls would be. */
 function IssuerNote({ sale }: { sale: DirectorySale }) {
+  const now = useNow();
+  const end = sale.endsAt === null ? null : offeringEnd(sale.endsAt, sale.openedAt, now);
   return (
     <div className="border-t border-line pt-8 text-[14px] leading-relaxed text-muted">
       <p className="font-mono text-[10px] uppercase tracking-[0.18em]">the issuer</p>
@@ -189,12 +193,15 @@ function IssuerNote({ sale }: { sale: DirectorySale }) {
           ? "This wallet approves who may buy, claims the trading fees and moves the curve to DAMM v2 once it fills. Connect it here and those controls appear."
           : "This wallet claims the trading fees and moves the curve to DAMM v2 once it fills. Connect it here and those controls appear."}
       </p>
-      {sale.endsAt !== null && (
-        <p className="mt-4 max-w-[44ch]">
+      {end !== null && (
+        <p className="mt-4 max-w-[44ch]" data-testid="sale-desk-end">
           {sale.offeringOver
-            ? `The offering ended on ${utcDay(sale.endsAt * 1000)}.`
-            : `The offering ends on ${utcDay(sale.endsAt * 1000)}, and every rule lifts then.`}
+            ? `The offering ended ${end.at}.`
+            : `The offering ends ${end.at}${end.left === null ? "" : `, ${end.left}`}, and every rule lifts then.`}
         </p>
+      )}
+      {!sale.offeringOver && end !== null && end.short !== null && (
+        <p className="mt-3 max-w-[44ch] text-pending">{end.short}</p>
       )}
     </div>
   );

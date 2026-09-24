@@ -94,9 +94,11 @@ export function LaunchSteps({
                   {step.detail}
                   {step.id === "metadata" && (
                     <span data-testid="launch-step-metadata-cost">
-                      {storageLamports === null
-                        ? ". Irys prices it in a moment."
-                        : `. About ${(storageLamports / 1e9).toFixed(6)} SOL, less whatever your Irys balance already holds.`}
+                      {state.lamports !== undefined
+                        ? `. Irys priced these files at ${(state.lamports / 1e9).toFixed(6)} SOL just now, before your wallet was asked; it pays only what your Irys balance lacks.`
+                        : storageLamports === null
+                          ? ". Irys prices it in a moment."
+                          : `. About ${(storageLamports / 1e9).toFixed(6)} SOL, less whatever your Irys balance already holds.`}
                     </span>
                   )}
                 </p>

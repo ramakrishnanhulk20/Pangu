@@ -1,0 +1,14 @@
+ok    unchanged: accepted (wanted accepted). wallet then mint signatures verify over the returned message
+ok    a compute unit price added in front: accepted (wanted accepted). wallet then mint signatures verify over the returned message
+ok    a Lighthouse assertion added between the page's instructions: accepted (wanted accepted). wallet then mint signatures verify over the returned message
+ok    a Lighthouse assertion added at the end: accepted (wanted accepted). wallet then mint signatures verify over the returned message
+ok    a Lighthouse instruction that writes an account the page only reads: accepted (wanted accepted). wallet then mint signatures verify over the returned message
+ok    an unknown program's instruction added: refused (wanted refused). The wallet added an instruction for a program this page does not accept, 3ZCaYxcS2i5VFT6pCBhtsm4HJag257FHHwWpFh8ZUu98, so the launch did not sign it. Nothing was sent.
+ok    a transfer out of the wallet added: refused (wanted refused). The wallet added an instruction for a program this page does not accept, 11111111111111111111111111111111, so the launch did not sign it. Nothing was sent.
+ok    one byte of the page's program call changed: refused (wanted refused). The wallet changed, reordered or dropped one of the instructions this page built, so the launch did not sign it. Nothing was sent.
+ok    the page's compute limit changed: refused (wanted refused). The wallet changed, reordered or dropped one of the instructions this page built, so the launch did not sign it. Nothing was sent.
+ok    one of the page's instructions dropped: refused (wanted refused). The wallet changed, reordered or dropped one of the instructions this page built, so the launch did not sign it. Nothing was sent.
+ok    two of the page's instructions swapped: refused (wanted refused). The wallet changed, reordered or dropped one of the instructions this page built, so the launch did not sign it. Nothing was sent.
+ok    the fee payer swapped: refused (wanted refused). The wallet changed who pays for this transaction, so the launch did not sign it. Nothing was sent.
+
+12 passed, 0 failed

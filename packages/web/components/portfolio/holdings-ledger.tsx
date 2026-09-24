@@ -128,9 +128,19 @@ function Actions({ holding }: { holding: Holding }) {
   );
 }
 
-function Row({ holding, index, still }: { holding: Holding; index: number; still: boolean }) {
+function Row({
+  holding,
+  index,
+  still,
+  now,
+}: {
+  holding: Holding;
+  index: number;
+  still: boolean;
+  now: number;
+}) {
   const access = accessWords(holding);
-  const state = stateLine(holding);
+  const state = stateLine(holding, now);
   const held = BigInt(holding.held);
   const priced = holding.graduated ? "at the curve's last price" : "at the curve's price now";
 
@@ -213,6 +223,11 @@ function Row({ holding, index, still }: { holding: Holding; index: number; still
             <dd className="mt-1.5 lg:mt-0">
               <span className="block font-medium">{state.word}</span>
               <span className="mt-1 block text-[12px] text-muted">{state.detail}</span>
+              {state.short !== null && (
+                <span data-testid="portfolio-short" className="mt-1.5 block max-w-[34ch] text-[12px] leading-snug text-pending">
+                  {state.short}
+                </span>
+              )}
             </dd>
           </div>
 
@@ -231,7 +246,7 @@ function Row({ holding, index, still }: { holding: Holding; index: number; still
 const HEADINGS = ["no.", "sale", "you hold", "room under your cap", "may you buy", "state", ""];
 
 /** Every sale this wallet is in, as a ruled ledger in the directory's own shape. */
-export function HoldingsLedger({ holdings, still }: { holdings: Holding[]; still: boolean }) {
+export function HoldingsLedger({ holdings, still, now }: { holdings: Holding[]; still: boolean; now: number }) {
   return (
     <div data-testid="portfolio-holdings">
       <div
@@ -246,7 +261,7 @@ export function HoldingsLedger({ holdings, still }: { holdings: Holding[]; still
       </div>
       <ol className="relative">
         {holdings.map((holding, index) => (
-          <Row key={holding.mint} holding={holding} index={index} still={still} />
+          <Row key={holding.mint} holding={holding} index={index} still={still} now={now} />
         ))}
       </ol>
     </div>

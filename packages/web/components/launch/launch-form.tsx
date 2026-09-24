@@ -1,6 +1,6 @@
 "use client";
 
-import { shares as whole } from "@/components/readout/format";
+import { shares as whole, utcMoment } from "@/components/readout/format";
 import { feedWords } from "@/lib/feeds";
 import {
   FEED_IDS,
@@ -451,7 +451,13 @@ function StockLine({ stock, feed }: { stock: StockState; feed: "apple" | "aaplx"
   return (
     <span data-testid="launch-stock" className="text-[14px] tabular-nums">
       {words.label}: <span className="font-semibold">${stock.reading.price.toFixed(2)}</span>
-      {stock.reading.stale && <span className="text-muted">, last published price</span>}
+      {stock.reading.stale && (
+        <span className="text-muted">
+          {stock.reading.publishTime === null
+            ? ", last published price"
+            : `, last published ${utcMoment(stock.reading.publishTime * 1000)}`}
+        </span>
+      )}
     </span>
   );
 }

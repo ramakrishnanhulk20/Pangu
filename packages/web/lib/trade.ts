@@ -264,22 +264,51 @@ export async function credentialStanding(
   };
 }
 
+/** The slippage every trade on this page states and signs: 1 percent under the quote shown. */
+export const SLIPPAGE_BPS = 100n;
+
+/** The least a trade may return once slippage is taken off what the page showed. */
+export function floorOf(shown: bigint): bigint {
+  return (shown * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+}
+
+/**
+ * A buy of `pays` that the chain refuses unless it returns at least
+ * `leastShares`, which the page works out from the quote the buyer was shown,
+ * not from a fresh one taken while building.
+ */
 export function buildBuy(
   connection: Connection,
   wallet: PublicKey,
   mint: PublicKey,
-  pays: bigint
+  pays: bigint,
+  leastShares: bigint
 ): Promise<TradeTransaction> {
-  return buyTransaction({ connection, buyer: wallet, mint, amountIn: pays });
+  return buyTransaction({ connection, buyer: wallet, mint, amountIn: pays, minimumAmountOut: leastShares });
 }
 
 export function buildSell(
   connection: Connection,
   wallet: PublicKey,
   mint: PublicKey,
-  shares: bigint
+  shares: bigint,
+  leastBack: bigint
 ): Promise<TradeTransaction> {
-  return sellTransaction({ connection, seller: wallet, mint, amountIn: shares });
+  return sellTransaction({ connection, seller: wallet, mint, amountIn: shares, minimumQuoteOut: leastBack });
+}
+
+const MOVED_BEFORE_SIGNING =
+  "The market moved since this page showed its quote: the trade now returns less than the least you were shown, so it was not sent. Take a fresh quote.";
+const MOVED_IN_SIMULATION =
+  "The price moved past the least you were shown between the quote and the transaction, so nothing was signed. Take a fresh quote.";
+
+/** Whether a sentence this page shows says the market moved past a trade's floor. */
+export function saysMarketMoved(sentence: string): boolean {
+  return (
+    sentence === MOVED_BEFORE_SIGNING ||
+    sentence === MOVED_IN_SIMULATION ||
+    /slippage/i.test(sentence)
+  );
 }
 
 /** What the chain says a transaction would do, before anybody signs it. */
@@ -308,7 +337,7 @@ function plainFailure(error: unknown, logs: readonly string[]): string {
     return SHORT_TOKEN;
   }
   if (/slippage/i.test(joined)) {
-    return "The price moved between the quote and the transaction. Try again with the new quote.";
+    return MOVED_IN_SIMULATION;
   }
   const said = logs
     .filter((line) => line.startsWith("Program log: ") && !line.startsWith("Program log: Instruction:"))
@@ -398,6 +427,9 @@ export function amountText(raw: bigint, decimals: number): string {
 export function messageOf(error: unknown): string {
   const text =
     error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
+  if (/^the market moved: /.test(text)) {
+    return MOVED_BEFORE_SIGNING;
+  }
   if (/user rejected|request rejected|declined|rejected the request/i.test(text)) {
     return "You turned this down in your wallet, so nothing was sent.";
   }

@@ -1,6 +1,6 @@
 import { ACCESS_MODE } from "pangu-sdk";
 
-import { utcDay } from "@/components/readout/format";
+import { offeringEnd } from "@/components/sales/words";
 import { CHAIN } from "@/lib/network";
 import type { Holding, Total } from "@/lib/portfolio";
 
@@ -62,30 +62,45 @@ export function noBuyReason(holding: Holding): string | null {
   return null;
 }
 
-/** The sale's state and the date under it. */
-export function stateLine(sale: {
-  state: string;
-  endsAt: number | null;
-  dammPool: string | null;
-}): { word: string; detail: string } {
+/**
+ * The sale's state, the exact end under it, and the short-offering warning
+ * when there is one. The portfolio does not carry a sale's creation time, so
+ * an offering counts as short when it ends within a day of `now`, the reading's
+ * own time in unix milliseconds.
+ */
+export function stateLine(
+  sale: {
+    state: string;
+    endsAt: number | null;
+    dammPool: string | null;
+  },
+  now: number
+): { word: string; detail: string; short: string | null } {
+  const end = sale.endsAt === null ? null : offeringEnd(sale.endsAt, null, now);
   switch (sale.state) {
     case "graduated":
       return {
         word: "Graduated",
         detail: sale.dammPool === null ? "move to DAMM v2 not sent yet" : "trades on DAMM v2",
+        short: null,
       };
     case "offering-over":
       return {
         word: "Offering over",
-        detail: sale.endsAt === null ? "the rules have lifted" : `ended ${utcDay(sale.endsAt * 1000)}`,
+        detail: end === null ? "the rules have lifted" : `ended ${end.at}`,
+        short: null,
       };
     case "running":
       return {
         word: "Running",
-        detail: sale.endsAt === null ? "no end date" : `offering ends ${utcDay(sale.endsAt * 1000)}`,
+        detail:
+          end === null
+            ? "no end date"
+            : `offering ends ${end.at}${end.left === null ? "" : `, ${end.left}`}`,
+        short: end?.short ?? null,
       };
     default:
-      return { word: "Unreadable", detail: `${CHAIN.inSentence} did not say where it stands` };
+      return { word: "Unreadable", detail: `${CHAIN.inSentence} did not say where it stands`, short: null };
   }
 }
 

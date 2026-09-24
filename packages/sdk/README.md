@@ -175,6 +175,22 @@ ceiling, price too uncertain, or price stale. A stale price is also what a shut
 stock market looks like: Pyth stops publishing an equity outside its trading
 sessions, so the account stops moving and ages out.
 
+### Buy and sell
+
+```ts
+const buy = await buyTransaction({ connection, buyer, mint, amountIn, minimumAmountOut });
+const sell = await sellTransaction({ connection, seller, mint, amountIn, minimumQuoteOut });
+```
+
+The floor is the least the trade may return before the chain refuses it. Set
+it from the quote the person was shown, less the slippage you told them, so the
+floor is what they agreed to. Leave it out and the builder takes 1 percent under
+a fresh quote of its own (`slippageBps` changes the 1 percent), which can sit
+below what a page showed a few seconds earlier. With a floor set, the builder
+reads the market again and throws `PanguInputError` ("the market moved") when
+the trade already returns less, so no wallet is asked to sign a trade that
+would fail.
+
 ## Keep the price fresh
 
 `pangu-sdk/price` is the third entry point, for a sale with a price band. It is

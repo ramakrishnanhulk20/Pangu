@@ -46,6 +46,26 @@ const ITEM_HEADER_BYTES = 1024;
 const MAX_METADATA_BYTES = 64 * 1024;
 const READ_TIMEOUT_MS = 8_000;
 
+/**
+ * The most this page lets a wallet pay Irys for one launch's files, 0.02 SOL.
+ * A logo and a short JSON cost a small fraction of that. The price comes from
+ * whatever the node's /price answers, so a node that answered wrong, or one
+ * that was not Irys, would otherwise set how much the wallet sends.
+ */
+export const MAX_STORAGE_LAMPORTS = 20_000_000;
+
+/** A storage price over MAX_STORAGE_LAMPORTS, refused before the wallet is asked to pay. */
+export class StorageTooDear extends Error {
+  constructor(lamports: number) {
+    super(
+      `Irys asked ${(lamports / 1e9).toFixed(6)} SOL to store these files, more than the ${
+        MAX_STORAGE_LAMPORTS / 1e9
+      } SOL this page will pay, so nothing was paid. Use a smaller logo, or try again later.`
+    );
+    this.name = "StorageTooDear";
+  }
+}
+
 /** How long a funding transfer may take to show up in the Irys balance. */
 const CREDIT_WAIT_MS = 120_000;
 const CREDIT_POLL_MS = 2_500;
@@ -448,6 +468,9 @@ export async function uploadMetadata(
   const jsonBytes = new TextEncoder().encode(JSON.stringify(metadataJson(text, stand))).length;
   const logoPrice = logo === null || logoKept ? 0 : await priceOne(logo.bytes);
   const price = logoPrice + (await priceOne(jsonBytes));
+  if (price > MAX_STORAGE_LAMPORTS) {
+    throw new StorageTooDear(price);
+  }
   const held = await balanceOf(irys);
   const shortfall = Math.max(0, price - held);
   say({ stage: "priced", lamports: price, shortfall });

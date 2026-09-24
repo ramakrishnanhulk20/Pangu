@@ -16,6 +16,7 @@ import {
   payingNeeded,
   readLanded,
   simulateAttack,
+  simulateOnlyWhy,
   targetFromWire,
   tokensHeld,
   type Attack,
@@ -396,7 +397,7 @@ export function BreakSection({ id = "try-to-break-it" }: { id?: string }) {
     if (publicKey === null || target === null) {
       return;
     }
-    const how: Mode = LEDGER_SENDS ? asked : "simulate";
+    const how: Mode = LEDGER_SENDS && simulateOnlyWhy(attack, target) === null ? asked : "simulate";
     const startedUnder = walletTurn.current;
     const turn = (latestRun.current.get(attack.id) ?? 0) + 1;
     latestRun.current.set(attack.id, turn);

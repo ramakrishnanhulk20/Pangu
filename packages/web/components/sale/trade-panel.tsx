@@ -9,7 +9,8 @@ import { ACCESS_MODE, type PriceReading } from "pangu-sdk";
 import type { BuyPreflight, PoolView } from "pangu-sdk/dbc";
 
 import { Spinner } from "@/components/break/strike";
-import { clock, explorerAddress, utcDay } from "@/components/readout/format";
+import { clock, explorerAddress } from "@/components/readout/format";
+import { offeringEnd } from "@/components/sales/words";
 import { CHAIN, DEMO_DOLLARS_ON, FAUCET_ON, explorerTx } from "@/lib/network";
 import type { DirectorySale } from "@/lib/directory";
 import { feedWords } from "@/lib/feeds";
@@ -19,6 +20,7 @@ import {
   buildBuy,
   buildSell,
   credentialStanding,
+  floorOf,
   messageOf,
   parseAmount,
   preflight,
@@ -26,6 +28,7 @@ import {
   quoteSell,
   readBandPrice,
   readWallet,
+  saysMarketMoved,
   whatToDo,
   type CredentialStanding,
   type WalletStanding,
@@ -33,6 +36,7 @@ import {
 
 import { ActionStatus } from "./action-status";
 import { busy, useChainAction } from "./use-chain-action";
+import { useNow } from "./use-now";
 
 // The wallet button reads the browser's injected wallets, so rendering it on
 // the server would only produce markup the client replaces at once.
@@ -115,6 +119,8 @@ export function TradePanel({
   const unitWord = sale.money;
   const rulesOff = sale.offeringOver;
   const feed = feedWords(sale.feedId);
+  const now = useNow();
+  const end = sale.endsAt === null ? null : offeringEnd(sale.endsAt, sale.openedAt, now);
 
   const shares = useCallback((raw: bigint) => `${tokenAmount(raw, baseDecimals)} ${symbol}`, [baseDecimals, symbol]);
   const paying = useCallback(
@@ -302,22 +308,24 @@ export function TradePanel({
       return;
     }
     const pays = quote.pays;
+    const least = floorOf(quote.shares);
     afterLanding(
       await run(async () => {
-        const built = await buildBuy(connection, publicKey, mint, pays);
+        const built = await buildBuy(connection, publicKey, mint, pays, least);
         return [{ transaction: built.transaction, signers: [] }];
       }, advise)
     );
   };
 
   const sell = async () => {
-    if (publicKey === null || amount === null) {
+    if (publicKey === null || amount === null || quote === null || !quote.ok) {
       return;
     }
     const part = amount;
+    const least = floorOf(quote.pays);
     afterLanding(
       await run(async () => {
-        const built = await buildSell(connection, publicKey, mint, part);
+        const built = await buildSell(connection, publicKey, mint, part, least);
         return [{ transaction: built.transaction, signers: [] }];
       }, advise)
     );
@@ -345,6 +353,13 @@ export function TradePanel({
     mode === "buy" && standing !== null && quote !== null && quote.ok && quote.pays > standing.paying;
   const overHolding = mode === "sell" && standing !== null && amount !== null && amount > standing.shares;
   const refusedNow = check.state === "answer" && !check.preflight.ok;
+  const moved =
+    (step.kind === "failed" && saysMarketMoved(step.message)) ||
+    (step.kind === "refused" && saysMarketMoved(step.sentence));
+  const freshQuote = () => {
+    reset();
+    onMarketMoved();
+  };
 
   const canAct =
     publicKey !== null &&
@@ -387,10 +402,27 @@ export function TradePanel({
         <WalletButton />
       </div>
 
-      {rulesOff && sale.endsAt !== null && (
+      {rulesOff && end !== null && (
         <p data-testid="trade-offering-over" className="mt-8 max-w-[52ch] border-l-2 border-accent pl-4 text-[15px] leading-relaxed">
-          {`The offering ended on ${utcDay(sale.endsAt * 1000)}: the rules have lifted, this token trades freely.`}
+          {`The offering ended ${end.at}: the rules have lifted, this token trades freely.`}
         </p>
+      )}
+
+      {mode === "buy" && !rulesOff && end !== null && (
+        <div
+          data-testid="trade-offering-end"
+          className="mt-8 max-w-[56ch] border-l-2 pl-4 text-[15px] leading-relaxed"
+          style={{ borderColor: end.short === null ? "var(--line)" : "var(--pending)" }}
+        >
+          <p>
+            {`The offering ends ${end.at}${end.left === null ? "" : `, ${end.left}`}. Then every rule lifts.`}
+          </p>
+          {end.short !== null && (
+            <p data-testid="trade-short-offering" className="mt-1 text-pending">
+              {end.short}
+            </p>
+          )}
+        </div>
       )}
 
       {mode === "buy" && !rulesOff && (
@@ -475,6 +507,19 @@ export function TradePanel({
             <span>{`About ${shares(quote.shares)} for ${paying(quote.pays)}, fee included, at the pool's price now.`}</span>
           )}
         </div>
+        {quote !== null && quote.ok && (
+          <p
+            data-testid="trade-floor"
+            data-shown-raw={(mode === "sell" ? quote.pays : quote.shares).toString()}
+            data-floor-raw={floorOf(mode === "sell" ? quote.pays : quote.shares).toString()}
+            className="mt-1 text-[13px] leading-relaxed text-muted"
+          >
+            <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em]">slippage 1%</span>
+            {mode === "sell"
+              ? `You get at least ${paying(floorOf(quote.pays))} back, or the sell does not happen.`
+              : `You get at least ${shares(floorOf(quote.shares))}, or the buy does not happen.`}
+          </p>
+        )}
 
         <Holding
           standing={standing}
@@ -530,6 +575,11 @@ export function TradePanel({
           testId="trade-status"
           landedLine={mode === "buy" ? `The buy landed on ${CHAIN.inSentence}.` : `The sell landed on ${CHAIN.inSentence}.`}
         />
+        {moved && (
+          <button type="button" data-testid="trade-fresh-quote" onClick={freshQuote} className={`${SMALL_BUTTON} mt-4`}>
+            take a fresh quote
+          </button>
+        )}
 
         {wallet !== null && (
           <Funding

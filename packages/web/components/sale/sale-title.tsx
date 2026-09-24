@@ -8,6 +8,8 @@ import { explorerAddress, shortAddress } from "@/components/readout/format";
 import { ceilingWords, stateWords, whoMayBuy } from "@/components/sales/words";
 import type { DirectorySale } from "@/lib/directory";
 
+import { useNow } from "./use-now";
+
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /**
@@ -27,7 +29,8 @@ export function SaleTitle({ sale }: { sale: DirectorySale }) {
     transition: still ? { duration: 0 } : { duration: 0.9, delay, ease: EASE },
   });
 
-  const state = stateWords(sale);
+  const now = useNow();
+  const state = stateWords(sale, now);
   const ceiling = ceilingWords(sale);
   const credits: { label: string; value: React.ReactNode }[] = [
     { label: "state", value: `${state.word}, ${state.detail}` },
@@ -121,6 +124,16 @@ export function SaleTitle({ sale }: { sale: DirectorySale }) {
           </div>
         ))}
       </motion.dl>
+      {state.short !== null && (
+        <motion.p
+          {...rise(0.4)}
+          data-testid="sale-title-short"
+          className="mt-6 max-w-[60ch] border-l-2 pl-4 text-[15px] leading-relaxed"
+          style={{ borderColor: "var(--pending)" }}
+        >
+          {state.short}
+        </motion.p>
+      )}
     </header>
   );
 }

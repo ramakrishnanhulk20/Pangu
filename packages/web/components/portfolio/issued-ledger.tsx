@@ -36,8 +36,8 @@ function Raised({ sale, still }: { sale: Issued; still: boolean }) {
   );
 }
 
-function Row({ sale, index, still }: { sale: Issued; index: number; still: boolean }) {
-  const state = stateLine(sale);
+function Row({ sale, index, still, now }: { sale: Issued; index: number; still: boolean; now: number }) {
+  const state = stateLine(sale, now);
 
   return (
     <motion.li
@@ -85,6 +85,9 @@ function Row({ sale, index, still }: { sale: Issued; index: number; still: boole
             <dd className="mt-1.5 lg:mt-0">
               <span className="block font-medium">{state.word}</span>
               <span className="mt-1 block text-[12px] text-muted">{state.detail}</span>
+              {state.short !== null && (
+                <span className="mt-1.5 block max-w-[34ch] text-[12px] leading-snug text-pending">{state.short}</span>
+              )}
             </dd>
           </div>
 
@@ -131,7 +134,7 @@ function Row({ sale, index, still }: { sale: Issued; index: number; still: boole
 const HEADINGS = ["no.", "sale", "state", "who may buy", "buyers", "raised of target", ""];
 
 /** The sales this wallet opened as issuer, each a click from its controls. */
-export function IssuedLedger({ issued, still }: { issued: Issued[]; still: boolean }) {
+export function IssuedLedger({ issued, still, now }: { issued: Issued[]; still: boolean; now: number }) {
   return (
     <div data-testid="portfolio-issued">
       <div
@@ -146,7 +149,7 @@ export function IssuedLedger({ issued, still }: { issued: Issued[]; still: boole
       </div>
       <ol className="relative">
         {issued.map((sale, index) => (
-          <Row key={sale.mint} sale={sale} index={index} still={still} />
+          <Row key={sale.mint} sale={sale} index={index} still={still} now={now} />
         ))}
       </ol>
     </div>
