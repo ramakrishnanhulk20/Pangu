@@ -10,12 +10,7 @@ Safe to import on a server and in a browser: no top level work, no DOM.
 ## Install
 
 ```bash
-# pangu-sdk is not on npm yet: build it from this repository
-git clone https://github.com/ramakrishnanhulk20/Pangu.git
-cd Pangu/packages/sdk && npm install && npm run build
-
-# then, in your own app (--install-links copies it, so your app keeps one @solana/web3.js)
-npm install --install-links ../path/to/Pangu/packages/sdk @solana/web3.js
+npm install pangu-sdk @solana/web3.js
 ```
 
 ## Read a sale

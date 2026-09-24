@@ -3,7 +3,25 @@
   "version": "0.1.0",
   "description": "Find a Pangu sale's accounts, read the sale and its buyers, and build Pangu's instructions.",
   "license": "MIT",
-  "sideEffects": false,
+  "keywords": [
+    "solana",
+    "meteora",
+    "dynamic-bonding-curve",
+    "token-2022",
+    "transfer-hook",
+    "stock-tokens",
+    "pyth",
+    "fair-launch"
+  ],
+  "homepage": "https://github.com/ramakrishnanhulk20/Pangu/tree/main/packages/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/ramakrishnanhulk20/Pangu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramakrishnanhulk20/Pangu.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -41,17 +59,18 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
-  "engines": {
-    "node": ">=20"
-  },
+  "sideEffects": false,
   "scripts": {
     "sync-idl": "node scripts/idl.mjs sync",
     "build": "node scripts/idl.mjs check && tsup",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@anchor-lang/core": "1.2.0",
@@ -59,11 +78,6 @@
     "@pythnetwork/pyth-solana-receiver": "0.16.0",
     "@solana/spl-token": "0.4.15",
     "buffer": "6.0.3"
-  },
-  "overrides": {
-    "jito-ts": {
-      "@solana/web3.js": "1.98.4"
-    }
   },
   "peerDependencies": {
     "@solana/web3.js": "^1.98"
@@ -75,5 +89,16 @@
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "5.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "jito-ts": {
+      "@solana/web3.js": "1.98.4"
+    }
   }
 }

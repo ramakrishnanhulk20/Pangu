@@ -57,6 +57,14 @@ export function SiteFooter() {
             Repository
           </a>
           <a
+            href="https://www.npmjs.com/package/pangu-sdk"
+            target="_blank"
+            rel="noreferrer"
+            className="text-muted underline decoration-transparent underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
+          >
+            npm
+          </a>
+          <a
             href={explorer}
             target="_blank"
             rel="noreferrer"

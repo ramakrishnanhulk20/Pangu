@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="LIVE_APP_URL">🚀 Live App</a> •
-  <a href="LIVE_APP_URL/docs">📚 Documentation</a> •
-  <a href="packages/sdk">📦 SDK</a>
+  <a href="docs/site">📚 Documentation</a> •
+  <a href="https://www.npmjs.com/package/pangu-sdk">📦 npm</a> •
+  <a href="packages/sdk">🧰 SDK</a>
 </p>
 
 <p align="center">
@@ -31,8 +31,7 @@
 
 | Platform | URL |
 |----------|-----|
-| 🚀 **App** | [Live App](LIVE_APP_URL) |
-| 📚 **Docs** | [Documentation](LIVE_APP_URL/docs) |
+| 📦 **SDK** | [npmjs.com/package/pangu-sdk](https://www.npmjs.com/package/pangu-sdk) |
 | ⛓️ **Devnet program** | [`4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`](https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet) |
 | 🌐 **Mainnet** | Ready, not deployed: [the runbook](docs/deploy/mainnet.md) |
 
@@ -236,12 +235,7 @@ cd ../web && npm run dev
 Install the SDK to read Pangu sales and build their transactions:
 
 ```bash
-# pangu-sdk is not on npm yet: build it from this repository
-git clone https://github.com/ramakrishnanhulk20/Pangu.git
-cd Pangu/packages/sdk && npm install && npm run build
-
-# then, in your own app (--install-links copies it, so your app keeps one @solana/web3.js)
-npm install --install-links ../path/to/Pangu/packages/sdk @solana/web3.js
+npm install pangu-sdk @solana/web3.js
 ```
 
 ### Find a sale, check a buy, build it
