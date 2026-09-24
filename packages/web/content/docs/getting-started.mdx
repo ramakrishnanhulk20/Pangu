@@ -59,7 +59,12 @@ Before a buyer signs a real transaction, Pangu's SDK can check what would happen
 ## For a developer: install pangu-sdk
 
 ```bash
-npm install pangu-sdk @solana/web3.js
+# pangu-sdk is not on npm yet: build it from this repository
+git clone https://github.com/ramakrishnanhulk20/Pangu.git
+cd Pangu/packages/sdk && npm install && npm run build
+
+# then, in your own app (--install-links copies it, so your app keeps one @solana/web3.js)
+npm install --install-links ../path/to/Pangu/packages/sdk @solana/web3.js
 ```
 
 Read a sale's current state:
