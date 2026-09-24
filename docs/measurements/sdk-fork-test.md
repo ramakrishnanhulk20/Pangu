@@ -222,3 +222,39 @@ predicted and then refused by the chain.
 | Close a buyer record | 277 | 7,820 |
 | Banded pool plus rules, paid in the demo dollar | 940 | 108,541 |
 | A buy in a banded sale | 912 to 922 | 113,926 to 131,465 |
+
+## Run of 23 September 2026: the SBPF v3 build
+
+Same command, against the same source built as SBPF v3, the format that stays
+deployable once SIMD-0500 is active. Binary SHA256
+`7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8`, 339,848
+bytes, IDL SHA256
+`0395b2857f9e1015ceda0ef990afce8deac2a98792f631948a7a6406fe35d5b1`, unchanged
+from the dollar list run above. `sdk-fork-test.sh` now refuses anything but a
+v3 binary:
+
+```
+fork suite binary: /home/ram/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
+SDK-FORK-OK
+```
+
+Result: all 16 steps pass, a to p, `SDK-FORK-OK`, with no change to the
+package. Nothing was sent to mainnet. The proof numbers hold: the curve raised
+5,000,000,001 of 5,000,000,000 lamports, 15 buyers, the largest holding 10.00
+percent against a cap share of 10.00 percent.
+
+Compute units, whole transactions, the dollar list run (v0) against v3:
+
+| Action | v0 | v3 |
+|---|---|---|
+| First buy | 132,341 | 120,318 |
+| A later buy | 124,850 to 153,354 | 112,811 to 147,315 |
+| Sell back to the pool | 103,533 | 90,010 |
+| Migrate to DAMM v2 | 144,612 | 149,112 |
+| Close a buyer record | 7,820 | 9,313 |
+| Banded pool plus rules, paid in the demo dollar | 108,541 | 99,498 |
+| A buy in a banded sale | 113,926 to 131,465 | 106,390 to 123,929 |
+
+One sample each, DBC's work included, and a figure moves by up to about 15,000
+units with the wallet, so read the direction rather than any one row: buys and
+sells came in lower on v3.

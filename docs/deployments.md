@@ -42,11 +42,36 @@ in a dollar. `DOLLAR_MINTS` in `create_sale.rs` holds USDC for mainnet, and,
 with the `devnet` cargo feature, devnet USDC and the demo dollar. A sale with no
 ceiling may be paid in any token, including a tokenized stock such as AAPLx.
 
-`scripts/wsl/build.sh` builds the devnet binary and checks it holds both devnet
-dollars and none of mainnet USDC. The mainnet build is the same command without
-the feature, produced reproducibly by `scripts/wsl/verify-build.sh`. Only a person
+Both builds are SBPF v3, the bytecode format the network keeps accepting for
+deploys and upgrades once SIMD-0500 switches v0, v1 and v2 off. Every script
+that builds or loads a shipped binary reads the version from its ELF header and
+refuses anything but v3.
+
+`scripts/wsl/build.sh` builds the devnet binary, `target/deploy/pangu.so`, and
+checks it holds both devnet dollars and none of mainnet USDC. The mainnet build
+is the same command without the feature, produced reproducibly by
+`scripts/wsl/verify-build.sh` (`solana-verify build --arch v3`). Only a person
 deploys it, with `scripts/wsl/deploy-mainnet.sh` and a typed confirmation; the
 steps are in `docs/deploy/mainnet.md`.
+
+`build.sh` also writes a third file, `target/deploy/pangu-v0-for-unit-tests.so`:
+the same source and the same devnet feature, built as SBPF v0. It exists only
+for the unit suite in `scripts/wsl/test.sh`, which runs on solana-bankrun
+0.4.0, and bankrun cannot load v3. `test.sh` copies it into a separate folder,
+`~/pangu-unit-tests`, so the name `pangu.so` never holds it, and nothing deploys
+it. The v3 bytecode is proven by the two fork suites and the mainnet rehearsal,
+which load the v3 files.
+
+| Build | SBPF | Size | sha256 |
+| --- | --- | --- | --- |
+| Devnet, `build.sh`, `target/deploy/pangu.so` | v3 | 339,848 bytes | `7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8` |
+| Unit tests only, `build.sh`, `target/deploy/pangu-v0-for-unit-tests.so` | v0 | 363,800 bytes | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f` |
+| Mainnet, `verify-build.sh`, `~/pangu-release/pangu-mainnet.so` | v3 | 337,856 bytes | `16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e` |
+| Devnet, `verify-build.sh`, `~/pangu-release/pangu-devnet.so` | v3 | 338,016 bytes | `d53b0d8520fb325f03345649e300be4d2a0f9682c7046270ed1b62282c38e09e` |
+
+The two devnet v3 files differ because `build.sh` compiles with this machine's
+toolchain and `verify-build.sh` inside the pinned Docker image. The unit-test
+file hashes like deploy 6 below, because deploy 6 was that same v0 build.
 
 Pyth's receiver program and price feed program sit at the same addresses on both
 networks, so nothing else differs between the builds. An earlier arrangement of
@@ -177,8 +202,8 @@ closing report says how many buffers are still holding SOL.
 Not deployed; ready: see `docs/deploy/mainnet.md`. The build that goes there is
 already made and reproducible, and every step of putting it there was rehearsed
 on a forked copy of mainnet on 23 September 2026
-(`docs/measurements/mainnet-rehearsal.md`). The deploy is one command Ram runs
-with his own key; `deploy.sh` still refuses mainnet.
+(`docs/measurements/mainnet-rehearsal.md`). The deploy is one command the founder runs
+with the founder's own key; `deploy.sh` still refuses mainnet.
 
 | Fact | Value |
 | --- | --- |
@@ -193,24 +218,24 @@ with his own key; `deploy.sh` still refuses mainnet.
 | Rent locked | not deployed |
 | sha256 of the deployed build | not deployed |
 | Explorer | not deployed |
-| Verified build | `pangu-mainnet.so`, the mainnet build (no `devnet` feature), SBPF v0, from commit `4d71addb0fab5db381d207e3eadfeea580420850` |
-| Verified build size | 366,968 bytes |
-| sha256 of the verified build | `f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358` |
-| Executable hash (solana-verify) | `474fa2628a7498fe71c3c21ebc459034ffcbe59eac86fae7b110ccd9fe8e86e0` |
+| Verified build | `pangu-mainnet.so`, the mainnet build (no `devnet` feature), SBPF v3, from commit `260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1` |
+| Verified build size | 337,856 bytes |
+| sha256 of the verified build | `16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e` |
+| Executable hash (solana-verify) | `3b8cea90deb0efdda3de722f36a5d0324eec217e710c318f2c48bebcbb3d93b8` |
 | Built with | `solana-verify build` 0.5.2 in `solanafoundation/solana-verifiable-build:4.2.2` (`sha256:16053d845922e798ab1852d3fe222faf5a23eeb1db3a13d30b70d6b6e82184ae`) |
 
 To reproduce the hash from a clean clone, on Linux with Docker:
 
 ```
-git checkout 4d71addb0fab5db381d207e3eadfeea580420850
+git checkout 260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1
 cd packages/program
-solana-verify build --library-name pangu --base-image solanafoundation/solana-verifiable-build:4.2.2
+solana-verify build --library-name pangu --base-image solanafoundation/solana-verifiable-build:4.2.2 --arch v3
 sha256sum target/deploy/pangu.so
 ```
 
 `scripts/wsl/verify-build.sh` runs exactly that twice from two fresh copies of
 the commit and refuses unless both hash the same, then builds the devnet binary
 from the same source with `--features devnet`
-(`3280a33969c174e18679a551b265d45b25da2e0411906302bcd1ec9b6346f2ad`, 367,144
+(`d53b0d8520fb325f03345649e300be4d2a0f9682c7046270ed1b62282c38e09e`, 338,016
 bytes): same commit, same image, one feature apart. `npm run status -- --network
 mainnet` holds the program on mainnet to the size and hash in this table.

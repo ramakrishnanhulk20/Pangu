@@ -4,7 +4,7 @@ Date: 23 September 2026. Every number here came out of a command that ran. No
 transaction was sent to mainnet: mainnet was only read, by the forked validator
 copying its accounts and by a handful of read-only RPC calls noted below.
 
-Going live is one command Ram runs with his own key (`docs/deploy/mainnet.md`).
+Going live is one command the founder runs with the founder's own key (`docs/deploy/mainnet.md`).
 This is the record of running every line of it first, on a local validator that
 holds copies of mainnet's real programs and tokens: Meteora's Dynamic Bonding
 Curve and DAMM v2, USDC, AAPLx and its DBC badge, Squads v4, and mainnet's own
@@ -265,4 +265,99 @@ proposal carried the devnet build only so the change shows in the hash.
   which cannot be undone and was not run.
 - Anything USDC's or AAPLx's issuers can do with their own powers over their
   tokens (freeze, permanent delegate, pause).
-- The web app. It reads devnet only today.
+- The web app. Its mainnet build was run against this forked validator separately, in `packages/web/lab-evidence/network-fork.txt`.
+
+## Run of 23 September 2026: the SBPF v3 build
+
+Everything above was rehearsed again after both shipped binaries moved to SBPF
+v3, the format that stays deployable once SIMD-0500 switches v0, v1 and v2 off.
+No transaction was sent to mainnet.
+
+```
+MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/verify-build.sh
+MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/mainnet-rehearsal.sh 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
+```
+
+**The verified build.** `verify-build.sh` now passes `--arch v3` to every
+`solana-verify build` and refuses a binary whose ELF header says anything but
+version 3. Commit `260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1`, the same image:
+
+```
+TOOLS: solana-verify 0.5.2, docker 29.1.3, SBPF v3
+MAINNET SBPF: v3
+MAINNET LENGTH: 337856 bytes
+MAINNET SHA256: 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
+MAINNET SHA256, SECOND BUILD: 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e (the same, so the build repeats)
+MAINNET EXECUTABLE HASH (solana-verify): 3b8cea90deb0efdda3de722f36a5d0324eec217e710c318f2c48bebcbb3d93b8
+DEVNET SBPF: v3
+DEVNET LENGTH: 338016 bytes
+DEVNET SHA256: d53b0d8520fb325f03345649e300be4d2a0f9682c7046270ed1b62282c38e09e
+VERIFY-BUILD-OK
+```
+
+The dollar lists check out as before: the mainnet binary carries mainnet USDC
+and neither devnet dollar, the devnet binary the reverse, both carry Pyth's two
+programs. The v3 mainnet binary is 29,112 bytes smaller than the v0 one.
+
+**The rehearsal.** `mainnet-rehearsal.sh` now refuses unless both release
+binaries are v3, and the validator still runs mainnet's own feature gates
+(`MATCH_MAINNET_FEATURES=1`). All six refusals held, then:
+
+```
+rehearsal binaries: /home/ram/pangu-release/pangu-mainnet.so and /home/ram/pangu-release/pangu-devnet.so, both SBPF v3
+PROGRAM DATA LENGTH: 405427 bytes
+RENT LOCKED IN PROGRAM ACCOUNT: 2.822976 SOL
+SOL SPENT: 2.825992003 SOL, rent and fees together
+UPLOAD BUFFER: closed, its SOL came back
+ON-CHAIN SHA256: 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
+HASH MATCH: YES
+DEPLOY-MAINNET-OK
+ALREADY UP TO DATE: the code on chain already hashes to 16a13b7f.... No transaction was sent.
+```
+
+The sales gave the same answers as on v0: a USDC buy under the cap, `OverCap`,
+`PriceOutsideBand` at the ceiling, a sell back at the ceiling, a second USDC
+curve bought to graduation and migrated (7 buyers, largest 20.00 percent
+against a cap share of 20.00 percent), `InvalidTokenBadge` without the pool
+badge, `BandNeedsDollarQuote` on AAPLx and on the demo dollar, and an AAPLx buy
+and sell. The upgrade authority went to a Squads 2 of 3 vault, the old key was
+refused with `Incorrect authority provided`, one approval was refused with
+`InvalidProposalStatus`, and two carried a v3 to v3 upgrade:
+
+```
+SQUADS-UPGRADE-OK
+ON-CHAIN SHA256 AFTER THE PROPOSAL: d53b0d8520fb325f03345649e300be4d2a0f9682c7046270ed1b62282c38e09e
+DEVNET BUILD SHA256:                d53b0d8520fb325f03345649e300be4d2a0f9682c7046270ed1b62282c38e09e
+MAINNET-REHEARSAL-OK
+```
+
+**Cost on mainnet for the v3 build.** The program data account is 405,472
+bytes (405,427 of code room plus a 45 byte header) and the upload buffer
+337,893. At mainnet's rent rate as read on 23 September (the rate that gave
+2.23791272 SOL for 440,406 bytes above), that is 2.06044800 SOL locked for the
+code, 0.00083312 SOL for the program account, and 1.71714668 SOL held by the
+buffer during the upload. Fees on the fork were 0.00187456 SOL. So about
+**2.063 SOL spent for good** and about **3.780 SOL held at the peak**, against
+2.241 and 4.104 for the v0 build. These mainnet figures are computed from the
+rate, not read for these exact sizes. `deploy-mainnet.sh` still asks for its
+4.5 SOL floor.
+
+**What each action cost on the fork, v0 against v3.** Whole transactions, one
+sample each, DBC's work included:
+
+| Action | v0 | v3 |
+| --- | --- | --- |
+| USDC pool plus rules with a ceiling | 94,838 | 102,302 |
+| buy under the cap, USDC (opens the buyer's record) | 144,447 | 138,361 |
+| a later buy on a banded sale, USDC | 115,992 to 127,956 | 108,419 to 121,917 |
+| a buy on a banded sale that opens a record, USDC | 150,403 to 160,916 | 138,351 to 151,850 |
+| sell back, USDC | 99,526 | 93,466 |
+| the buy that fills the curve, USDC | 163,084 | 142,029 |
+| migrate to DAMM v2, USDC | 152,453 | 146,453 |
+| AAPLx pool plus rules | 98,110 | 99,566 |
+| buy, AAPLx | 113,832 | 119,791 |
+| sell, AAPLx | 83,540 | 88,017 |
+
+The USDC buys and sells, where Pangu's band check runs, came in lower on v3;
+the AAPLx pair and the two pool creations came in higher. A single figure moves
+by up to about 15,000 units with the wallet, so no one row proves a change.

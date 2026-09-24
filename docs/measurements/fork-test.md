@@ -176,3 +176,55 @@ What changed in the tests:
 The pool and a credential-mode sale still fit one transaction, at 1,012 bytes
 against the 1,232 limit. The proof number is unchanged: the largest wallet holds
 9.99 percent of every token the curve sold, against a cap share of 9.99 percent.
+
+## Run of 23 September 2026: the SBPF v3 build
+
+Same command, against the binary devnet is being moved to: the same source,
+built as SBPF v3 instead of v0. SBPF v3 is the bytecode format the network will
+keep accepting for deploys and upgrades once SIMD-0500 switches the older ones
+off. Binary SHA256
+`7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8`, 339,848
+bytes (the v0 build of the same source is 363,800), ELF header version 3, IDL
+SHA256 `0395b2857f9e1015ceda0ef990afce8deac2a98792f631948a7a6406fe35d5b1`.
+`fork-test.sh` now refuses to start on anything but a v3 binary and prints the
+file and its hash:
+
+```
+fork suite binary: /home/ram/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
+  38 passing (5m)
+FORK-TEST-OK
+```
+
+The validator runs with every feature gate on, so SIMD-0500 is active in it and
+a v0 program could not be deployed there; the v3 program loads and runs. The
+run before it never reached the tests: WSL lost its network straight after the
+build and the validator could not clone from mainnet. A fresh WSL session fixed
+it.
+
+`fork-validator.sh stop` now stops only the validator it started, by the process
+id in its own pid file, and refuses to start while some other validator is
+answering on the local port. After this run no `solana-test-validator` was left
+running and the pid file was gone.
+
+Compute units, whole transactions, v0 (the v2 rules run above) against v3:
+
+| Action | v0 | v3 |
+| --- | --- | --- |
+| Pool plus `create_sale`, issuer list | 107,968 | 92,925 |
+| First buy, issuer list | 137,850 | 113,827 |
+| Sell, issuer list | 108,030 | 82,507 |
+| Pool plus `create_sale` with an end | 94,839 | 112,796 |
+| Over-cap buy after the offering ended | 120,489 | 105,466 |
+| Sell after the offering ended | 90,697 | 75,674 |
+| Wallet to wallet after the offering ended | 33,002 | 28,479 |
+| `close_buyer_record` | 7,820 | 7,813 |
+| Pool plus `create_sale`, credential mode | 104,841 | 89,793 |
+| Buy, credential mode | 134,322 | 137,290 |
+
+These are whole transactions, DBC's own work included, and one sample each. A
+single figure moves by up to about 15,000 units from wallet to wallet, because
+Pangu searches for each new wallet's record address, so no one row proves a
+change. Eight of the ten rows are lower on v3. Pangu's own share, from
+the unit suite on the v0 build the same day: `create_sale` 24,954, a buy
+through the hook 42,827, a sell 47,299 (the rules v2 figures were 23.5k, 42.8k
+and 45.8k).

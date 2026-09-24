@@ -6,7 +6,7 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/b
 # a Pangu sale can be run end to end against the code that is actually deployed.
 #
 #   bash fork-validator.sh          start it and wait for it to answer
-#   bash fork-validator.sh stop     kill it
+#   bash fork-validator.sh stop     kill the one it started, and no other
 #
 # Two settings exist for the mainnet rehearsal (scripts/wsl/mainnet-rehearsal.sh):
 #   LEAVE_PANGU_ADDRESS_EMPTY=1   start without Pangu at its address, so the
@@ -15,9 +15,10 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/share/solana/install/active_release/b
 #                                 "<address> <json file>" per line, written by
 #                                 packages/sdk/fork-test/rehearsal-accounts.ts
 #   MATCH_MAINNET_FEATURES=1      copy mainnet's feature gates instead of turning
-#                                 every one on. A local validator otherwise runs
-#                                 SIMD-0500, which refuses to deploy SBPF v0
-#                                 programs and is not active on mainnet
+#                                 every one on, so the rehearsal deploys under
+#                                 exactly mainnet's rules. A local validator
+#                                 otherwise also runs gates mainnet has not
+#                                 turned on, such as SIMD-0500
 #
 # Nothing here ever sends a transaction to mainnet. Mainnet is only read.
 
@@ -50,14 +51,23 @@ PANGU_SO="$WORK/target/deploy/pangu.so"
 SAS_ID="22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG"
 SAS_SO="$HOME/pangu-fixtures/sas.so"
 
+# Stops only the validator this script started, named by its pid file. Another
+# solana-test-validator on the machine, from another project or a person's own
+# session, is left alone. The pid is checked to still be a solana-test-validator
+# first, because after a WSL restart the same number can belong to anything.
 stop_validator() {
-  if [ -f "$PIDFILE" ]; then
-    kill "$(cat "$PIDFILE")" >/dev/null 2>&1
-    rm -f "$PIDFILE"
+  [ -f "$PIDFILE" ] || return 0
+  local pid
+  pid="$(tr -dc '0-9' < "$PIDFILE")"
+  if [ -n "$pid" ] && ps -p "$pid" -o args= 2>/dev/null | grep -q solana-test-validator; then
+    kill "$pid" >/dev/null 2>&1
+    for _ in $(seq 1 15); do
+      kill -0 "$pid" >/dev/null 2>&1 || break
+      sleep 1
+    done
+    kill -0 "$pid" >/dev/null 2>&1 && kill -9 "$pid" >/dev/null 2>&1
   fi
-  pkill -f solana-test-validator >/dev/null 2>&1
-  sleep 3
-  pkill -9 -f solana-test-validator >/dev/null 2>&1
+  rm -f "$PIDFILE"
   return 0
 }
 
@@ -86,6 +96,13 @@ if [ ! -s "$SAS_SO" ]; then
 fi
 
 stop_validator
+# With only our own validator stopped, anything still answering on the local
+# port belongs to someone else. Starting now would run the tests against it, so
+# the start refuses instead.
+if solana cluster-version --url "$LOCAL" >/dev/null 2>&1; then
+  echo "a validator this script did not start is already answering on $LOCAL; stop it first" >&2
+  exit 1
+fi
 rm -rf "$LEDGER"
 mkdir -p "$ACCOUNTS"
 

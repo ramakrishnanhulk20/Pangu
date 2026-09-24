@@ -24,6 +24,13 @@ WORK="$HOME/pangu-sdk-build"
 bash "$SCRIPTS/build.sh" || exit 1
 bash "$SCRIPTS/fetch-fixtures.sh" || exit 1
 
+# The validator loads the program build's pangu.so, the binary devnet runs, and
+# this suite refuses to prove anything but the SBPF v3 bytecode.
+FORK_SO="$HOME/pangu-build/target/deploy/pangu.so"
+FORK_SBPF="$(od -An -t u4 -j 48 -N 4 "$FORK_SO" | tr -d ' ')"
+[ "$FORK_SBPF" = "3" ] || { echo "SDK-FORK-FAILED: $FORK_SO is SBPF v$FORK_SBPF, not v3"; exit 1; }
+echo "fork suite binary: $FORK_SO, SBPF v3, sha256 $(sha256sum "$FORK_SO" | cut -d' ' -f1)"
+
 if ! bash "$SCRIPTS/fork-validator.sh"; then
   echo "the forked validator did not start" >&2
   exit 1

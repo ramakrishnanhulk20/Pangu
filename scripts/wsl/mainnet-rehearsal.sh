@@ -4,7 +4,7 @@
 # Runs every step of going live on mainnet against a local validator that holds
 # copies of mainnet's real programs and tokens, so nothing about the real run is
 # being tried for the first time:
-#   1. deploy-mainnet.sh --rehearse with the verified mainnet build, after six
+#   1. deploy-mainnet.sh --rehearse with the verified SBPF v3 mainnet build, after six
 #      runs it must refuse: no phrase, the wrong phrase, the wrong binary for
 #      the hash, no deployer key, a deployer holding 1 SOL, and an answer of "no"
 #   2. the sales in packages/sdk/fork-test/rehearsal.ts: USDC with a ceiling on
@@ -56,6 +56,13 @@ WANT="$(printf '%s' "${1:-}" | tr 'A-F' 'a-f')"
 [[ "$WANT" =~ ^[0-9a-f]{64}$ ]] || fail "give the mainnet sha256 verify-build.sh printed"
 [ -f "$MAINNET_SO" ] && [ -f "$DEVNET_SO" ] || fail "no verified builds in $RELEASE, run verify-build.sh first"
 [ "$(hash_of "$MAINNET_SO")" = "$WANT" ] || fail "$MAINNET_SO does not hash to $WANT"
+# Both binaries Pangu ships are SBPF v3, the format that stays deployable once
+# SIMD-0500 is active, so the rehearsal deploys and upgrades nothing older.
+sbpf_version() { od -An -t u4 -j 48 -N 4 "$1" | tr -d ' '; }
+for so in "$MAINNET_SO" "$DEVNET_SO"; do
+  [ "$(sbpf_version "$so")" = "3" ] || fail "$so is SBPF v$(sbpf_version "$so"), not v3; run verify-build.sh again"
+done
+echo "rehearsal binaries: $MAINNET_SO and $DEVNET_SO, both SBPF v3"
 [ -d "$HOME/pangu-build/node_modules" ] || fail "~/pangu-build has no node modules, run fork-test.sh once first"
 
 # Every run must refuse with DEPLOY-REFUSED and exit code 2, and nothing else.

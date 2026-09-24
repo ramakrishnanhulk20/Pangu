@@ -2,23 +2,26 @@
 
 Pangu is not on mainnet yet. Everything needed to put it there is ready and has
 been run once on a forked copy of mainnet (`docs/measurements/mainnet-rehearsal.md`).
-Ram decided on 23 September 2026: mainnet-ready now, deploy later, and he keeps
-the upgrade key at launch. This page is the whole procedure, in order.
+The founder decided on 23 September 2026: mainnet-ready now, deploy later, and
+the founder keeps the upgrade key at launch. This page is the whole procedure,
+in order.
 
-No agent runs any of this against mainnet. The deploy is Ram's, with his key.
+No agent runs any of this against mainnet. The deploy is the founder's, with
+the founder's own key.
 
 ## What it costs
 
-Read from mainnet on 23 September 2026 and measured on the rehearsal:
+For the SBPF v3 build, 337,856 bytes: rent at mainnet's rate as read on 23
+September 2026, and fees as measured on the rehearsal:
 
 | What | SOL | Comes back? |
 | --- | --- | --- |
-| Rent for the program's code account, 440,361 bytes of room (the build plus 20 percent, so a bigger build can be upgraded in place later) | 2.23791272 | No, it stays locked while the program exists |
+| Rent for the program's code account, 405,427 bytes of room (the SBPF v3 build plus 20 percent, so a bigger build can be upgraded in place later) | 2.06044800 | No, it stays locked while the program exists |
 | Rent for the program account itself | 0.00083312 | No |
-| Fees for the upload, about 363 write transactions at a priority fee of 100,000 micro-lamports per compute unit | about 0.0021 | No |
-| The upload buffer, held while the code is uploaded | 1.86503564 | Yes, in the same transaction that puts the code in place |
-| **Spent for good** | **about 2.241** | |
-| **Held at the peak** | **about 4.104** | |
+| Fees for the upload, about 334 write transactions at a priority fee of 100,000 micro-lamports per compute unit | about 0.0019 | No |
+| The upload buffer, held while the code is uploaded | 1.71714668 | Yes, in the same transaction that puts the code in place |
+| **Spent for good** | **about 2.063** | |
+| **Held at the peak** | **about 3.780** | |
 
 `deploy-mainnet.sh` refuses to start unless the deployer wallet holds at least
 **4.5 SOL**, or the computed peak plus 0.1 SOL if that is ever higher. Put 4.6
@@ -30,7 +33,7 @@ After the launch:
 | --- | --- |
 | A Squads v4 multisig for the upgrade key, later | about 0.0025 SOL of rent; Squads' creation fee is 0 today |
 | A sale's template and pool plus rules, paid by the issuer | 10,000 lamports in fees each, plus the rent DBC takes for the accounts |
-| A buy or a sell, paid by the buyer | 5,000 lamports in fees, 84,000 to 167,000 compute units |
+| A buy or a sell, paid by the buyer | 5,000 lamports in fees, 88,000 to 152,000 compute units on the rehearsal |
 | One price refresh, paid by the refresher key | about 0.000035 SOL, measured on devnet |
 
 ## Before you start
@@ -48,17 +51,21 @@ After the launch:
 4. **A keyed mainnet RPC node** (Helius, Triton, QuickNode) as
    `MAINNET_RPC_URL` in the repository root `.env`. The public node drops long
    uploads. The URL carries its key, and nothing prints it.
-5. **One check of mainnet's feature gates.** Pangu is built as SBPF v0.
-   SIMD-0500 stops v0 programs being deployed once it is active. On 23
-   September it was neither active nor scheduled on mainnet. Check it the day
-   you deploy, reading the public node:
+5. **One check of mainnet's feature gates.** Pangu is built as SBPF v3, and
+   `verify-build.sh` refuses to hand over anything else. SIMD-0500 (feature
+   `B8JJXCy5amZyWG9r7EnUYLwzXSXTxG7GZ1qZ1qggo83g`) stops SBPF v0, v1 and v2
+   programs being deployed, upgraded or frozen once it is active, and leaves v3
+   alone, so it no longer blocks this deploy or any later upgrade, whether it
+   is active or not. The one thing that must hold is that mainnet still accepts
+   v3 deploys, a gate active since epoch 993. Check it the day you deploy,
+   reading the public node:
 
    ```
-   solana feature status B8JJXCy5amZyWG9r7EnUYLwzXSXTxG7GZ1qZ1qggo83g --url mainnet-beta --keypair <your deployer file>
+   solana feature status 5cC3foj77CWun58pC51ebHFUWavHWKarWyR5UUik7dnC --url mainnet-beta --keypair <your deployer file>
    ```
 
-   "inactive" means go. Anything else means the build has to move to SBPF v3
-   first, which is a program change, not a deploy step.
+   "active" means go. Anything else means mainnet would refuse the v3 build:
+   stop, and deploy nothing.
 
 ## The commands, in order
 
@@ -77,12 +84,12 @@ It builds the committed program twice in the Solana Foundation's pinned image
 and refuses unless both builds hash the same. It ends with:
 
 ```
-MAINNET SHA256: f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358
+MAINNET SHA256: 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
 VERIFY-BUILD-OK
 ```
 
 That is the hash recorded in `docs/deployments.md`. If the program has changed
-since commit `4d71addb`, the hash changes too; record the new one before going
+since commit `260c1a4d`, the hash changes too; record the new one before going
 on.
 
 **2. Rehearse, if anything changed since the last rehearsal.**
@@ -99,7 +106,7 @@ upgrade, and ends with `MAINNET-REHEARSAL-OK`. About fifteen minutes.
 ```
 PANGU_MAINNET_GO="deploy pangu to mainnet" bash /mnt/d/Projects/Meteora/scripts/wsl/deploy-mainnet.sh \
   ~/pangu-release/pangu-mainnet.so \
-  f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358 \
+  16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e \
   <path to your deployer keypair file>
 ```
 
@@ -109,7 +116,7 @@ plan and the costs and waits. Read them, type `yes`, and it uploads, deploys and
 reads the code back. It ends with:
 
 ```
-ON-CHAIN SHA256: f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358
+ON-CHAIN SHA256: 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
 HASH MATCH: YES
 DEPLOY-MAINNET-OK
 ```
@@ -127,7 +134,7 @@ solana program show 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG --url "$MAINNET
 solana-verify get-program-hash 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG --url "$MAINNET_RPC_URL"
 ```
 
-The second prints `474fa2628a7498fe71c3c21ebc459034ffcbe59eac86fae7b110ccd9fe8e86e0`,
+The second prints `3b8cea90deb0efdda3de722f36a5d0324eec217e710c318f2c48bebcbb3d93b8`,
 the executable hash `verify-build.sh` printed for the same binary.
 
 **5. Status, read only.** From Windows, in `packages/scripts`:
@@ -150,9 +157,9 @@ the commit that was built:
 ```
 solana-verify verify-from-repo https://github.com/ramakrishnanhulk20/Pangu \
   --program-id 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG \
-  --commit-hash 4d71addb0fab5db381d207e3eadfeea580420850 \
+  --commit-hash 260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1 \
   --mount-path packages/program --library-name pangu \
-  --base-image solanafoundation/solana-verifiable-build:4.2.2 \
+  --base-image solanafoundation/solana-verifiable-build:4.2.2 --arch v3 \
   --url "$MAINNET_RPC_URL" --keypair <your deployer file>
 ```
 
@@ -162,19 +169,25 @@ record is a mainnet transaction and it is yours to send.
 
 ## The web app on mainnet
 
-`packages/web` reads devnet only today: its RPC variables are named for devnet,
-its explorer links say `cluster=devnet`, and banded sales there are paid in the
-demo dollar. A mainnet mode is its own piece of work. When it lands, these are
-the Vercel settings that change:
+`packages/web` has a mainnet mode. One build setting picks the network:
+`NEXT_PUBLIC_PANGU_NETWORK=mainnet` for the product, `devnet` or unset for the
+demo, and every per-network fact lives in `packages/web/lib/network.ts`. The
+mainnet build was run against the forked-mainnet validator from the rehearsal,
+with USDC and AAPLx, and every check passed:
+`packages/web/lab-evidence/network-fork.txt`. The full variable list, with
+where each is read, is in `docs/deploy/vercel.md`. These are the Vercel settings
+that differ on mainnet:
 
-| Setting | Devnet today | Mainnet |
+| Setting | Devnet | Mainnet |
 | --- | --- | --- |
-| Network | devnet, fixed in the code | a network variable the mainnet mode adds |
-| Server RPC | `DEVNET_RPC_URL`, keyed | a keyed mainnet node, server only |
-| Browser RPC | `NEXT_PUBLIC_DEVNET_RPC_URL` | a mainnet key restricted to the site's origin |
+| `NEXT_PUBLIC_PANGU_NETWORK` | `devnet`, or unset | `mainnet`. Read at build time, so changing it needs a redeploy; any other value stops the build |
+| Server RPC | `DEVNET_RPC_URL`, keyed | `MAINNET_RPC_URL`, a keyed mainnet node, server only |
+| Browser RPC | `NEXT_PUBLIC_DEVNET_RPC_URL` | `NEXT_PUBLIC_MAINNET_RPC_URL`, the public node when unset, or a key restricted to the site's origin; it must not contain the word devnet |
+| Paying tokens at launch | the demo dollar, SOL | USDC, and the xStocks AAPLx, TSLAx, NVDAx and SPYx, each offered only while its Meteora token badge reads back from the chain |
 | Dollar a ceiling is paid in | the demo dollar `2TYsrKmX...` | USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, the only one the mainnet build accepts (`dollarMints("mainnet")`) |
-| Demo dollars button | `DEMO_DOLLAR_MINT_AUTHORITY` | off: there is no demo dollar on mainnet, so leave it unset and the route answers 503 |
-| Price refresher's key | the demo key pays for refreshes | its own mainnet key, holding real SOL, server only. At most one refresh a minute, about 0.000035 SOL each: worst case about 0.05 SOL a day, in practice only when a banded sale is visited with a price over ten minutes old. 0.5 SOL covers ten days of the worst case |
+| Demo dollars button | `DEMO_DOLLAR_MINT_AUTHORITY` | none: leave the key out, and `POST /api/break/dollars` answers 404 |
+| Attack ledger | simulate, or send for real | simulate only |
+| Price refresher's key | `DEMO_DOLLAR_MINT_AUTHORITY` pays for refreshes | `PRICE_REFRESH_KEY`, its own mainnet key holding real SOL, server only. At most one refresh a minute, about 0.000035 SOL each: worst case about 0.05 SOL a day, in practice only when a banded sale is visited with a price over ten minutes old. Fund it with 0.5 SOL; under 0.05 SOL it stops posting and the page says the price is waiting |
 | `PYTH_API_KEY` | the granted trial key | the team's trial runs to 5 October 2026; mainnet needs a paid key after that |
 
 ## The DBC token badge for AAPLx-paid sales
@@ -189,15 +202,15 @@ on chain on 23 September 2026 at slot 449746171:
 | Owner | `dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN`, Meteora's Dynamic Bonding Curve |
 | Token it badges | `XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp`, AAPLx |
 
-DBC wants the badge on the template and again on the pool. `pangu-sdk`'s
-`openSaleTransaction` does not pass it yet, so an AAPLx-paid sale opened through
-the SDK is refused with `InvalidTokenBadge` until it does. The rehearsal adds it
-by hand and the sale then works. A sale with a price ceiling must be paid in
-USDC on mainnet; AAPLx-paid sales run without one.
+DBC wants the badge on the template and again on the pool. `pangu-sdk` takes
+it in both places: `launchTemplateTransaction` and `openSaleTransaction` each
+accept a `tokenBadge`, and a pool opened without it is refused with
+`InvalidTokenBadge`, as the rehearsal shows. A sale with a price ceiling must
+be paid in USDC on mainnet; AAPLx-paid sales run without one.
 
 ## The upgrade authority plan
 
-**At launch Ram keeps the key.** The deployer wallet is the upgrade authority.
+**At launch the founder keeps the key.** The deployer wallet is the upgrade authority.
 It can replace the program's code at any time, including during a live sale.
 The README, the docs and the app say so openly.
 
@@ -243,8 +256,10 @@ end to end on the fork with Squads' real mainnet program:
 - **Leftover upload buffers.** `solana program show --buffers --keypair <your
   deployer file> --url "$MAINNET_RPC_URL"` should list none after the deploy; if
   one is there, `solana program close <buffer>` takes its SOL back.
-- **SIMD-0500 on mainnet.** Once it is scheduled, this v0 build can no longer
-  be upgraded; a fix would need an SBPF v3 build first.
+- **SIMD-0500 on mainnet.** It does not touch this program: the build is SBPF
+  v3, and SIMD-0500 only refuses v0, v1 and v2 binaries. Once it is active,
+  every upgrade and the freeze must stay v3, which `verify-build.sh` already
+  guarantees by refusing any other version.
 - **The first real sales.** A ceiling only on USDC, a cap below the curve, an
   offering end in the future: the program refuses anything else, and the
   refusal names are in the SDK's error list.

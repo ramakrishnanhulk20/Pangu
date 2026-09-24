@@ -7,6 +7,10 @@
 # the devnet binary from the same source with the one feature that differs, so
 # the two network builds can be compared.
 #
+# Both are SBPF v3, the one format the network keeps accepting for deploys and
+# upgrades once SIMD-0500 is active. solana-verify builds v0 unless told, so
+# the arch is passed on every build and read back from each binary's header.
+#
 # Nothing here signs or sends a transaction. The binaries land in ~/pangu-release,
 # which deploy-mainnet.sh takes as its input together with the hash printed here.
 #
@@ -28,6 +32,7 @@ RELEASE="$HOME/pangu-release"
 # compiler. 4.2.2 is the Solana release this machine's CLI runs.
 IMAGE="solanafoundation/solana-verifiable-build:4.2.2"
 LIBRARY=pangu
+ARCH=v3
 
 fail() { echo "VERIFY-BUILD-FAILED: $1"; exit 1; }
 
@@ -65,12 +70,14 @@ checkout() {
 build() {
   local folder="$1"
   shift
-  (cd "$folder" && solana-verify build --library-name "$LIBRARY" --base-image "$IMAGE" "$@") \
+  (cd "$folder" && solana-verify build --library-name "$LIBRARY" --base-image "$IMAGE" --arch "$ARCH" "$@") \
     || fail "solana-verify build failed in $folder, see the lines above"
   [ -f "$folder/target/deploy/$LIBRARY.so" ] || fail "solana-verify produced no $folder/target/deploy/$LIBRARY.so"
 }
 
 hash_of() { sha256sum "$1" | cut -d' ' -f1; }
+# The SBPF version sits in the ELF header's e_flags, four bytes at offset 48.
+sbpf_version() { od -An -t u4 -j 48 -N 4 "$1" | tr -d ' '; }
 
 docker pull "$IMAGE"
 IMAGE_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")"
@@ -93,6 +100,9 @@ REPEAT_HASH="$(hash_of "$REPEAT_SO")"
 DEVNET_HASH="$(hash_of "$DEVNET_SO")"
 [ "$MAINNET_HASH" = "$REPEAT_HASH" ] || fail "two builds of the same commit hash differently ($MAINNET_HASH and $REPEAT_HASH), so this build is not reproducible"
 [ "$MAINNET_HASH" != "$DEVNET_HASH" ] || fail "the mainnet and devnet builds are identical, so the devnet feature did nothing"
+for so in "$MAINNET_SO" "$REPEAT_SO" "$DEVNET_SO"; do
+  [ "$(sbpf_version "$so")" = "3" ] || fail "$so is SBPF v$(sbpf_version "$so"), not v3"
+done
 
 # The two builds are told apart by the dollar list alone. A program id is 32 raw
 # bytes the compiler loads as eight 4 byte pieces, so each id is looked for as
@@ -169,13 +179,15 @@ DEVNET_EXEC_HASH="$(solana-verify get-executable-hash "$DEVNET_SO")"
 echo
 echo "SOURCE: commit $COMMIT, folder $PROGRAM_DIR${REMOTE:+, of $REMOTE}"
 echo "IMAGE: $IMAGE ($IMAGE_DIGEST)"
-echo "TOOLS: solana-verify $(solana-verify --version | awk '{print $2}'), docker $(docker version --format '{{.Server.Version}}'), SBPF v0"
+echo "TOOLS: solana-verify $(solana-verify --version | awk '{print $2}'), docker $(docker version --format '{{.Server.Version}}'), SBPF $ARCH"
 echo "MAINNET BINARY: $RELEASE/pangu-mainnet.so"
+echo "MAINNET SBPF: v$(sbpf_version "$MAINNET_SO")"
 echo "MAINNET LENGTH: $MAINNET_LEN bytes"
 echo "MAINNET SHA256: $MAINNET_HASH"
 echo "MAINNET SHA256, SECOND BUILD: $REPEAT_HASH (the same, so the build repeats)"
 echo "MAINNET EXECUTABLE HASH (solana-verify): $MAINNET_EXEC_HASH"
 echo "DEVNET BINARY: $RELEASE/pangu-devnet.so"
+echo "DEVNET SBPF: v$(sbpf_version "$DEVNET_SO")"
 echo "DEVNET LENGTH: $DEVNET_LEN bytes"
 echo "DEVNET SHA256: $DEVNET_HASH"
 echo "DEVNET EXECUTABLE HASH (solana-verify): $DEVNET_EXEC_HASH"
@@ -183,7 +195,7 @@ echo "DIFFERENCE: same commit, same image, same command; the devnet build adds -
 echo
 echo "TO REPRODUCE: on Linux with Docker and solana-verify $(solana-verify --version | awk '{print $2}'),"
 echo "  git clone ${REMOTE:-<the Pangu repository>} pangu && cd pangu && git checkout $COMMIT"
-echo "  cd $PROGRAM_DIR && solana-verify build --library-name $LIBRARY --base-image $IMAGE"
+echo "  cd $PROGRAM_DIR && solana-verify build --library-name $LIBRARY --base-image $IMAGE --arch $ARCH"
 echo "  sha256sum target/deploy/$LIBRARY.so    # prints $MAINNET_HASH"
 echo "NEXT: deploy-mainnet.sh $RELEASE/pangu-mainnet.so $MAINNET_HASH <deployer keypair path>"
 echo VERIFY-BUILD-OK
