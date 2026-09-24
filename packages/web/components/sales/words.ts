@@ -31,6 +31,9 @@ export function whoMayBuy(accessMode: number): { short: string; long: string } {
 }
 
 const DAY_MS = 86_400_000;
+// A one-day launch sets its end from the chain clock a few seconds before the
+// sale lands, so it measures just under a day. It is not a short offering.
+const SHORT_UNDER_MS = DAY_MS - 10 * 60_000;
 
 /** When an offering ends, to the minute, how long is left, and the warning a short one carries. */
 export interface OfferingEnd {
@@ -59,7 +62,7 @@ export function offeringEnd(endsAt: number, openedAt: number | null, now: number
     at,
     left: now !== null && ends > now ? `${timeUntil(ends, now)} left` : null,
     short:
-      notOver && start !== null && ends - start < DAY_MS
+      notOver && start !== null && ends - start < SHORT_UNDER_MS
         ? `Short offering: at ${at} every rule lifts and anyone can buy without a cap.`
         : null,
   };
