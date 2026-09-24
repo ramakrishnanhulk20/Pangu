@@ -220,7 +220,7 @@ with the founder's own key; `deploy.sh` still refuses mainnet.
 | Rent locked | not deployed |
 | sha256 of the deployed build | not deployed |
 | Explorer | not deployed |
-| Verified build | `pangu-mainnet.so`, the mainnet build (no `devnet` feature), SBPF v3, from commit `260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1` |
+| Verified build | `pangu-mainnet.so`, the mainnet build (no `devnet` feature), SBPF v3, from commit `8ffda72100f07046fe85a6132f126f915acb29f8` |
 | Verified build size | 337,856 bytes |
 | sha256 of the verified build | `16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e` |
 | Executable hash (solana-verify) | `3b8cea90deb0efdda3de722f36a5d0324eec217e710c318f2c48bebcbb3d93b8` |
@@ -229,7 +229,7 @@ with the founder's own key; `deploy.sh` still refuses mainnet.
 To reproduce the hash from a clean clone, on Linux with Docker:
 
 ```
-git checkout 260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1
+git checkout 8ffda72100f07046fe85a6132f126f915acb29f8
 cd packages/program
 solana-verify build --library-name pangu --base-image solanafoundation/solana-verifiable-build:4.2.2 --arch v3
 sha256sum target/deploy/pangu.so

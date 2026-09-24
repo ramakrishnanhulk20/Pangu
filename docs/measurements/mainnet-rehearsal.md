@@ -21,7 +21,7 @@ were run in separate WSL sessions, the build first.
 ## 1. The verified build
 
 `verify-build.sh` builds the committed `packages/program` folder of commit
-`4d71addb0fab5db381d207e3eadfeea580420850` with `solana-verify build` 0.5.2 in
+`3e9074c8e2bd2cec40a4ce3b0984a7b09e3d7c63` with `solana-verify build` 0.5.2 in
 `solanafoundation/solana-verifiable-build:4.2.2`, twice, from two fresh copies,
 and refuses unless the two hash the same. It then builds the devnet binary from
 the same source with `--features devnet`.
@@ -37,7 +37,7 @@ VERIFY-BUILD-OK
 ```
 
 The script was run a second time later the same day, after other folders had
-moved on to commit `a03a07378503c3be063f22f8023d76088beb9850` (nothing in
+moved on to commit `7c34136a1b9b345ca6fa9174139cb0aea8ac9efc` (nothing in
 `packages/program` changed between the two). It built the same
 `f15f65ed8dcf4a64380babf010b2f132fd71645669b0c3b4fbd9ff2c00461358` twice more:
 four builds, one hash.
@@ -280,7 +280,7 @@ MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/mai
 
 **The verified build.** `verify-build.sh` now passes `--arch v3` to every
 `solana-verify build` and refuses a binary whose ELF header says anything but
-version 3. Commit `260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1`, the same image:
+version 3. Commit `8ffda72100f07046fe85a6132f126f915acb29f8`, the same image:
 
 ```
 TOOLS: solana-verify 0.5.2, docker 29.1.3, SBPF v3

@@ -89,7 +89,7 @@ VERIFY-BUILD-OK
 ```
 
 That is the hash recorded in `docs/deployments.md`. If the program has changed
-since commit `260c1a4d`, the hash changes too; record the new one before going
+since commit `8ffda721`, the hash changes too; record the new one before going
 on.
 
 **2. Rehearse, if anything changed since the last rehearsal.**
@@ -162,7 +162,7 @@ the commit that was built:
 ```
 solana-verify verify-from-repo https://github.com/ramakrishnanhulk20/Pangu \
   --program-id 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG \
-  --commit-hash 260c1a4de570c8c85122d4d50bc1d1b7ef50f9c1 \
+  --commit-hash 8ffda72100f07046fe85a6132f126f915acb29f8 \
   --mount-path packages/program --library-name pangu \
   --base-image solanafoundation/solana-verifiable-build:4.2.2 --arch v3 \
   --url "$MAINNET_RPC_URL" --keypair <your deployer file>
