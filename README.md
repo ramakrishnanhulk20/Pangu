@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://pangu-web.vercel.app">🚀 Live App</a> •
+  <a href="https://youtu.be/dZPinNOR7i0">🎬 Demo Video</a> •
   <a href="https://pangu-web.vercel.app/docs">📚 Documentation</a> •
   <a href="https://www.npmjs.com/package/pangu-sdk">📦 npm</a> •
   <a href="packages/sdk">🧰 SDK</a>
@@ -34,6 +35,7 @@
 |----------|-----|
 | 🚀 **App** | [pangu-web.vercel.app](https://pangu-web.vercel.app) |
 | 📚 **Docs** | [pangu-web.vercel.app/docs](https://pangu-web.vercel.app/docs) |
+| 🎬 **Demo video** | [youtu.be/dZPinNOR7i0](https://youtu.be/dZPinNOR7i0) |
 | 📦 **SDK** | [npmjs.com/package/pangu-sdk](https://www.npmjs.com/package/pangu-sdk) |
 | ⛓️ **Devnet program** | [`4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`](https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet) |
 | 🌐 **Mainnet** | Ready, not deployed: [the runbook](docs/deploy/mainnet.md) |

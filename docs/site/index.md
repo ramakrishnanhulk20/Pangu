@@ -22,6 +22,8 @@ The app is the whole product. Each of these pages reads the chain as it loads an
 
 The front page shows the live demo sale and lets anyone attack its rules from their own wallet ("Try to break it"). These docs live at `/docs` in the same app.
 
+To see all of it before you connect a wallet, watch [the five-minute demo](https://youtu.be/dZPinNOR7i0).
+
 ## The rules, in one breath
 
 While a sale is open, every movement of the token passes through Pangu. A wallet cannot buy past its cap, however many accounts it spreads the buys over. If the sale requires it, a buyer must be on the issuer's list or hold a verifier's credential. If the sale has a price ceiling, no buy may push the curve too far above the real stock's price, read live from Pyth. Tokens cannot move wallet to wallet until the sale ends. Selling back to the pool is always allowed.
