@@ -9,16 +9,16 @@ there. Every number below was read back off the chain, not copied from a plan.
 | --- | --- |
 | Program id | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
 | Program data account | `58UAoZWuoMpnV4HzydaVUai9U7DFzapFtN5KtAzkzDpY` |
-| Running since slot | 502981972 |
-| Running since | 2026-09-23 14:08:42 UTC |
+| Running since slot | 503286300 |
+| Running since | 2026-09-24 04:09:17 UTC |
 | Upgrade authority (public key) | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L` |
-| Build running there | `pangu.so`, the devnet build (`--features devnet`) of the rules v2 program |
-| Build size | 363,800 bytes |
+| Build running there | `pangu.so`, the SBPF v3 devnet build (`--arch v3 --features devnet`) of the rules v2 program |
+| Build size | 339,848 bytes |
 | Program account size | 442,320 bytes (the first build plus 20 percent headroom) |
 | Rent locked | 2.24786444 SOL |
-| sha256 of the deployed build | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f` |
+| sha256 of the deployed build | `7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8` |
 | sha256 of the IDL clients build against | `48836ab193d10b8a58321a9f6777640bc43873f207a6210f2de18c1a47032772`, as the build writes it. The SDK's copy holds the same JSON with different whitespace |
-| Loader | BPF upgradeable loader, SBPF v0 bytecode |
+| Loader | BPF upgradeable loader, SBPF v3 bytecode |
 | Toolchain | Anchor 1.2.0, solana-cli 4.2.2 |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 
@@ -78,7 +78,7 @@ networks, so nothing else differs between the builds. An earlier arrangement of
 two binaries existed while the band read Switchboard, whose program has a
 different address on each network; moving the band to Pyth removed that reason.
 
-## The six deploys
+## The seven deploys
 
 Same address every time. An upgrade replaces the code in the account that is
 already there, so nothing a client or a saved account points at ever moves.
@@ -91,6 +91,7 @@ already there, so nothing a client or a saved account points at ever moves.
 | 4 | 502476730 | 2026-09-22 14:53:26 | The SaleRules layout version, so a reader refuses rules written by another layout | `fomCUUu2u7MThsTpUyxwHXwyGTpNawwqKNZW8HaKExWZJpp3bKNS1xGhepZKKPxVFjJ4MdeL3MSPGqfqTK96eX7` |
 | 5 | 502899538 | 2026-09-23 10:21:01 | Rules v2: the paying token is stored and checked, banded sales must be dollar priced, the cap stays below the curve's supply, every sale carries an offering period, and events name the sale's mint | `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
 | 6 | 502981972 | 2026-09-23 14:08:42 | A price ceiling only when buyers pay in a listed dollar for the network; the devnet build carries devnet USDC and the demo dollar | `4ep1rYGmZJXns7Efu22HmR1fHfKZQrnhznoMj3vjA7ZYxQi27yqkPPvix6fqv72ZHyrSVmFNiU6Kf4a4btauEPZ6` |
+| 7 | 503286300 | 2026-09-24 04:09:17 | The same program moved to SBPF v3, so no rule on the old format can block a later upgrade; the upload went through the keyed node's plain request channel after the websocket path timed out | `5sDpVkMBka2UFMwdXtnKHPK498dFQsrcnjyzcxU7cNVE6z5KsM1aqVn7UkfWqHNc8byCSQj97gxfCmVcrmHcunq7` |
 
 | # | Build | sha256 | Size |
 | --- | --- | --- | --- |
@@ -99,6 +100,7 @@ already there, so nothing a client or a saved account points at ever moves.
 | 4 | `pangu.so`, with the layout version | `a937c610ab35442df59e0ead889a98ea8acafb396f2de9f2c37355ee5a555beb` | 358,248 bytes |
 | 5 | `pangu.so`, rules v2 | `191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731` | 363,720 bytes |
 | 6 | `pangu.so`, rules v2, devnet build with the dollar list | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f` | 363,800 bytes |
+| 7 | `pangu.so`, rules v2, devnet build with the dollar list, SBPF v3 | `7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8` | 339,848 bytes |
 
 What each one cost:
 

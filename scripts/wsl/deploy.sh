@@ -186,7 +186,10 @@ fi
 [ -f "$BUFFER_KEY" ] || solana-keygen new --no-bip39-passphrase --silent --outfile "$BUFFER_KEY" >/dev/null
 chmod 600 "$BUFFER_KEY"
 
-DEPLOY_ARGS=(--program-id "$PROGRAM_KEY" --keypair "$PAYER" --upgrade-authority "$PAYER" --url "$URL" --buffer "$BUFFER_KEY")
+# --use-rpc writes the upload through the node's ordinary request channel. The
+# default path opens a websocket to reach validators directly, and that socket
+# timed out through the keyed node on 24 Sep 2026 while plain requests worked.
+DEPLOY_ARGS=(--program-id "$PROGRAM_KEY" --keypair "$PAYER" --upgrade-authority "$PAYER" --url "$URL" --buffer "$BUFFER_KEY" --use-rpc)
 if [ "$PROGRAM_EXISTS" = yes ]; then
   echo "MODE: upgrade in place. The account size was fixed on the first deploy, so no new rent is locked."
 else
