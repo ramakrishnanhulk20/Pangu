@@ -58,7 +58,7 @@ const base = process.argv[2] ?? "http://127.0.0.1:3460";
 // cut short by the network, rather than opening a third sale.
 const secondOnly = process.argv.includes("--second-only");
 if (/:3000\b/.test(base)) {
-  throw new Error("port 3000 is Ram's dev server; point this at a verification server");
+  throw new Error("port 3000 is the running dev server; point this at a verification server");
 }
 
 const WALLET_NAME = "Pangu Test Wallet";

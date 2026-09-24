@@ -47,7 +47,7 @@ const nacl = require("tweetnacl");
 
 const base = process.argv[2] ?? "http://127.0.0.1:3480";
 if (/:3000\b/.test(base)) {
-  throw new Error("port 3000 is Ram's dev server; point this at a verification server");
+  throw new Error("port 3000 is the running dev server; point this at a verification server");
 }
 
 const WALLET_NAME = "Pangu Test Wallet";

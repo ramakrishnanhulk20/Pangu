@@ -22,7 +22,7 @@ const { chromium } = require(process.env.APPDATA + "/npm/node_modules/playwright
 const base = process.argv[2] ?? "http://127.0.0.1:3461";
 const mint = process.argv[3];
 if (/:3000\b/.test(base)) {
-  throw new Error("port 3000 is Ram's dev server; point this at a verification server");
+  throw new Error("port 3000 is the running dev server; point this at a verification server");
 }
 if (mint === undefined) {
   throw new Error("name a sale that has an end date");

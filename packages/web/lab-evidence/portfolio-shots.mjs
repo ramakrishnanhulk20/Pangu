@@ -19,7 +19,7 @@ const WALLET = process.argv[3] ?? "none";
 const NAME = process.argv[4] ?? "portfolio";
 const FOLDER = process.argv[5] ?? "lab-evidence";
 if (/:3000\b/.test(BASE)) {
-  throw new Error("port 3000 is Ram's dev server; point this at another server");
+  throw new Error("port 3000 is the running dev server; point this at another server");
 }
 
 function injectReadOnly({ address, publicKey }) {

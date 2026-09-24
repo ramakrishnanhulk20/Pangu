@@ -106,7 +106,7 @@ interface Held {
   skipped: number;
 }
 
-// Thirty seconds, as the work order sets it. The list changes when somebody
+// Thirty seconds. The list changes when somebody
 // launches a sale, not every block, and the sale page asks again on a miss.
 const FRESH_MS = 30_000;
 

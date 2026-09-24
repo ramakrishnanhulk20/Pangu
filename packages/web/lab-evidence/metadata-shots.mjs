@@ -30,7 +30,7 @@ const { chromium } = require(process.env.APPDATA + "/npm/node_modules/playwright
 
 const [base = "http://127.0.0.1:3480", mint, templateSignature, saleSignature, metadataUri] = process.argv.slice(2);
 if (/:3000\b/.test(base)) {
-  throw new Error("port 3000 is Ram's dev server; point this at a verification server");
+  throw new Error("port 3000 is the running dev server; point this at a verification server");
 }
 
 const FORM = {

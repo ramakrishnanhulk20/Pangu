@@ -113,7 +113,7 @@ export type PortfolioAnswer =
   | { ok: true; portfolio: Portfolio }
   | { ok: false; status: 400 | 429; reason: string };
 
-// Fifteen seconds, as the work order sets it: long enough that a page polling
+// Fifteen seconds: long enough that a page polling
 // and a second tab share one read, short enough that a sell shows on the next.
 const FRESH_MS = 15_000;
 

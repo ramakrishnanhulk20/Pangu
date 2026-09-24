@@ -12,7 +12,7 @@
 //
 // Covers: multisig creation, the vault as upgrade authority, the threshold
 // holding, and an executed upgrade. Does NOT cover: the time lock, a config
-// authority, or the Squads web app, which is what Ram would use on mainnet.
+// authority, or the Squads web app, which is what the team would use on mainnet.
 // @sqds/multisig is installed next to this package only for the rehearsal run,
 // by scripts/wsl/mainnet-rehearsal.sh, so the published SDK never depends on it.
 

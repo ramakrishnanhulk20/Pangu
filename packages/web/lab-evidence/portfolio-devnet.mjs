@@ -39,7 +39,7 @@ const { getBuyerRecord } = require("pangu-sdk");
 const BASE = process.argv[2] ?? "http://127.0.0.1:3471";
 const SCRATCH = process.argv[3];
 if (/:3000\b/.test(BASE)) {
-  throw new Error("port 3000 is Ram's dev server; point this at another server");
+  throw new Error("port 3000 is the running dev server; point this at another server");
 }
 if (SCRATCH === undefined) {
   throw new Error("name a scratch folder outside the repository for the throwaway key");

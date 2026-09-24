@@ -1363,7 +1363,7 @@ Judging runs across a weekend. This run opens a third demo sale, PAAPLX, with
 the same curve as PBAND2 but banded on `Crypto.AAPLX/USD`, the tokenised Apple
 share, which Pyth publishes all week. A judge can then run every buy row at any
 hour. It is a different instrument from the stock and carries its own basis
-risk, which `feeds.ts` says. Decided by Ram on 23 September 2026. Every command
+risk, which `feeds.ts` says. Decided by the founder on 23 September 2026. Every command
 below ran from a Windows shell in `packages/scripts` on the keyed devnet node,
 with no 429s, so nothing needed a second pass.
 
