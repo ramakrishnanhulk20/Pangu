@@ -4,9 +4,10 @@
 # Runs every step of going live on mainnet against a local validator that holds
 # copies of mainnet's real programs and tokens, so nothing about the real run is
 # being tried for the first time:
-#   1. deploy-mainnet.sh --rehearse with the verified SBPF v3 mainnet build, after six
-#      runs it must refuse: no phrase, the wrong phrase, the wrong binary for
-#      the hash, no deployer key, a deployer holding 1 SOL, and an answer of "no"
+#   1. deploy-mainnet.sh --rehearse with the verified SBPF v3 mainnet build, after
+#      seven runs it must refuse: no phrase, the wrong phrase, the wrong binary
+#      for the hash, the devnet binary with its own correct hash, no deployer
+#      key, a deployer holding 1 SOL, and an answer of "no"
 #   2. the sales in packages/sdk/fork-test/rehearsal.ts: USDC with a ceiling on
 #      Apple, AAPLx without one, and the demo dollar refused
 #   3. the upgrade authority plan: a Squads v4 multisig, the upgrade authority
@@ -124,6 +125,9 @@ echo "== 1. deploy-mainnet.sh refuses what it must"
 expect_refusal "no phrase" env -u PANGU_MAINNET_GO "${DEPLOY[@]}" "$MAINNET_SO" "$WANT" "$DEPLOYER"
 expect_refusal "the wrong phrase" env PANGU_MAINNET_GO="deploy pangu" "${DEPLOY[@]}" "$MAINNET_SO" "$WANT" "$DEPLOYER"
 expect_refusal "the devnet binary under the mainnet hash" env PANGU_MAINNET_GO="$PHRASE" "${DEPLOY[@]}" "$DEVNET_SO" "$WANT" "$DEPLOYER"
+# A hash only proves the binary is the one named. Typing the devnet build's own
+# hash must still be refused, by the tool's own mainnet build check.
+expect_refusal "the devnet binary with its own correct hash" env PANGU_MAINNET_GO="$PHRASE" "${DEPLOY[@]}" "$DEVNET_SO" "$(hash_of "$DEVNET_SO")" "$DEPLOYER"
 expect_refusal "no deployer keypair given" env PANGU_MAINNET_GO="$PHRASE" "${DEPLOY[@]}" "$MAINNET_SO" "$WANT"
 expect_refusal "a deployer holding 1 SOL" env PANGU_MAINNET_GO="$PHRASE" "${DEPLOY[@]}" "$MAINNET_SO" "$WANT" "$THIN"
 expect_refusal "an answer other than yes" sh -c 'printf "no\n" | PANGU_MAINNET_GO="$0" "$@"' "$PHRASE" "${DEPLOY[@]}" "$MAINNET_SO" "$WANT" "$DEPLOYER"

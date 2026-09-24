@@ -64,7 +64,7 @@ sent:
 ```
 REFUSED AS EXPECTED: no phrase
 REFUSED AS EXPECTED: the wrong phrase
-DEPLOY-REFUSED: /home/ram/pangu-release/pangu-devnet.so hashes to 3280a339..., not the f15f65ed... given. Deploy only the binary verify-build.sh printed.
+DEPLOY-REFUSED: ~/pangu-release/pangu-devnet.so hashes to 3280a339..., not the f15f65ed... given. Deploy only the binary verify-build.sh printed.
 REFUSED AS EXPECTED: the devnet binary under the mainnet hash
 REFUSED AS EXPECTED: no deployer keypair given
 DEPLOY-REFUSED: the deployer holds less than the 5.722503760 SOL this deploy needs. Fund DpHXvMG7... and run it again.
@@ -304,7 +304,7 @@ binaries are v3, and the validator still runs mainnet's own feature gates
 (`MATCH_MAINNET_FEATURES=1`). All six refusals held, then:
 
 ```
-rehearsal binaries: /home/ram/pangu-release/pangu-mainnet.so and /home/ram/pangu-release/pangu-devnet.so, both SBPF v3
+rehearsal binaries: ~/pangu-release/pangu-mainnet.so and ~/pangu-release/pangu-devnet.so, both SBPF v3
 PROGRAM DATA LENGTH: 405427 bytes
 RENT LOCKED IN PROGRAM ACCOUNT: 2.822976 SOL
 SOL SPENT: 2.825992003 SOL, rent and fees together
@@ -361,3 +361,66 @@ sample each, DBC's work included:
 The USDC buys and sells, where Pangu's band check runs, came in lower on v3;
 the AAPLx pair and the two pool creations came in higher. A single figure moves
 by up to about 15,000 units with the wallet, so no one row proves a change.
+
+## Run of 24 September 2026: the deploy tool checks the build itself
+
+The code review of 24 September found that `deploy-mainnet.sh` proved only
+that the binary hashes to the hash typed in. The devnet build with its own
+hash typed in reached the plan and would have deployed on `yes`, and mainnet
+would then accept a ceiling on the demo dollar, whose mint authority is a
+devnet key. The tool now runs the checks `verify-build.sh` runs, from the same
+file (`scripts/wsl/lib-binary-checks.sh`): SBPF v3 in the ELF header, mainnet
+USDC present, devnet USDC and the demo dollar absent. They run right after the
+hash check, before anything is read from the network. No transaction was sent
+to mainnet.
+
+```
+MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/mainnet-rehearsal.sh 16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e
+```
+
+Seven refusals now, each with exit code 2 and nothing sent. The new one is the
+devnet build given its own correct hash:
+
+```
+DEPLOY-REFUSED: ~/pangu-release/pangu-devnet.so hashes to d53b0d85..., not the 16a13b7f... given. Deploy only the binary verify-build.sh printed.
+REFUSED AS EXPECTED: the devnet binary under the mainnet hash
+DEPLOY-REFUSED: ~/pangu-release/pangu-devnet.so is not the mainnet build: it lacks mainnet USDC (0 of 8 pieces), carries devnet USDC (8 of 8 pieces), carries the demo dollar (8 of 8 pieces). Deploy only the mainnet binary verify-build.sh made.
+REFUSED AS EXPECTED: the devnet binary with its own correct hash
+```
+
+The other five held as before (no phrase, the wrong phrase, no deployer key, a
+deployer holding 1 SOL, an answer other than yes). The mainnet build passed the
+new check, `BINARY BUILD: SBPF v3, mainnet USDC and neither devnet dollar (the
+mainnet build)`, and the rest gave the same answers as the SBPF v3 run above:
+`HASH MATCH: YES`, `DEPLOY-MAINNET-OK`, `ALREADY UP TO DATE` on the second run,
+`OverCap`, `PriceOutsideBand`, `InvalidTokenBadge`, `BandNeedsDollarQuote` on
+AAPLx and on the demo dollar, the old key refused, one approval refused with
+`InvalidProposalStatus`, two carrying the upgrade, and `MAINNET-REHEARSAL-OK`.
+
+**The SBPF check, run on its own.** Three files hit that check: the real SBPF
+v0 build `build.sh` makes for the unit suite, a copy of the mainnet build with
+the four version bytes at offset 48 set to 0, and a three byte file. Each was
+given its own correct hash, under `--rehearse`, with the phrase set, and the
+tool refused all three before any network call (the deployer path was an empty
+file, because the check runs before a key is read):
+
+```
+bash scripts/wsl/deploy-mainnet.sh --rehearse ~/pangu-build/target/deploy/pangu-v0-for-unit-tests.so "$(sha256sum ~/pangu-build/target/deploy/pangu-v0-for-unit-tests.so | cut -d' ' -f1)" ~/identity-dummy-deployer
+DEPLOY-REFUSED: ~/pangu-build/target/deploy/pangu-v0-for-unit-tests.so is SBPF v0, not SBPF v3. Deploy only the mainnet binary verify-build.sh made.
+bash scripts/wsl/deploy-mainnet.sh --rehearse ~/identity-v0.so "$(sha256sum ~/identity-v0.so | cut -d' ' -f1)" ~/identity-dummy-deployer
+DEPLOY-REFUSED: ~/identity-v0.so is SBPF v0, not SBPF v3. Deploy only the mainnet binary verify-build.sh made.
+bash scripts/wsl/deploy-mainnet.sh --rehearse ~/identity-short.so "$(sha256sum ~/identity-short.so | cut -d' ' -f1)" ~/identity-dummy-deployer
+DEPLOY-REFUSED: ~/identity-short.so is too short to carry an SBPF version, not SBPF v3. Deploy only the mainnet binary verify-build.sh made.
+```
+
+The three byte file first stopped the script with exit code 1 on `od`'s error
+rather than a refusal; `sbpf_version` now never fails, so a file too short to
+be a program is refused like any other wrong binary.
+
+**A finding on the way.** The first two attempts stopped at the forked
+validator: `clone_accounts failed: Failed to fetch: error sending request`. WSL
+on this machine has no IPv6 route (a request to the keyed mainnet node over
+IPv6 got no answer, the same request over IPv4 got 200), and that node's host
+now publishes an IPv6 address, which the validator tried first. WSL's resolver
+now lists IPv4 addresses first (one `precedence ::ffff:0:0/96 100` line in
+`/etc/gai.conf`), and the third attempt passed.

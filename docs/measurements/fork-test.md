@@ -190,7 +190,7 @@ SHA256 `0395b2857f9e1015ceda0ef990afce8deac2a98792f631948a7a6406fe35d5b1`.
 file and its hash:
 
 ```
-fork suite binary: /home/ram/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
+fork suite binary: ~/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
   38 passing (5m)
 FORK-TEST-OK
 ```

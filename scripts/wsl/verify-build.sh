@@ -36,7 +36,11 @@ ARCH=v3
 
 fail() { echo "VERIFY-BUILD-FAILED: $1"; exit 1; }
 
-for tool in docker solana-verify git sha256sum; do
+# sbpf_version, check_mainnet_list and check_devnet_list, shared with
+# deploy-mainnet.sh so the deploy judges the binary exactly as this build did.
+source "$(dirname "${BASH_SOURCE[0]}")/lib-binary-checks.sh" || fail "lib-binary-checks.sh could not be read"
+
+for tool in docker solana-verify git sha256sum node; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed in WSL"
 done
 docker info >/dev/null 2>&1 || fail "the Docker daemon is not running, start it with: sudo systemctl start docker"
@@ -76,8 +80,6 @@ build() {
 }
 
 hash_of() { sha256sum "$1" | cut -d' ' -f1; }
-# The SBPF version sits in the ELF header's e_flags, four bytes at offset 48.
-sbpf_version() { od -An -t u4 -j 48 -N 4 "$1" | tr -d ' '; }
 
 docker pull "$IMAGE"
 IMAGE_DIGEST="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")"
@@ -104,64 +106,12 @@ for so in "$MAINNET_SO" "$REPEAT_SO" "$DEVNET_SO"; do
   [ "$(sbpf_version "$so")" = "3" ] || fail "$so is SBPF v$(sbpf_version "$so"), not v3"
 done
 
-# The two builds are told apart by the dollar list alone. A program id is 32 raw
-# bytes the compiler loads as eight 4 byte pieces, so each id is looked for as
-# its eight pieces, the same check build.sh runs on the devnet build.
-check_list() {
-  SO_PATH="$1" WANTED="$2" UNWANTED="$3" node - <<'NODE'
-const fs = require("fs");
-const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function base58(text) {
-  const bytes = [0];
-  for (const character of text) {
-    let carry = ALPHABET.indexOf(character);
-    if (carry < 0) throw new Error(`not base58: ${text}`);
-    for (let i = 0; i < bytes.length; i += 1) {
-      carry += bytes[i] * 58;
-      bytes[i] = carry & 0xff;
-      carry >>= 8;
-    }
-    while (carry > 0) {
-      bytes.push(carry & 0xff);
-      carry >>= 8;
-    }
-  }
-  for (const character of text) {
-    if (character !== "1") break;
-    bytes.push(0);
-  }
-  return Buffer.from(bytes.reverse());
-}
-const binary = fs.readFileSync(process.env.SO_PATH);
-const pieces = (id) => {
-  const key = base58(id);
-  let found = 0;
-  for (let offset = 0; offset < 32; offset += 4) {
-    if (binary.includes(key.subarray(offset, offset + 4))) found += 1;
-  }
-  return found;
-};
-let ok = true;
-for (const id of process.env.WANTED.split(" ").filter(Boolean)) {
-  const found = pieces(id);
-  console.log(`    carries ${id}: ${found} of 8 pieces`);
-  if (found !== 8) ok = false;
-}
-for (const id of process.env.UNWANTED.split(" ").filter(Boolean)) {
-  const found = pieces(id);
-  console.log(`    lacks   ${id}: ${found} of 8 pieces, wanted 0`);
-  if (found !== 0) ok = false;
-}
-process.exit(ok ? 0 : 1);
-NODE
-}
-MAINNET_USDC=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
-DEVNET_DOLLARS="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU 2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5"
-PYTH="rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT"
+# The two builds are told apart by the dollar list alone, checked by the
+# functions in lib-binary-checks.sh that deploy-mainnet.sh runs too.
 echo "== the mainnet binary's dollar list"
-check_list "$MAINNET_SO" "$PYTH $MAINNET_USDC" "$DEVNET_DOLLARS" || fail "the mainnet binary does not carry exactly mainnet USDC"
+check_mainnet_list "$MAINNET_SO" || fail "the mainnet binary does not carry exactly mainnet USDC"
 echo "== the devnet binary's dollar list"
-check_list "$DEVNET_SO" "$PYTH $DEVNET_DOLLARS" "$MAINNET_USDC" || fail "the devnet binary does not carry exactly the devnet dollars"
+check_devnet_list "$DEVNET_SO" || fail "the devnet binary does not carry exactly the devnet dollars"
 
 mkdir -p "$RELEASE"
 cp "$MAINNET_SO" "$RELEASE/pangu-mainnet.so"

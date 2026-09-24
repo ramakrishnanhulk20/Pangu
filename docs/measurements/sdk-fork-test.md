@@ -234,7 +234,7 @@ from the dollar list run above. `sdk-fork-test.sh` now refuses anything but a
 v3 binary:
 
 ```
-fork suite binary: /home/ram/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
+fork suite binary: ~/pangu-build/target/deploy/pangu.so, SBPF v3, sha256 7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8
 SDK-FORK-OK
 ```
 

@@ -110,7 +110,12 @@ PANGU_MAINNET_GO="deploy pangu to mainnet" bash /mnt/d/Projects/Meteora/scripts/
   <path to your deployer keypair file>
 ```
 
-It checks the phrase, the binary's hash, the program keypair, that the node is
+It checks the phrase and the binary's hash, then proves by itself that the
+binary is the mainnet build: SBPF v3, carrying mainnet USDC and neither devnet
+dollar, judged by the same code `verify-build.sh` runs
+(`scripts/wsl/lib-binary-checks.sh`). The hash is a second check, not the only
+one, so typing the devnet build's own hash still gets it refused before
+anything is read from the network. Then it checks the program keypair, that the node is
 mainnet (by its genesis hash), and the deployer's balance. Then it prints the
 plan and the costs and waits. Read them, type `yes`, and it uploads, deploys and
 reads the code back. It ends with:

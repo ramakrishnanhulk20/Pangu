@@ -34,8 +34,8 @@ rsync -a --delete \
 OUT="target/deploy/pangu.so"
 UNIT_OUT="target/deploy/pangu-v0-for-unit-tests.so"
 
-# The SBPF version sits in the ELF header's e_flags, four bytes at offset 48.
-sbpf_version() { od -An -t u4 -j 48 -N 4 "$1" | tr -d ' '; }
+# sbpf_version and check_list, shared with verify-build.sh and deploy-mainnet.sh.
+source "$(dirname "${BASH_SOURCE[0]}")/lib-binary-checks.sh" || { echo "BUILD-FAILED: lib-binary-checks.sh could not be read"; exit 1; }
 
 cd "$WORK"
 rm -f "$OUT" "$UNIT_OUT"
@@ -56,79 +56,13 @@ cp target/types/pangu.ts "$SRC/target/types/pangu.ts"
 
 # Proof that each build really carries Pyth's two program ids, the devnet dollar
 # list and no trace of the oracle it replaced or of the mainnet dollar list,
-# rather than a build that looks right because nothing complained. A program id
-# is 32 raw bytes and the compiler loads them as eight 4 byte immediates rather
-# than one run of bytes, so the check looks for the eight pieces of each.
-check_dollar_list() {
-SO_PATH="$1" node - <<'NODE'
-const fs = require("fs");
-
-const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function base58(text) {
-  const bytes = [0];
-  for (const character of text) {
-    let carry = ALPHABET.indexOf(character);
-    if (carry < 0) throw new Error(`not base58: ${text}`);
-    for (let i = 0; i < bytes.length; i += 1) {
-      carry += bytes[i] * 58;
-      bytes[i] = carry & 0xff;
-      carry >>= 8;
-    }
-    while (carry > 0) {
-      bytes.push(carry & 0xff);
-      carry >>= 8;
-    }
-  }
-  for (const character of text) {
-    if (character !== "1") break;
-    bytes.push(0);
-  }
-  return Buffer.from(bytes.reverse());
-}
-
-const WANTED = {
-  "Pyth receiver": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
-  "Pyth price feed": "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT",
-  "devnet USDC": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-  "demo dollar": "2TYsrKmXKrqxLRULNBGFrGjTnxebo1H2azRb7bzQPem5",
-};
-const UNWANTED = {
-  "mainnet USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  "Switchboard quote": "orac1eFjzWL5R3RbbdMV68K9H6TaCVVcL6LjvQQWAbz",
-  "Switchboard on demand": "SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv",
-};
-const binary = fs.readFileSync(process.env.SO_PATH);
-
-function piecesFound(id) {
-  const key = base58(id);
-  let found = 0;
-  for (let offset = 0; offset < 32; offset += 4) {
-    if (binary.includes(key.subarray(offset, offset + 4))) found += 1;
-  }
-  return found;
-}
-
-let ok = true;
-for (const [name, id] of Object.entries(WANTED)) {
-  const found = piecesFound(id);
-  console.log(`  ${name} ${id}: ${found} of 8 pieces in the binary`);
-  if (found !== 8) ok = false;
-}
-for (const [name, id] of Object.entries(UNWANTED)) {
-  const found = piecesFound(id);
-  console.log(`  ${name} ${id}: ${found} of 8 pieces, wanted 0`);
-  if (found !== 0) ok = false;
-}
-if (!ok) {
-  console.log("BUILD-FAILED: this build does not carry exactly Pyth's two programs and the devnet dollar list.");
-  process.exit(1);
-}
-NODE
-}
+# rather than a build that looks right because nothing complained. check_list
+# is the one verify-build.sh and deploy-mainnet.sh run.
+DEVNET_UNWANTED="$MAINNET_USDC $SWITCHBOARD"
 echo "the v3 build, $OUT:"
-check_dollar_list "$WORK/$OUT" || exit 1
+check_list "$WORK/$OUT" "$PYTH $DEVNET_DOLLARS" "$DEVNET_UNWANTED" || { echo "BUILD-FAILED: this build does not carry exactly Pyth's two programs and the devnet dollar list."; exit 1; }
 echo "the v0 unit-test build, $UNIT_OUT:"
-check_dollar_list "$WORK/$UNIT_OUT" || exit 1
+check_list "$WORK/$UNIT_OUT" "$PYTH $DEVNET_DOLLARS" "$DEVNET_UNWANTED" || { echo "BUILD-FAILED: this build does not carry exactly Pyth's two programs and the devnet dollar list."; exit 1; }
 
 echo "BINARY: $SRC/$OUT"
 echo "SBPF: v$(sbpf_version "$OUT"), the binary devnet runs and deploy.sh ships"

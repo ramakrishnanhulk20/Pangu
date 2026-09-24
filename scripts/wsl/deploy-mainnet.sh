@@ -7,6 +7,10 @@
 #   - PANGU_MAINNET_GO holds the exact phrase: deploy pangu to mainnet
 #   - the deployer keypair path is given on the command line, never assumed
 #   - the binary hashes to the sha256 given
+#   - the binary is the mainnet build: SBPF v3, carrying mainnet USDC and
+#     neither devnet dollar, judged by the same functions verify-build.sh runs
+#     (lib-binary-checks.sh), so a hash typed for the wrong binary cannot carry
+#     the devnet build onto mainnet
 #   - the node answering is mainnet, by its genesis hash
 #   - the deployer holds at least 4.5 SOL
 #   - the program keypair is the one for 4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG
@@ -41,6 +45,8 @@ ENV_FILE="/mnt/d/Projects/Meteora/.env"
 refuse() { echo "DEPLOY-REFUSED: $1"; exit 2; }
 fail() { echo "DEPLOY-FAILED: $1"; exit 1; }
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib-binary-checks.sh" || refuse "lib-binary-checks.sh could not be read, so the binary cannot be checked"
+
 REHEARSE=no
 if [ "${1:-}" = "--rehearse" ]; then
   REHEARSE=yes
@@ -58,6 +64,23 @@ DEPLOYER="$3"
 [[ "$WANT_HASH" =~ ^[0-9a-f]{64}$ ]] || refuse "\"$2\" is not a sha256"
 LOCAL_HASH="$(sha256sum "$SO" | cut -d' ' -f1)"
 [ "$LOCAL_HASH" = "$WANT_HASH" ] || refuse "$SO hashes to $LOCAL_HASH, not the $WANT_HASH given. Deploy only the binary verify-build.sh printed."
+# The hash only proves the binary is the one the operator named. These prove it
+# is the mainnet build: the devnet build with its own hash typed in would pass
+# the line above, and mainnet would then accept a ceiling on the demo dollar,
+# whose mint authority is a devnet key.
+SBPF="$(sbpf_version "$SO")"
+if [ "$SBPF" != "3" ]; then
+  [ -n "$SBPF" ] && SBPF_SEEN="SBPF v$SBPF" || SBPF_SEEN="too short to carry an SBPF version"
+  refuse "$SO is $SBPF_SEEN, not SBPF v3. Deploy only the mainnet binary verify-build.sh made."
+fi
+command -v node >/dev/null 2>&1 || refuse "node is not installed in WSL, so the binary's dollar list cannot be checked"
+echo "BINARY DOLLAR LIST:"
+LIST_OUT="$(check_mainnet_list "$SO" 2>&1)" && LIST_OK=yes || LIST_OK=no
+printf '%s\n' "$LIST_OUT" | grep -v '^NOT AS WANTED: '
+if [ "$LIST_OK" != yes ]; then
+  WRONG="$(printf '%s\n' "$LIST_OUT" | sed -n 's/^NOT AS WANTED: //p')"
+  refuse "$SO is not the mainnet build: it ${WRONG:-could not be read by the dollar list check}. Deploy only the mainnet binary verify-build.sh made."
+fi
 [ -f "$PROGRAM_KEY" ] || refuse "there is no program keypair at $PROGRAM_KEY"
 PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEY")"
 [ "$PROGRAM_ID" = "$PROGRAM_ID_WANTED" ] || refuse "the program keypair at $PROGRAM_KEY is for $PROGRAM_ID, not $PROGRAM_ID_WANTED"
@@ -154,6 +177,7 @@ fi
 echo "NETWORK: $SHOWN_URL"
 echo "BINARY: $SO"
 echo "BINARY SHA256: $LOCAL_HASH (matches the hash given)"
+echo "BINARY BUILD: SBPF v3, mainnet USDC and neither devnet dollar (the mainnet build)"
 echo "BINARY LENGTH: $LEN bytes"
 echo "PROGRAM ID: $PROGRAM_ID"
 echo "DEPLOYER, PAYER AND UPGRADE AUTHORITY: $DEPLOYER_ID"

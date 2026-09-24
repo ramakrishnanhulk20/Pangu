@@ -73,7 +73,9 @@ const MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 const USDC = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const AAPLX = new PublicKey("XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp");
 const APPLE_FEED = "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688";
-const WSL_HOME = "//wsl.localhost/Ubuntu/home/ram";
+// The WSL home folder the fork validator writes its accounts into. Set
+// PANGU_WSL_HOME to override, for example //wsl.localhost/Ubuntu/home/<user>.
+const WSL_HOME = process.env.PANGU_WSL_HOME ?? `//wsl.localhost/Ubuntu/home/${process.env.PANGU_WSL_USER ?? process.env.USERNAME?.toLowerCase() ?? "user"}`;
 const LANDING_MS = 180_000;
 
 const connection = new Connection(RPC, "confirmed");
