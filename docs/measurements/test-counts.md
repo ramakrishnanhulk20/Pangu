@@ -16,7 +16,7 @@ nothing deploys.
 | --- | --- | --- | --- |
 | Program, Rust unit tests | `scripts/wsl/test.sh` (runs `cargo test -p pangu --lib`) | none, host build | `test result: ok. 31 passed; 0 failed; 0 ignored` |
 | Program, bankrun suite (mocha) | `scripts/wsl/test.sh` | v0 unit-test build, sha256 `e40ab680...` | `141 passing (1m)`, `TEST-OK` |
-| SDK, `pangu-sdk` | `npx vitest run` in `packages/sdk` | none | `Test Files 13 passed (13)`, `Tests 168 passed (168)` |
+| SDK, `pangu-sdk` | `npx vitest run` in `packages/sdk` | none | `Test Files 14 passed (14)`, `Tests 178 passed (178)` |
 | Scripts | `npx vitest run` in `packages/scripts` | none | `Test Files 12 passed (12)`, `Tests 126 passed (126)` |
 | Forked mainnet, whole sale life against real Meteora programs, program suite | `scripts/wsl/fork-test.sh` | v3, sha256 `7082897...` | `38 passing (5m)`, `FORK-TEST-OK`, recorded in `fork-test.md` under the SBPF v3 run |
 | Forked mainnet, SDK suite | `scripts/wsl/sdk-fork-test.sh` | v3, sha256 `7082897...` | 16 steps passing, a to p, `SDK-FORK-OK`, recorded in `sdk-fork-test.md` under the SBPF v3 run |

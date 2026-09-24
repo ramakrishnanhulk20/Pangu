@@ -10,14 +10,14 @@ import { explorerTxOn } from "@/lib/network";
 // comment above it. Nothing here is rounded, guessed, or live.
 
 // docs/measurements/test-counts.md, the runs of 23 September 2026: 31 Rust,
-// 137 litesvm, 37 fork steps from the program's own suite, 146 sdk, 109
-// scripts.
+// 141 on solana-bankrun, 38 fork steps from the program's own suite on the
+// SBPF v3 build, 178 sdk, 126 scripts.
 const SUITES = [
   { count: "31", label: "Rust tests" },
-  { count: "137", label: "unit tests" },
-  { count: "37", label: "forked mainnet steps" },
-  { count: "146", label: "package tests" },
-  { count: "109", label: "script tests" },
+  { count: "141", label: "unit tests" },
+  { count: "38", label: "forked mainnet steps" },
+  { count: "178", label: "package tests" },
+  { count: "126", label: "script tests" },
 ];
 
 // docs/measurements/devnet-run.md, the sixth run. The link is PBAND2's buy
@@ -165,20 +165,19 @@ export function Proof() {
             ))}
           </div>
 
-          {/* docs/deployments.md, the fifth deploy, and
-              docs/measurements/devnet-run.md, "The sixth run". */}
+          {/* docs/deployments.md, the seventh deploy. */}
           <Reveal>
             <div className="grid grid-cols-1 gap-4 border-t border-paper/15 py-10 font-mono text-[11px] leading-[1.7] text-paper/55 sm:grid-cols-12 sm:gap-8">
               <p className="uppercase tracking-[0.18em] sm:col-span-5">
-                Fifth devnet deploy
+                Seventh devnet deploy
               </p>
               <div className="sm:col-span-7">
                 <p className="text-paper">
-                  slot 502899538, 23 September 2026, 363,720 bytes
+                  slot 503286300, 24 September 2026, SBPF v3, 339,848 bytes
                 </p>
                 <ShortValue
                   label="sha256"
-                  value="191e9cf1ab6f9ababc1fb50c1f279b7f19e305934fff0952f8155b4f85a10731"
+                  value="7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8"
                 />
                 <ShortValue label="program" value="4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG" />
               </div>

@@ -34,7 +34,7 @@ Every sale also names an offering period when it opens: 1 to 60 days from the la
 
 ## What is live
 
-Pangu is live on Solana devnet. Program address `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`, first deployed on 22 September 2026 and upgraded in place five times since. The sixth deploy, running since 23 September 2026 at 14:08:42 UTC, is the one that lets a price ceiling be paid only in a listed dollar. See it on the explorer:
+Pangu is live on Solana devnet. Program address `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`, first deployed on 22 September 2026 and upgraded in place six times since. The seventh deploy, running since 24 September 2026 at 04:09:17 UTC, is the same program on SBPF v3, the bytecode format the network keeps accepting for upgrades. See it on the explorer:
 https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet
 
 Eight recorded runs from the command line have put sales through it: sales gated by an issuer's approved list, one of them filled and graduated into a Meteora pool; sales open to anyone with a price ceiling against Apple's exchange price, and one against AAPLx, which trades all week; a sale priced to show the ceiling refusing every buy; a sale open only to wallets a verifier has attested; and a ceiling refused on a token that looks like a dollar and is not on the list. Every attack tried against those sales, and every refusal, landed as a real transaction anyone can open. Each of the four doors has its own recorded run on devnet too, linked at the foot of its page.

@@ -8,13 +8,13 @@ description: Where Pangu lives on chain, every sale on devnet, what it depends o
 | Fact | Value |
 | --- | --- |
 | Program address | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` |
-| Running since | 23 September 2026, 14:08:42 UTC, slot 502981972, the sixth deploy |
+| Running since | 24 September 2026, 04:09:17 UTC, slot 503286300, the seventh deploy |
 | Explorer | https://explorer.solana.com/address/4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG?cluster=devnet |
 | Upgrade authority | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, the project's own devnet wallet, held by the team and stated openly |
-| sha256 of the deployed build | `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f`, 363,800 bytes |
+| sha256 of the deployed build | `7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8`, 339,848 bytes, SBPF v3 |
 | Program data account | `58UAoZWuoMpnV4HzydaVUai9U7DFzapFtN5KtAzkzDpY` |
 
-The program was deployed once and upgraded five times on devnet, always at this same address, each build checked byte for byte against the code that was tested before it went live.
+The program was deployed once and upgraded six times on devnet, always at this same address, each build checked byte for byte against the code that was tested before it went live.
 
 | Deploy | Slot | When (UTC) | What went on chain |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ The program was deployed once and upgraded five times on devnet, always at this 
 | 4 | 502476730 | 22 September 2026, 14:53:26 | The rules layout version, so a reader refuses rules written by another layout |
 | 5 | 502899538 | 23 September 2026, 10:21:01 | Rules v2, an upgrade in place: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, every sale carries an offering period, and every event names its sale's mint. Signature `4GQ2J5s1QmypeiDfeRwCGpZN13TpmMTQoXNnWnQq3jtxFW88cudEr5fjyxA9c8qbBitT5JuC7AHRgtSCGaUpokZ4` |
 | 6 | 502981972 | 23 September 2026, 14:08:42 | A price ceiling only when buyers pay in a dollar the program lists for its network: devnet USDC and the demo dollar on this build, USDC alone on the mainnet build. Signature `4ep1rYGmZJXns7Efu22HmR1fHfKZQrnhznoMj3vjA7ZYxQi27yqkPPvix6fqv72ZHyrSVmFNiU6Kf4a4btauEPZ6` |
+| 7 | 503286300 | 24 September 2026, 04:09:17 | The same program moved to SBPF v3, the bytecode format the network keeps accepting for deploys and upgrades once the older formats are switched off, so no rule on the old format can block a later upgrade. Signature `5sDpVkMBka2UFMwdXtnKHPK498dFQsrcnjyzcxU7cNVE6z5KsM1aqVn7UkfWqHNc8byCSQj97gxfCmVcrmHcunq7` |
 
 The full history, including what each upgrade cost, is in `docs/deployments.md` in the repository.
 
@@ -75,7 +76,7 @@ All Rust and TypeScript tests, no network needed:
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash /mnt/d/Projects/Meteora/scripts/wsl/test.sh
 ```
 
-Prints `rust: test result: ok. 31 passed` and a mocha summary of 137 tests passing, then exits 0. The counts for every suite are in `docs/measurements/test-counts.md`.
+Prints `rust: test result: ok. 31 passed` and a mocha summary of 141 tests passing, then exits 0. The mocha suite runs on solana-bankrun, which cannot load SBPF v3, so it runs an SBPF v0 build of the same source that nothing deploys; the fork suites run the v3 build. The counts for every suite are in `docs/measurements/test-counts.md`.
 
 The devnet prove command, against the live program:
 
@@ -102,4 +103,4 @@ The four doors of the app have their own recorded runs on devnet, each a script 
 
 ## Mainnet
 
-Not deployed. Ready: the mainnet build is made reproducibly and its hash recorded in `docs/deployments.md`, the deploy is one guarded command a person runs with their own key, and every step was rehearsed on a forked copy of mainnet on 23 September 2026. The program keypair fixes the address, so on mainnet it will sit at the same `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`. What changes on mainnet, the costs and the upgrade key plan are on the mainnet page; the runbook is `docs/deploy/mainnet.md` in the repository.
+Not deployed. Ready: the mainnet build, SBPF v3, is made reproducibly and verified, sha256 `16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e`, 337,856 bytes, recorded in `docs/deployments.md`; the deploy is one guarded command a person runs with their own key, and every step was rehearsed on a forked copy of mainnet on 23 September 2026. The program keypair fixes the address, so on mainnet it will sit at the same `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG`. What changes on mainnet, the costs and the upgrade key plan are on the mainnet page; the runbook is `docs/deploy/mainnet.md` in the repository.

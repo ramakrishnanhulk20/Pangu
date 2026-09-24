@@ -12,10 +12,10 @@ Live app: coming with the Vercel deploy, the team fills in the URL · Docs: `/do
 
 | Network | Program id | Deployed | Upgrade authority | Build |
 | --- | --- | --- | --- | --- |
-| Devnet | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` | The sixth deploy, slot 502981972, 23 September 2026 at 14:08:42 UTC | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, held by the team, stated openly | sha256 `e40ab680c3ff8a806e51b66b014765674b95ccbd6ead553729689ab20c4cb59f`, 363,800 bytes |
-| Mainnet | Ready, not deployed. The same address, fixed by the program keypair | One guarded command the team runs with its own key | The team at launch, then a two of three Squads v4 multisig | The verified mainnet build: its sha256 and the command that reproduces it are in [`docs/deployments.md`](docs/deployments.md) |
+| Devnet | `4Nd46mDiaTSkqXPAXKqT4jkahcz1TxVSdoirbBCAr5qG` | The seventh deploy, slot 503286300, 24 September 2026 at 04:09:17 UTC | `Fwi8ejZ8kqF8PwcxssHFqJQZmVrkmBfoaXV5CTjqp5L`, held by the team, stated openly | SBPF v3, sha256 `7082897943e68901f85c8c93e2581a8a3571af41491ac9f242286592f4b388f8`, 339,848 bytes |
+| Mainnet | Ready, not deployed. The same address, fixed by the program keypair | One guarded command the team runs with its own key | The team at launch, then a two of three Squads v4 multisig | The verified mainnet build, SBPF v3, sha256 `16a13b7f8e9eab5f407d9564f8826bdca8390e6a28dc411a954adad7d3d7852e`, 337,856 bytes; the command that reproduces it is in [`docs/deployments.md`](docs/deployments.md) |
 
-The devnet program was deployed once and upgraded five times, always at this same address, each build checked byte for byte against the code that was tested before it went live. The fifth deploy is the rules v2 build: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, and every sale carries an offering period. The sixth narrows the dollars a price ceiling accepts to a list per network: devnet USDC and the demo dollar on the devnet build, USDC alone on the mainnet build. Full history: `docs/deployments.md`.
+The devnet program was deployed once and upgraded six times, always at this same address, each build checked byte for byte against the code that was tested before it went live. The fifth deploy, on 23 September 2026, is the rules v2 build: the paying token is stored and checked, a banded sale must be priced in dollars, the cap stays below what the curve sells, and every sale carries an offering period. The sixth deploy, later on 23 September 2026, narrows the dollars a price ceiling accepts to a list per network: devnet USDC and the demo dollar on the devnet build, USDC alone on the mainnet build. The seventh, on 24 September 2026, is the same program moved to SBPF v3, the bytecode format the network keeps accepting for deploys and upgrades once the older formats are switched off. Full history: `docs/deployments.md`.
 
 Mainnet is ready and not deployed. The mainnet build is made reproducibly in the Solana Foundation's pinned build image and verified; the deploy script checks a typed phrase, the binary's hash, the program keypair, the network's genesis hash and the deployer's balance before it sends anything; and on 23 September 2026 the deploy, sales paid in USDC and in AAPLx, the upgrade key's handover to a Squads multisig, and the web app built for mainnet all ran on a forked copy of mainnet (`docs/measurements/mainnet-rehearsal.md`, `packages/web/lab-evidence/network-fork.txt`).
 
@@ -375,11 +375,11 @@ cd Pangu
 # check the WSL toolchain: Anchor, Solana CLI, Rust, Node, rsync
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/env-check.sh
 
-# build and test the on-chain program: 31 Rust tests, 137 litesvm tests
+# build and test the on-chain program: 31 Rust tests, 141 bankrun tests
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/test.sh
 
 # run a full sale against a forked mainnet validator holding real Meteora and
-# Solana Attestation Service programs: 37 steps, takes about 4 minutes
+# Solana Attestation Service programs: 38 steps, takes about 5 minutes
 MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash scripts/wsl/fork-test.sh
 
 # build the mainnet binary twice in the pinned image and check both hash the same,
@@ -489,16 +489,16 @@ The counts recorded in `docs/measurements/test-counts.md`:
 
 ```
 31 Rust tests
-137 litesvm tests, including 6,000 randomised buy, sell, transfer, approve and
+141 bankrun tests, including 6,000 randomised buy, sell, transfer, approve and
   revoke operations across ten sequences, checked against the chain after
   every single one
-37 steps against a forked mainnet validator running real Meteora Dynamic
+38 steps against a forked mainnet validator running real Meteora Dynamic
   Bonding Curve, DAMM v2 and Solana Attestation Service programs
-146 pangu-sdk unit tests
-109 devnet-script tests
+178 pangu-sdk unit tests
+126 devnet-script tests
 ```
 
-The 37 steps are the program's own fork suite. The SDK has a fork suite of its own on the same forked validator: 15 steps on the rules v2 interface, and 16 once a step was added that proves a ceiling refused on a token outside the dollar list (`docs/measurements/sdk-fork-test.md`).
+The 38 steps are the program's own fork suite, run on the SBPF v3 build that devnet runs. The SDK has a fork suite of its own on the same forked validator and the same build: 16 steps, a to p, the last proving a ceiling refused on a token outside the dollar list (`docs/measurements/sdk-fork-test.md`). The 141 unit tests run on solana-bankrun, which cannot load SBPF v3, so they run a v0 build of the same source that nothing deploys; the fork suites and the mainnet rehearsal are what prove the v3 bytecode.
 
 The app's four doors each have a recorded run on devnet, a script that drives the real page with a throwaway wallet and checks every line against the chain, in `packages/web/lab-evidence`:
 
@@ -513,7 +513,7 @@ network-fork.txt      the mainnet build of the app on forked mainnet: every chec
 
 And the mainnet rehearsal, `docs/measurements/mainnet-rehearsal.md`: `VERIFY-BUILD-OK`, then `DEPLOY-MAINNET-OK` with `HASH MATCH: YES`, `SQUADS-UPGRADE-OK` and `MAINNET-REHEARSAL-OK`.
 
-Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (21 September 2026: 27 Rust, 119 litesvm, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
+Earlier runs recorded in `docs/measurements/`, superseded by the counts above as later work added tests: `price-band-pyth.md` (21 September 2026: 27 Rust, 119 bankrun, 36 fork), `sdk-pyth.md` (113 sdk, 24 script), `random-sequences.md` (the 6,000-operation run itself, in full: seeds, the operation mix, and what is checked after every step).
 
 Prove-it command against the live network, run again for this submission:
 
@@ -550,7 +550,7 @@ The compute figures are from the build rehearsed on 23 September 2026; a later b
 
 | Path | What is in it |
 | --- | --- |
-| `packages/program` | The Anchor program in `programs/pangu`: the four rules and the account layouts. `tests` holds the litesvm suite, `fork-tests` the suite against real Meteora and Solana Attestation Service programs cloned from mainnet, and `feeds` the real account bytes both read. |
+| `packages/program` | The Anchor program in `programs/pangu`: the four rules and the account layouts. `tests` holds the unit suite, run on solana-bankrun, `fork-tests` the suite against real Meteora and Solana Attestation Service programs cloned from mainnet, and `feeds` the real account bytes both read. |
 | `packages/sdk` | `pangu-sdk`: reads a sale, builds its instructions, runs it against Meteora's DBC, and keeps its Pyth price fresh. `test` holds its unit tests, and `fork-test` its own fork suite plus the mainnet rehearsal of the sales and the Squads handover. |
 | `packages/scripts` | The devnet commands: `launch`, `seed`, `prove`, `graduate`, `refresh-price`, `mint-dollars`, `status`, with their tests, and `sales.json`, the list of demo sales the scripts opened. |
 | `packages/web` | The Next.js app. `app` holds the pages (`/`, `/sales`, `/sale/[mint]`, `/launch`, `/verify`, `/portfolio`, `/docs`) and the server routes under `app/api`; `components` one folder per page or band; `lib` the chain reads, the transaction builders and the one setting that picks the network; `content/docs` these docs as MDX; `lab-evidence` the recorded page runs and their screenshots. |
@@ -583,7 +583,7 @@ The compute figures are from the build rehearsed on 23 September 2026; a later b
 
 The threat model, in four lines, from `docs/security/threat-model.md`: Pangu is called by another program on every single movement of the sale token, so the biggest risks are a look-alike account standing in for the real one, someone calling the hook directly, many wallets or many token accounts used to get around the cap, and a price account that is stale, missing, or faked. The mirror-image risk is a rule that misfires on a sell and traps a holder's money, which is why a blocked sell is treated as the worst possible failure and the code is built so nothing can cause one. The privileged parties are the issuer, who decides who is approved, and the holder of Pangu's upgrade key, the team, stated openly.
 
-Twenty-one defensive-programming rules, C1 through C21, each with its proof on the rubric page. The fourteen program rules C1 to C14 are each proven by a named test and, for all but two, by a real refused transaction on Solana devnet. The three on the app are proven by recorded devnet runs (C15, C16) and by inspection (C17). The four program rules added in the rules v2 build, C18 to C21 (a banded sale is paid in a listed dollar, the issuer cannot freeze the paying token, the cap sits below the curve's supply, and the offering period), are proven by named tests and by the sixth devnet run, which opened both of its sales under them; C18's refusal, `BandNeedsDollarQuote`, then landed on devnet in the eighth run.
+Twenty-five defensive-programming rules, C1 through C25, each with its proof on the rubric page. The fourteen program rules C1 to C14 are each proven by a named test and, for all but two, by a real refused transaction on Solana devnet. The three on the app are proven by recorded devnet runs (C15, C16) and by inspection (C17). The four program rules added in the rules v2 build, C18 to C21 (a banded sale is paid in a listed dollar, the issuer cannot freeze the paying token, the cap sits below the curve's supply, and the offering period), are proven by named tests and by the sixth devnet run, which opened both of its sales under them; C18's refusal, `BandNeedsDollarQuote`, then landed on devnet in the eighth run. The three app rules added after the code review of 24 September 2026 (C22, C23 and C25: a trade floored at what the page showed, the offering end shown wherever a buy is offered, and a cap on the storage top-up) are proven by the app's review-fixes run, and the deploy tool's rule (C24) by the tool refusing binaries that are not the mainnet build, each given its own correct hash.
 
 A full code review before this submission found eight issues; all were fixed. The most serious: an issuer who still held the power to mint more of the sale token could have minted straight into any wallet, past the cap and past any approval, since minting is not a transfer and the hook never sees it. The fix: a sale now refuses to open on any token whose minting power has not already been given up. Full detail: `docs/measurements/review-fixes.md`.
 
